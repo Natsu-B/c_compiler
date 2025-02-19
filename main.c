@@ -159,7 +159,6 @@ int main(int argc, char **argv)
         error("引数が正しくありません");
     }
     char *input = openfile(argv[1]);
-    fprintf(stdout, "\n%s\n", input);
 
     token = tokenize(input);
     FILE *fout = fopen("out.s", "w");

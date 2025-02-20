@@ -91,15 +91,18 @@ struct Token
     union           // トークンの種類に応じたデータを保存
     {
         long val; // 整数の場合の値
+        int len;  // 記号の場合 トークンの長さ
     };
 };
 
 Token *token; // トークンの実体 利用する関数は制限する
 
 // 次のトークンが引数の記号だったら読み進めtrueをその他のときはfalseを返す関数
-bool consume(char op)
+bool consume(char *op)
 {
-    if (token->kind != TK_RESERVED || token->str[0] != op)
+    if (token->kind != TK_RESERVED ||
+        strlen(op) != token->len ||
+        memcmp(op, token->str, token->len))
         return false;
 
     token = token->next;
@@ -107,10 +110,10 @@ bool consume(char op)
 }
 
 // 次のトークンが引数の記号だったら読み進め、そうでなければerror_atを呼び出す
-void expect(char op)
+void expect(char *op)
 {
     if (!consume(op))
-        error_at(token->str, "トークンが %c でありませんでした", op);
+        error_at(token->str, "トークンが %s でありませんでした", op);
 }
 
 // 次のトークンが整数だった場合読み進め、それ以外だったらエラーを返す関数
@@ -155,10 +158,20 @@ Token *tokenizer(char *input)
             continue;
         }
 
-        if (strchr("+-*/()", *input))
+        if (strchr("+-*/()=!<>", *input))
         {
             cur = new_token(TK_RESERVED, cur, input);
-            input++;
+            // "==", "<=", ">=", "!=" の場合
+            if (*(input + 1) == '=')
+            {
+                cur->len = 2;
+                input += 2;
+            }
+            else
+            {
+                cur->len = 1;
+                input++;
+            }
             continue;
         }
 
@@ -169,6 +182,7 @@ Token *tokenizer(char *input)
             continue;
         }
 
+        // 改行は飛ばす
         if (*input == '\n')
         {
             input++;
@@ -191,6 +205,10 @@ typedef enum
     ND_SUB, // -
     ND_MUL, // *
     ND_DIV, // /
+    ND_EQ,  // ==
+    ND_NEQ, // !=
+    ND_LT,  // <
+    ND_LTE, // <=
     ND_NUM, // 整数
 } NodeKind;
 
@@ -228,17 +246,33 @@ Node *new_node_num(int val)
     return node;
 }
 
-extern Node *expr();    // expr    = mul ("+" mul | "-" mul)*
-extern Node *mul();     // mul     = unary ("*" unary | "/" unary)*
-extern Node *unary();   // unary   = ("+" | "-")? primary
-extern Node *primary(); // primary = num | "(" expr ")"
+// expr       = equality
+extern Node *expr();
+
+// equality   = relational ("==" relational | "!=" relational)*
+extern Node *equality();
+
+// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
+extern Node *relational();
+
+// add        = mul ("+" mul | "-" mul)*
+extern Node *add();
+
+// mul     = unary ("*" unary | "/" unary)*
+extern Node *mul();
+
+// unary   = ("+" | "-")? primary
+extern Node *unary();
+
+// primary = num | "(" expr ")"
+extern Node *primary();
 
 Node *primary()
 {
-    if (consume('('))
+    if (consume("("))
     {
         Node *node = expr();
-        expect(')');
+        expect(")");
         return node;
     }
 
@@ -247,9 +281,9 @@ Node *primary()
 
 Node *unary()
 {
-    if (consume('+'))
+    if (consume("+"))
         return primary();
-    if (consume('-'))
+    if (consume("-"))
         return new_node(ND_SUB, new_node_num(0), primary());
     return primary();
 }
@@ -260,10 +294,58 @@ Node *mul()
 
     for (;;)
     {
-        if (consume('*'))
+        if (consume("*"))
             node = new_node(ND_MUL, node, unary());
-        else if (consume('/'))
+        else if (consume("/"))
             node = new_node(ND_DIV, node, unary());
+        else
+            return node;
+    }
+}
+
+Node *add()
+{
+    Node *node = mul();
+
+    for (;;)
+    {
+        if (consume("+"))
+            node = new_node(ND_ADD, node, mul());
+        else if (consume("-"))
+            node = new_node(ND_SUB, node, mul());
+        else
+            return node;
+    }
+}
+
+Node *relational()
+{
+    Node *node = add();
+    for (;;)
+    {
+        if (consume("<="))
+            node = new_node(ND_LTE, node, add());
+        else if (consume("<"))
+            node = new_node(ND_LT, node, add());
+        else if (consume(">="))
+            node = new_node(ND_LTE, add(), node);
+        else if (consume(">"))
+            node = new_node(ND_LT, add(), node);
+        else
+            return node;
+    }
+}
+
+Node *equality()
+{
+    Node *node = relational();
+
+    for (;;)
+    {
+        if (consume("=="))
+            node = new_node(ND_EQ, node, relational());
+        else if (consume("!="))
+            node = new_node(ND_NEQ, node, relational());
         else
             return node;
     }
@@ -271,17 +353,7 @@ Node *mul()
 
 Node *expr()
 {
-    Node *node = mul();
-
-    for (;;)
-    {
-        if (consume('+'))
-            node = new_node(ND_ADD, node, mul());
-        else if (consume('-'))
-            node = new_node(ND_SUB, node, mul());
-        else
-            return node;
-    }
+    return equality();
 }
 
 Node *parser(Token *token)
@@ -322,6 +394,26 @@ void gen(FILE *fout, Node *node)
         fprintf(fout, "    cqo\n");
         fprintf(fout, "    idiv rdi\n");
         break;
+    case ND_EQ:
+        fprintf(fout, "    cmp rax, rdi\n");
+        fprintf(fout, "    sete al\n");
+        fprintf(fout, "    movzb rax, al\n");
+        break;
+    case ND_NEQ:
+        fprintf(fout, "    cmp rax, rdi\n");
+        fprintf(fout, "    setne al\n");
+        fprintf(fout, "    movzb rax, al\n");
+        break;
+    case ND_LT:
+        fprintf(fout, "    cmp rax, rdi\n");
+        fprintf(fout, "    setl al\n");
+        fprintf(fout, "    movzb rax, al\n");
+        break;
+    case ND_LTE:
+        fprintf(fout, "    cmp rax, rdi\n");
+        fprintf(fout, "    setle al\n");
+        fprintf(fout, "    movzb rax, al\n");
+        break;
     default:
         error("unreachable");
         break;
@@ -343,8 +435,8 @@ void generator(Node *node, char *output_filename)
 
     gen(fout, node);
 
-    fprintf(fout, "   pop rax\n");
-    fprintf(fout, "   ret\n");
+    fprintf(fout, "    pop rax\n");
+    fprintf(fout, "    ret\n");
 
     fclose(fout);
 }

@@ -42,7 +42,29 @@ void _error(char *file, int line, const char *func, char *fmt, ...)
     exit(1);
 }
 
-// 引数のファイル名のファイルを読み取り、char配列として返す
+char *user_input;
+
+void error_init(char *input)
+{
+    user_input = input;
+}
+
+// 入力プログラムがおかしいとき、エラー箇所を可視化するプログラム
+void error_at(char *error_location, char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    // エラー位置特定
+    int error_position = error_location - user_input;
+    fprintf(stderr, "%s", user_input);
+    fprintf(stderr, "%*s", error_position, " ");
+    fprintf(stderr, "^ ");
+    vfprintf(stderr, fmt, ap);
+    fprintf(stderr, "\n");
+    exit(1);
+}
+
+// 引数のファイル名のファイルを読み取り、char配列として返す 内部でcallocを利用している
 char *openfile(char *filename)
 {
     FILE *fin = fopen(filename, "r");
@@ -88,7 +110,7 @@ bool consume(char op)
 long expect_number()
 {
     if (token->kind != TK_NUM)
-        error("トークンが整数でありませんでした");
+        error_at(token->str, "トークンが整数でありませんでした");
     long val = token->val;
     token = token->next;
     return val;
@@ -145,7 +167,7 @@ Token *tokenize(char *input)
             input++;
             continue;
         }
-        error("トークナイズに失敗しました");
+        error_at(input, "トークナイズに失敗しました");
     }
 
     new_token(TK_EOF, cur, input);
@@ -159,6 +181,7 @@ int main(int argc, char **argv)
         error("引数が正しくありません");
     }
     char *input = openfile(argv[1]);
+    error_init(input);
 
     token = tokenize(input);
     FILE *fout = fopen("out.s", "w");
@@ -184,7 +207,7 @@ int main(int argc, char **argv)
             fprintf(fout, "    sub rax, %ld\n", expect_number());
             continue;
         }
-        error("不正なトークン");
+        error_at(token->str, "不正なトークン");
     }
     fprintf(fout, "   ret\n");
 

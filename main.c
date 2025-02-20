@@ -11,26 +11,6 @@
 #define error(fmt, ...) \
     _error(__FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 
-typedef enum
-{
-    TK_RESERVED, // 記号
-    TK_NUM,      // 整数
-    TK_EOF,      // 入力終了
-} TokenKind;     // トークンの種類
-
-typedef struct Token Token;
-
-struct Token
-{
-    TokenKind kind; // トークンの種類
-    Token *next;    // 次のトークン
-    char *str;      // トークン文字列
-    union           // トークンの種類に応じたデータを保存
-    {
-        long val; // 整数の場合の値
-    };
-};
-
 // エラー時にログを出力し、終了する関数 errorから呼び出される
 void _error(char *file, int line, const char *func, char *fmt, ...)
 {
@@ -94,6 +74,26 @@ char *openfile(char *filename)
 // ここからトークナイズ関連の処理
 // ------------------------------------------------------------------------------------
 
+typedef enum
+{
+    TK_RESERVED, // 記号
+    TK_NUM,      // 整数
+    TK_EOF,      // 入力終了
+} TokenKind;     // トークンの種類
+
+typedef struct Token Token;
+
+struct Token
+{
+    TokenKind kind; // トークンの種類
+    Token *next;    // 次のトークン
+    char *str;      // トークン文字列
+    union           // トークンの種類に応じたデータを保存
+    {
+        long val; // 整数の場合の値
+    };
+};
+
 Token *token; // トークンの実体 利用する関数は制限する
 
 // 次のトークンが引数の記号だったら読み進めtrueをその他のときはfalseを返す関数
@@ -104,6 +104,13 @@ bool consume(char op)
 
     token = token->next;
     return true;
+}
+
+// 次のトークンが引数の記号だったら読み進め、そうでなければerror_atを呼び出す
+void expect(char op)
+{
+    if (!consume(op))
+        error_at(token->str, "トークンが %c でありませんでした", op);
 }
 
 // 次のトークンが整数だった場合読み進め、それ以外だったらエラーを返す関数
@@ -134,7 +141,7 @@ Token *new_token(TokenKind kind, Token *old, char *str)
 }
 
 // トークナイズする関数
-Token *tokenize(char *input)
+Token *tokenizer(char *input)
 {
     Token head;
     head.next = NULL;
@@ -148,7 +155,7 @@ Token *tokenize(char *input)
             continue;
         }
 
-        if (*input == '+' || *input == '-')
+        if (strchr("+-*/()", *input))
         {
             cur = new_token(TK_RESERVED, cur, input);
             input++;
@@ -174,6 +181,162 @@ Token *tokenize(char *input)
     return head.next;
 }
 
+// ------------------------------------------------------------------------------------
+// ここからパーサ関連の処理
+// ------------------------------------------------------------------------------------
+
+typedef enum
+{
+    ND_ADD, // +
+    ND_SUB, // -
+    ND_MUL, // *
+    ND_DIV, // /
+    ND_NUM, // 整数
+} NodeKind;
+
+typedef struct Node Node;
+
+struct Node
+{
+    NodeKind kind; // ノードの種類
+    union
+    {
+        struct
+        {
+            Node *lhs; // 左辺 left-hand side
+            Node *rhs; // 右辺 right-hand side
+        };
+        int val; // ND_NUMの場合 数値
+    };
+};
+
+Node *new_node(NodeKind kind, Node *lhs, Node *rhs)
+{
+    Node *node = calloc(1, sizeof(Node));
+    node->kind = kind;
+    node->lhs = lhs;
+    node->rhs = rhs;
+
+    return node;
+}
+
+Node *new_node_num(int val)
+{
+    Node *node = calloc(1, sizeof(Node));
+    node->kind = ND_NUM;
+    node->val = val;
+    return node;
+}
+
+extern Node *expr();
+
+Node *primary()
+{
+    if (consume('('))
+    {
+        Node *node = expr();
+        expect(')');
+        return node;
+    }
+
+    return new_node_num(expect_number());
+}
+
+Node *mul()
+{
+    Node *node = primary();
+
+    for (;;)
+    {
+        if (consume('*'))
+            node = new_node(ND_MUL, node, primary());
+        else if (consume('/'))
+            node = new_node(ND_DIV, node, primary());
+        else
+            return node;
+    }
+}
+
+Node *expr()
+{
+    Node *node = mul();
+
+    for (;;)
+    {
+        if (consume('+'))
+            node = new_node(ND_ADD, node, mul());
+        else if (consume('-'))
+            node = new_node(ND_SUB, node, mul());
+        else
+            return node;
+    }
+}
+
+Node *parser(Token *token)
+{
+    return expr();
+}
+
+// ------------------------------------------------------------------------------------
+// ここからコードジェネレーター関連の処理
+// ------------------------------------------------------------------------------------
+
+void gen(FILE *fout, Node *node)
+{
+    if (node->kind == ND_NUM)
+    {
+        fprintf(fout, "    push %d\n", node->val);
+        return;
+    }
+
+    gen(fout, node->lhs);
+    gen(fout, node->rhs);
+
+    fprintf(fout, "    pop rdi\n");
+    fprintf(fout, "    pop rax\n");
+
+    switch (node->kind)
+    {
+    case ND_ADD:
+        fprintf(fout, "    add rax, rdi\n");
+        break;
+    case ND_SUB:
+        fprintf(fout, "    sub rax, rdi\n");
+        break;
+    case ND_MUL:
+        fprintf(fout, "    imul rax, rdi\n");
+        break;
+    case ND_DIV:
+        fprintf(fout, "    cqo\n");
+        fprintf(fout, "    idiv rdi\n");
+        break;
+    default:
+        error("unreachable");
+        break;
+    }
+
+    fprintf(fout, "    push rax\n");
+}
+
+void generator(Node *node, char *output_filename)
+{
+    FILE *fout = fopen(output_filename, "w");
+    if (fout == NULL)
+    {
+        error("ファイルに書き込めませんでした");
+    }
+    fprintf(fout, ".intel_syntax noprefix\n");
+    fprintf(fout, ".global main\n");
+    fprintf(fout, "main:\n");
+
+    gen(fout, node);
+
+    fprintf(fout, "   pop rax\n");
+    fprintf(fout, "   ret\n");
+
+    fclose(fout);
+}
+
 int main(int argc, char **argv)
 {
     if (argc != 2)
@@ -183,34 +346,12 @@ int main(int argc, char **argv)
     char *input = openfile(argv[1]);
     error_init(input);
 
-    token = tokenize(input);
-    FILE *fout = fopen("out.s", "w");
-    if (fout == NULL)
-    {
-        error("ファイルに書き込めませんでした");
-    }
+    // トークナイザ
+    token = tokenizer(input);
+    // パーサ
+    Node *node = parser(token);
+    // コードジェネレーター
+    generator(node, "out.s");
 
-    fprintf(fout, ".intel_syntax noprefix\n");
-    fprintf(fout, ".global main\n");
-    fprintf(fout, "main:\n");
-    fprintf(fout, "    mov rax, %ld\n", expect_number());
-
-    while (!at_eof())
-    {
-        if (consume('+'))
-        {
-            fprintf(fout, "    add rax, %ld\n", expect_number());
-            continue;
-        }
-        if (consume('-'))
-        {
-            fprintf(fout, "    sub rax, %ld\n", expect_number());
-            continue;
-        }
-        error_at(token->str, "不正なトークン");
-    }
-    fprintf(fout, "   ret\n");
-
-    fclose(fout);
     return 0;
 }

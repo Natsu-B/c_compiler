@@ -12,10 +12,18 @@
 
 Token *token; // トークンの実体
 
+Token *consume_ident()
+{
+    if (token->kind != TK_IDENT)
+        return NULL;
+    Token *ret = token;
+    token = token->next;
+    return ret;
+}
+
 // 次のトークンが引数の記号だったら読み進めtrueをその他のときはfalseを返す関数
 bool consume(char *op)
 {
-    pr_debug2("consume %*s", token->len, op);
     if (token->kind != TK_RESERVED ||
         strlen(op) != token->len ||
         memcmp(op, token->str, token->len))
@@ -75,7 +83,7 @@ void tokenizer(char *input)
             continue;
         }
 
-        if (strchr("+-*/()=!<>", *input))
+        if (strchr("+-*/()=!<>;", *input))
         {
             cur = new_token(TK_RESERVED, cur, input);
             // "==", "<=", ">=", "!=" の場合
@@ -102,6 +110,15 @@ void tokenizer(char *input)
             continue;
         }
 
+        // aからzの英字小文字の場合は変数とみなし TK_INDENTへ
+        if ('a' <= *input && *input <= 'z')
+        {
+            cur = new_token(TK_IDENT, cur, input);
+            cur->len = 1;
+            input++;
+            continue;
+        }
+
         // 改行は飛ばす
         if (*input == '\n')
         {
@@ -112,6 +129,22 @@ void tokenizer(char *input)
     }
 
     new_token(TK_EOF, cur, input);
+
     pr_debug("complite tokenize");
+#if DEBUG
+    pr_debug2("tokenize result:");
+    Token *tmp = head.next;
+    int i = 0;
+    for (;;)
+    {
+        if (tmp->kind == TK_EOF)
+            break;
+        if (tmp->kind == TK_NUM)
+            pr_debug2("%d: TokenKind: %d val: %ld", i++, tmp->kind, tmp->val);
+        else
+            pr_debug2("%d: TokenKind: %d str: %.*s", i++, tmp->kind, tmp->len, tmp->str);
+        tmp = tmp->next;
+    }
+#endif
     token = head.next;
 }

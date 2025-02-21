@@ -13,7 +13,7 @@
     _debug(__FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 #if DEBUG
 #define pr_debug2(fmt, ...) \
-    pr_debug(fmt, ##__VA_ARGS__)
+    _debug2(__FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 #endif // DEBUG=(true)
 #else
 #define pr_debug(fmt, ...)
@@ -26,6 +26,7 @@
     _error(__FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 
 extern void _debug(char *file, int line, const char *func, char *fmt, ...);
+extern void _debug2(char *file, int line, const char *func, char *fmt, ...);
 
 extern void _error(char *file, int line, const char *func, char *fmt, ...);
 

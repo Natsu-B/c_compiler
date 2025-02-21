@@ -4,10 +4,13 @@ SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)
 
 main: $(OBJS)
-		$(CC) -o main $(OBJS) $(LDFLAGS)
+	$(CC) -o main $(OBJS) $(LDFLAGS)
 
 test: main
 	./test.sh
+
+detail: $(OBJS)
+	$(CC) -o main $(OBJS) $(LDFLAGS) -g3
 
 clean:
 	rm -f main *.o *~ tmp*

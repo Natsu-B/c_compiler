@@ -25,77 +25,104 @@ Node *new_node_num(int val)
     return node;
 }
 
-// expr       = equality
+/**
+ * program    = stmt*
+ * stmt       = expr ";"
+ * expr       = assign
+ * assign     = equality ("=" assign)?
+ * equality   = relational ("==" relational | "!=" relational)*
+ * relational = add ("<" add | "<=" add | ">" add | ">=" add)*
+ * add        = mul ("+" mul | "-" mul)*
+ * mul        = unary ("*" unary | "/" unary)*
+ * unary      = ("+" | "-")? primary
+ * primary    = num | ident | "(" expr ")"
+ */
+
+void program();
+Node *stmt();
 Node *expr();
-
-// equality   = relational ("==" relational | "!=" relational)*
+Node *assign();
 Node *equality();
-
-// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
 Node *relational();
-
-// add        = mul ("+" mul | "-" mul)*
 Node *add();
-
-// mul     = unary ("*" unary | "/" unary)*
 Node *mul();
-
-// unary   = ("+" | "-")? primary
 Node *unary();
-
-// primary = num | "(" expr ")"
 Node *primary();
 
-Node *primary()
+Node *code[max_num];
+
+void parser()
 {
-    pr_debug2("primary");
-    if (consume("("))
+    pr_debug("start parser...");
+    program();
+    pr_debug("complite parse");
+}
+
+void program()
+{
+    pr_debug2("program");
+    int i = 0;
+    while (!at_eof())
     {
-        Node *node = expr();
-        expect(")");
-        return node;
+        code[i++] = stmt();
+        if (i == max_num)
+            error_exit("変数が多すぎます");
     }
 
-    return new_node_num(expect_number());
-}
-
-Node *unary()
-{
-    pr_debug2("unary");
-    if (consume("+"))
-        return primary();
-    if (consume("-"))
-        return new_node(ND_SUB, new_node_num(0), primary());
-    return primary();
-}
-
-Node *mul()
-{
-    pr_debug2("mul");
-    Node *node = unary();
-
-    for (;;)
+#if DEBUG
+    pr_debug2("parse result");
+    for (int j = 0; j < i; j++)
     {
-        if (consume("*"))
-            node = new_node(ND_MUL, node, unary());
-        else if (consume("/"))
-            node = new_node(ND_DIV, node, unary());
+        int kind = code[j]->kind;
+        if (kind == ND_LVAR)
+            pr_debug2("%d: NodeKind: ND_LVAR offset: %d", j, code[j]->offset);
+        else if (kind == ND_NUM)
+            pr_debug2("%d: NodeKind: ND_NUM val: %d", j, code[j]->val);
         else
-            return node;
+        {
+            pr_debug2("%d left-hand side: NodeKind_is_ND_LVAR: %s, offset: %d", j, code[j]->lhs->kind == ND_LVAR ? "true" : "false", code[j]->lhs->offset);
+            pr_debug2("%d: NodeKind: %d", j, code[j]->kind);
+            pr_debug2("%d right-hand side: NodeKind: %d Data(val or offset):", j, code[j]->rhs->kind, code[j]->rhs->val);
+        }
     }
+#endif
 }
 
-Node *add()
+Node *stmt()
 {
-    pr_debug2("add");
-    Node *node = mul();
+    pr_debug2("stmt");
+    Node *node = expr();
+    expect(";");
+    return node;
+}
+
+Node *expr()
+{
+    pr_debug2("expr");
+    return assign();
+}
+
+Node *assign()
+{
+    pr_debug2("assign");
+    Node *node = equality();
+
+    if (consume("="))
+        node = new_node(ND_ASSIGN, node, assign());
+    return node;
+}
+
+Node *equality()
+{
+    pr_debug2("equality");
+    Node *node = relational();
 
     for (;;)
     {
-        if (consume("+"))
-            node = new_node(ND_ADD, node, mul());
-        else if (consume("-"))
-            node = new_node(ND_SUB, node, mul());
+        if (consume("=="))
+            node = new_node(ND_EQ, node, relational());
+        else if (consume("!="))
+            node = new_node(ND_NEQ, node, relational());
         else
             return node;
     }
@@ -120,31 +147,66 @@ Node *relational()
     }
 }
 
-inline Node *equality()
+Node *add()
 {
-    pr_debug2("equality");
-    Node *node = relational();
+    pr_debug2("add");
+    Node *node = mul();
 
     for (;;)
     {
-        if (consume("=="))
-            node = new_node(ND_EQ, node, relational());
-        else if (consume("!="))
-            node = new_node(ND_NEQ, node, relational());
+        if (consume("+"))
+            node = new_node(ND_ADD, node, mul());
+        else if (consume("-"))
+            node = new_node(ND_SUB, node, mul());
         else
             return node;
     }
 }
 
-inline Node *expr()
+Node *mul()
 {
-    return equality();
+    pr_debug2("mul");
+    Node *node = unary();
+
+    for (;;)
+    {
+        if (consume("*"))
+            node = new_node(ND_MUL, node, unary());
+        else if (consume("/"))
+            node = new_node(ND_DIV, node, unary());
+        else
+            return node;
+    }
 }
 
-Node *parser()
+Node *unary()
 {
-    pr_debug("start parser...");
-    Node *result = expr();
-    pr_debug("complite parse");
-    return result;
+    pr_debug2("unary");
+    if (consume("+"))
+        return primary();
+    if (consume("-"))
+        return new_node(ND_SUB, new_node_num(0), primary());
+    return primary();
+}
+
+Node *primary()
+{
+    pr_debug2("primary");
+    if (consume("("))
+    {
+        Node *node = expr();
+        expect(")");
+        return node;
+    }
+
+    Token *tok = consume_ident();
+    if (tok)
+    {
+        Node *node = calloc(1, sizeof(Node));
+        node->kind = ND_LVAR;
+        node->offset = (tok->str[0] - 'a' + 1) * 8;
+        return node;
+    }
+
+    return new_node_num(expect_number());
 }

@@ -6,12 +6,39 @@
 #include "include/error.h"
 #include <stdio.h>
 
+void gen_lval(FILE *fout, Node *node)
+{
+    if (node->kind != ND_LVAR)
+        error_exit("代入の左辺値が整数でありません");
+
+    fprintf(fout, "    mov rax, rbp\n");
+    fprintf(fout, "    sub rax, %d\n", node->offset);
+    fprintf(fout, "    push rax\n");
+}
+
 void gen(FILE *fout, Node *node)
 {
-    if (node->kind == ND_NUM)
+    switch (node->kind)
     {
+    case ND_NUM:
         fprintf(fout, "    push %d\n", node->val);
         return;
+    case ND_LVAR:
+        gen_lval(fout, node);
+        fprintf(fout, "    pop rax\n");
+        fprintf(fout, "    mov rax, [rax]\n");
+        fprintf(fout, "    push rax\n");
+        return;
+    case ND_ASSIGN:
+        gen_lval(fout, node->lhs);
+        gen(fout, node->rhs);
+        fprintf(fout, "    pop rdi\n");
+        fprintf(fout, "    pop rax\n");
+        fprintf(fout, "    mov [rax], rdi\n");
+        fprintf(fout, "    push rdi\n");
+        return;
+    default:
+        break;
     }
 
     gen(fout, node->lhs);
@@ -63,10 +90,10 @@ void gen(FILE *fout, Node *node)
     fprintf(fout, "    push rax\n");
 }
 
-void generator(Node *node, char *output_filename)
+void generator(char *output_filename)
 {
     pr_debug("start generator");
-    pr_debug("output filename: %s", output_filename);
+    pr_debug("output filepath: %s", output_filename);
     FILE *fout = fopen(output_filename, "w");
     if (fout == NULL)
     {
@@ -76,10 +103,19 @@ void generator(Node *node, char *output_filename)
     fprintf(fout, ".intel_syntax noprefix\n");
     fprintf(fout, ".global main\n");
     fprintf(fout, "main:\n");
+    fprintf(fout, "    push rbp\n");
+    fprintf(fout, "    mov rbp, rsp\n");
+    fprintf(fout, "    sub rsp, 208\n");
 
-    gen(fout, node);
+    for (int i = 0; code[i]; i++)
+    {
+        pr_debug2("code[%d]", i);
+        gen(fout, code[i]);
+        fprintf(fout, "    pop rax\n");
+    }
 
-    fprintf(fout, "    pop rax\n");
+    fprintf(fout, "    mov rsp, rbp\n");
+    fprintf(fout, "    pop rbp\n");
     fprintf(fout, "    ret\n");
 
     fclose(fout);

@@ -3,9 +3,11 @@
 #include "include/tokenizer.h"
 #include "include/parser.h"
 #include "include/generator.h"
+#include <stdio.h>
 
 int main(int argc, char **argv)
 {
+    fprintf(stdout, "\e[32mc_compiler\e[37m\n");
     if (argc != 3)
     {
         error_exit("引数が正しくありません");
@@ -16,9 +18,9 @@ int main(int argc, char **argv)
     // トークナイザ
     tokenizer(input);
     // パーサ
-    Node *node = parser();
+    parser();
     // コードジェネレーター
-    generator(node, argv[2]);
+    generator(argv[2]);
 
     return 0;
 }

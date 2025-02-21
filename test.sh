@@ -3,8 +3,6 @@ assert() {
   expected="$1"
   input="$2"
 
-  rm out/out.s
-  rm out/out
   echo "$input" > out/tmp.txt
   ./main out/tmp.txt out/out.s
   cc -o out/out out/out.s
@@ -19,7 +17,7 @@ assert() {
   fi
 }
 
-mkdir out
+mkdir -p out
 
 assert 0 '0;'
 assert 42 '42; '
@@ -49,5 +47,7 @@ assert 1 '10 >= 1 ;'
 assert 1 'a = 1; 1;'
 assert 4 'a= 5; b = -1; a+b;'
 assert 10 'a=5; b=2; a*b/2+5;'
+assert 1 'foge = 1; huga = 2; piyo = 1; foge * huga - piyo;'
+assert 3 'FOGE = 10; HUGA = 5; PIYO = FOGE / HUGA; PIYO + 1;'
 
 echo OK

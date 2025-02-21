@@ -6,6 +6,17 @@
 #include "include/tokenizer.h"
 #include "include/error.h"
 #include <stdlib.h>
+#include <string.h>
+
+LVar *locals;
+
+LVar *find_lvar(Token *token)
+{
+    for (LVar *var = locals; var; var = var->next)
+        if (var->len == token->len && !memcmp(var->name, token->str, var->len))
+            return var;
+    return NULL;
+}
 
 Node *new_node(NodeKind kind, Node *lhs, Node *rhs)
 {
@@ -199,12 +210,26 @@ Node *primary()
         return node;
     }
 
-    Token *tok = consume_ident();
-    if (tok)
+    Token *token = consume_ident();
+    if (token)
     {
         Node *node = calloc(1, sizeof(Node));
         node->kind = ND_LVAR;
-        node->offset = (tok->str[0] - 'a' + 1) * 8;
+        LVar *lvar = find_lvar(token);
+        if (lvar)
+        {
+            node->offset = lvar->offset;
+        }
+        else
+        {
+            lvar = calloc(1, sizeof(LVar));
+            lvar->next = locals;
+            lvar->name = token->str;
+            lvar->len = token->len;
+            lvar->offset = (locals ? locals->offset : 0) + 8;
+            node->offset = lvar->offset;
+            locals = lvar;
+        }
         return node;
     }
 

@@ -33,6 +33,6 @@ extern Token *consume_ident();
 extern bool consume(char *op);
 extern void expect(char *op);
 
-//extern long expect_number();
+extern long expect_number();
 
 #endif // TOKENIZER_C_COMPILER

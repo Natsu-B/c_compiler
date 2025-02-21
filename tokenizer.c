@@ -111,11 +111,17 @@ void tokenizer(char *input)
         }
 
         // aからzの英字小文字の場合は変数とみなし TK_INDENTへ
-        if ('a' <= *input && *input <= 'z')
+        int i = 0;
+        while (('a' <= *input && *input <= 'z') ||
+               ('A' <= *input && *input <= 'Z'))
         {
-            cur = new_token(TK_IDENT, cur, input);
-            cur->len = 1;
+            i++;
             input++;
+        }
+        if (i)
+        {
+            cur = new_token(TK_IDENT, cur, input - i);
+            cur->val = i;
             continue;
         }
 

@@ -35,6 +35,17 @@ struct Node
     };
 };
 
+typedef struct LVar LVar;
+
+struct LVar
+{
+    LVar* next; // 次の変数
+    char* name; // 変数名
+    int len; // 長さ
+    int offset; // オフセット
+};
+
+
 extern void parser();
 
 #define max_num 100

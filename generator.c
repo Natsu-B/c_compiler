@@ -18,6 +18,14 @@ void gen_lval(FILE *fout, Node *node)
 
 void gen(FILE *fout, Node *node)
 {
+    if(node->kind == ND_RETURN) {
+        gen(fout, node->rhs);
+        fprintf(fout, "    pop rax\n");
+        fprintf(fout, "    mov rsp, rbp\n");
+        fprintf(fout, "    pop rbp\n");
+        fprintf(fout, "    ret\n");
+        return;
+    }
     switch (node->kind)
     {
     case ND_NUM:

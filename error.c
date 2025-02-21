@@ -8,6 +8,14 @@
 #include <error.h>
 #include <stdlib.h>
 
+#ifndef __GNUC__
+#define __attribute__(x) /*NOTHING*/
+#endif
+void _debug2(char *file, int line, const char *func, char *fmt, ...)
+    __attribute__((format(printf, 4, 5)));
+void error_at(char *error_location, char *fmt, ...)
+    __attribute__((format(printf, 2, 3)));
+
 // #define DEBUG 時に動作を出力する pr_debugから呼び出される
 void _debug(char *file, int line, const char *func, char *fmt, ...)
 {

@@ -14,6 +14,7 @@ typedef enum
     ND_LT,     // <
     ND_LTE,    // <=
     ND_ASSIGN, // =
+    ND_RETURN, // return
     ND_LVAR,   // ローカル変数
     ND_NUM,    // 整数
 } NodeKind;

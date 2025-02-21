@@ -8,6 +8,7 @@ typedef enum
     TK_RESERVED, // 記号
     TK_IDENT,    // 識別子
     TK_NUM,      // 整数
+    TK_RETURN,   // return
     TK_EOF,      // 入力終了
 } TokenKind;     // トークンの種類
 
@@ -29,7 +30,7 @@ extern void tokenizer(char *input);
 
 extern bool at_eof();
 
-extern Token *consume_ident();
+extern Token *consume_TokenKind(TokenKind kind);
 extern bool consume(char *op);
 extern void expect(char *op);
 

@@ -49,5 +49,8 @@ assert 4 'a= 5; b = -1; a+b;'
 assert 10 'a=5; b=2; a*b/2+5;'
 assert 1 'foge = 1; huga = 2; piyo = 1; foge * huga - piyo;'
 assert 3 'FOGE = 10; HUGA = 5; PIYO = FOGE / HUGA; PIYO + 1;'
+assert 10 'a=5; b=2; c=a*b/2+5;return c;'
+assert 5 'a = 2; b = 3; a_b = a +b; return a_b; a * 2;'
+assert 2 'returne = 1; return returne + 1;'
 
 echo OK

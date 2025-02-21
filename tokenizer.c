@@ -12,9 +12,9 @@
 
 Token *token; // トークンの実体
 
-Token *consume_ident()
+Token *consume_TokenKind(TokenKind kind)
 {
-    if (token->kind != TK_IDENT)
+    if (token->kind != kind)
         return NULL;
     Token *ret = token;
     token = token->next;
@@ -37,7 +37,7 @@ bool consume(char *op)
 void expect(char *op)
 {
     if (!consume(op))
-        error_at(token->str, "トークンが %*s でありませんでした", token->len, op);
+        error_at(token->str, "トークンが %.*s でありませんでした", token->len, op);
 }
 
 // 次のトークンが整数だった場合読み進め、それ以外だったらエラーを返す関数
@@ -54,6 +54,15 @@ long expect_number()
 bool at_eof()
 {
     return token->kind == TK_EOF;
+}
+
+// 与えられた引数がトークンを構成するかどうか 英数字と '_'
+int is_alnum(char c)
+{
+    return ('a' <= c && c <= 'z') ||
+           ('A' <= c && c <= 'Z') ||
+           ('0' <= c && c <= '9') ||
+           (c == '_');
 }
 
 // 新しくトークンを作る関数
@@ -89,13 +98,13 @@ void tokenizer(char *input)
             // "==", "<=", ">=", "!=" の場合
             if (*(input + 1) == '=')
             {
-                pr_debug2("find RESERVED token: %2s", input);
+                pr_debug2("find RESERVED token: %.2s", input);
                 cur->len = 2;
                 input += 2;
             }
             else
             {
-                pr_debug2("find RESERVED token: %1s", input);
+                pr_debug2("find RESERVED token: %.1s", input);
                 cur->len = 1;
                 input++;
             }
@@ -110,16 +119,26 @@ void tokenizer(char *input)
             continue;
         }
 
-        // aからzの英字小文字の場合は変数とみなし TK_INDENTへ
+        // 英数字と'_'のみの場合は変数または予約語とみなす
         int i = 0;
-        while (('a' <= *input && *input <= 'z') ||
-               ('A' <= *input && *input <= 'Z'))
+        while (is_alnum(*input))
         {
             i++;
             input++;
         }
         if (i)
         {
+            // return 文か否かを判別する
+            if (i == strlen("return"))
+            {
+                pr_debug("why?: %s", input-i);
+                if (!strncmp(input - i, "return", i))
+                {
+                    cur = new_token(TK_RETURN, cur, input - i);
+                    cur->val = i;
+                    continue;
+                }
+            }
             cur = new_token(TK_IDENT, cur, input - i);
             cur->val = i;
             continue;

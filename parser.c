@@ -38,7 +38,7 @@ Node *new_node_num(int val)
 
 /**
  * program    = stmt*
- * stmt       = expr ";"
+ * stmt       = expr ";" | "return" expr ";"
  * expr       = assign
  * assign     = equality ("=" assign)?
  * equality   = relational ("==" relational | "!=" relational)*
@@ -91,9 +91,11 @@ void program()
             pr_debug2("%d: NodeKind: ND_NUM val: %d", j, code[j]->val);
         else
         {
-            pr_debug2("%d left-hand side: NodeKind_is_ND_LVAR: %s, offset: %d", j, code[j]->lhs->kind == ND_LVAR ? "true" : "false", code[j]->lhs->offset);
+            if (code[j]->lhs)
+                pr_debug2("%d left-hand side: NodeKind_is_ND_LVAR: %s, offset: %d", j, code[j]->lhs->kind == ND_LVAR ? "true" : "false", code[j]->lhs->offset);
             pr_debug2("%d: NodeKind: %d", j, code[j]->kind);
-            pr_debug2("%d right-hand side: NodeKind: %d Data(val or offset):", j, code[j]->rhs->kind, code[j]->rhs->val);
+            if (code[j]->rhs)
+                pr_debug2("%d right-hand side: NodeKind: %d Data(val or offset):", j, code[j]->rhs->kind, code[j]->rhs->val);
         }
     }
 #endif
@@ -102,7 +104,15 @@ void program()
 Node *stmt()
 {
     pr_debug2("stmt");
-    Node *node = expr();
+    Node *node;
+    if (consume_TokenKind(TK_RETURN))
+    {
+        node = calloc(1, sizeof(Node));
+        node->kind = ND_RETURN;
+        node->rhs = expr();
+    }
+    else
+        node = expr();
     expect(";");
     return node;
 }
@@ -210,7 +220,7 @@ Node *primary()
         return node;
     }
 
-    Token *token = consume_ident();
+    Token *token = consume_TokenKind(TK_IDENT);
     if (token)
     {
         Node *node = calloc(1, sizeof(Node));

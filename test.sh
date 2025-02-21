@@ -3,11 +3,11 @@ assert() {
   expected="$1"
   input="$2"
 
-  echo "$input" > tmp.txt
+  echo "$input" > out/tmp.txt
 
-  ./main tmp.txt
-  cc -o out out.s
-  ./out
+  ./main out/tmp.txt out/out.s
+  cc -o out/out out/out.s
+  ./out/out
   actual="$?"
 
   if [ "$actual" = "$expected" ]; then
@@ -17,6 +17,8 @@ assert() {
     exit 1
   fi
 }
+
+mkdir out
 
 assert 0 0
 assert 42 42

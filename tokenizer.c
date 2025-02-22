@@ -4,6 +4,7 @@
 
 #include "include/tokenizer.h"
 #include "include/error.h"
+#include "include/debug.h"
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -12,6 +13,23 @@
 
 Token *token; // トークンの実体
 
+// 次の次のトークン(1つ先のトークン)が引数のトークンだったらtrueを変える
+bool peek_next_TokenKind(TokenKind kind)
+{
+    if (token->next->kind != kind)
+        return false;
+    return true;
+}
+
+bool peek_next(char *op)
+{
+    if (token->next->len == strlen(op) &&
+        !strncmp(token->next->str, op, token->next->len))
+        return true;
+    return false;
+}
+
+// 次のトークンが引数のトークンの種類だったら読み勧めてそのTokenを返す
 Token *consume_TokenKind(TokenKind kind)
 {
     if (token->kind != kind)
@@ -128,10 +146,53 @@ void tokenizer(char *input)
         }
         if (i)
         {
-            // return 文か否かを判別する
-            if (i == strlen("return"))
+            // if 文か否かを判別する
+            if (i == 2) // strlen("if") = 2
             {
-                pr_debug("why?: %s", input-i);
+                if (!strncmp(input - i, "if", i))
+                {
+                    cur = new_token(TK_IF, cur, input - i);
+                    cur->len = i;
+                    continue;
+                }
+            }
+
+            // else 文か否かを判別する
+            if (i == 4) // strlen("else") = 4
+            {
+                if (!strncmp(input - i, "else", i))
+                {
+                    cur = new_token(TK_ELSE, cur, input - i);
+                    cur->len = i;
+                    continue;
+                }
+            }
+
+            // for 文か否かを判別する
+            if (i == 3) // strlen("for") = 3
+            {
+                if (!strncmp(input - i, "for", i))
+                {
+                    cur = new_token(TK_FOR, cur, input - i);
+                    cur->len = i;
+                    continue;
+                }
+            }
+
+            // while文か否かを判別する
+            if (i == 5) // strlen("while") = 5
+            {
+                if (!strncmp(input - i, "while", i))
+                {
+                    cur = new_token(TK_WHILE, cur, input - i);
+                    cur->len = i;
+                    continue;
+                }
+            }
+
+            // return 文か否かを判別する
+            if (i == 6) // strlen("return") = 6
+            {
                 if (!strncmp(input - i, "return", i))
                 {
                     cur = new_token(TK_RETURN, cur, input - i);
@@ -156,20 +217,9 @@ void tokenizer(char *input)
     new_token(TK_EOF, cur, input);
 
     pr_debug("complite tokenize");
-#if DEBUG
-    pr_debug2("tokenize result:");
-    Token *tmp = head.next;
-    int i = 0;
-    for (;;)
-    {
-        if (tmp->kind == TK_EOF)
-            break;
-        if (tmp->kind == TK_NUM)
-            pr_debug2("%d: TokenKind: %d val: %ld", i++, tmp->kind, tmp->val);
-        else
-            pr_debug2("%d: TokenKind: %d str: %.*s", i++, tmp->kind, tmp->len, tmp->str);
-        tmp = tmp->next;
-    }
+#ifdef DEBUG
+    char *TokenKindList[TK_END] = {TokenKindTable};
+    print_tokenize_result(head.next, TokenKindList);
 #endif
     token = head.next;
 }

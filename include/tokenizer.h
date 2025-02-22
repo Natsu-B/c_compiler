@@ -9,8 +9,16 @@ typedef enum
     TK_IDENT,    // 識別子
     TK_NUM,      // 整数
     TK_RETURN,   // return
+    TK_IF,       // if
+    TK_ELSE,     // else
+    TK_FOR,      // for
+    TK_WHILE,    // while
     TK_EOF,      // 入力終了
+    TK_END,      // デバッグ出力用
 } TokenKind;     // トークンの種類
+
+// デバッグ出力用 TokenKindに追加したら必ず追加すること
+#define TokenKindTable "TK_RESERVED", "TK_IDENT", "TK_NUM", "TK_RETURN", "TK_IF", "TK_ELSE", "TK_FOR", "TK_WHILE", "TK_EOF"
 
 typedef struct Token Token;
 
@@ -30,6 +38,8 @@ extern void tokenizer(char *input);
 
 extern bool at_eof();
 
+extern bool peek_next_TokenKind(TokenKind kind);
+extern bool peek_next(char *op);
 extern Token *consume_TokenKind(TokenKind kind);
 extern bool consume(char *op);
 extern void expect(char *op);

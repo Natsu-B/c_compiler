@@ -5,8 +5,10 @@
 #include "include/parser.h"
 #include "include/tokenizer.h"
 #include "include/error.h"
+#include "include/debug.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 LVar *locals;
 
@@ -16,6 +18,39 @@ LVar *find_lvar(Token *token)
         if (var->len == token->len && !memcmp(var->name, token->str, var->len))
             return var;
     return NULL;
+}
+
+GTLabel *head_label;
+
+GTLabel *generate_label_name(char *name)
+{
+    size_t namesize = strlen(name + 4);
+    GTLabel *next = calloc(1, sizeof(GTLabel));
+    next->len = namesize;
+    next->next = head_label;
+    char *mangle_name = malloc(namesize);
+    int i = 0;
+    for (;;)
+    {
+        snprintf(mangle_name, namesize, "_%d_%s", i++, name);
+        GTLabel *var = head_label;
+        for (;;)
+        {
+            if (!var || !var->next)
+            {
+                next->name = mangle_name;
+                head_label = next;
+                return next;
+            }
+            if (namesize == var->len &&
+                !strncmp(mangle_name, var->name, namesize))
+            {
+                break;
+            }
+
+            var = var->next;
+        }
+    }
 }
 
 Node *new_node(NodeKind kind, Node *lhs, Node *rhs)
@@ -38,7 +73,11 @@ Node *new_node_num(int val)
 
 /**
  * program    = stmt*
- * stmt       = expr ";" | "return" expr ";"
+ * stmt    = expr ";"
+ *         | "if" "(" expr ")" stmt ("else" stmt)?
+ *         | "while" "(" expr ")" stmt
+ *         | "for" "(" expr? ";" expr? ";" expr? ")" stmt
+ *         | "return" expr ";"
  * expr       = assign
  * assign     = equality ("=" assign)?
  * equality   = relational ("==" relational | "!=" relational)*
@@ -77,33 +116,81 @@ void program()
     {
         code[i++] = stmt();
         if (i == max_num)
-            error_exit("変数が多すぎます");
+            error_exit("行数が多すぎます");
     }
 
-#if DEBUG
-    pr_debug2("parse result");
-    for (int j = 0; j < i; j++)
-    {
-        int kind = code[j]->kind;
-        if (kind == ND_LVAR)
-            pr_debug2("%d: NodeKind: ND_LVAR offset: %d", j, code[j]->offset);
-        else if (kind == ND_NUM)
-            pr_debug2("%d: NodeKind: ND_NUM val: %d", j, code[j]->val);
-        else
-        {
-            if (code[j]->lhs)
-                pr_debug2("%d left-hand side: NodeKind_is_ND_LVAR: %s, offset: %d", j, code[j]->lhs->kind == ND_LVAR ? "true" : "false", code[j]->lhs->offset);
-            pr_debug2("%d: NodeKind: %d", j, code[j]->kind);
-            if (code[j]->rhs)
-                pr_debug2("%d right-hand side: NodeKind: %d Data(val or offset):", j, code[j]->rhs->kind, code[j]->rhs->val);
-        }
-    }
+#ifdef DEBUG
+    char *NodeKindList[ND_END] = {NodeKindTable};
+    print_parse_result(code, i, NodeKindList);
 #endif
 }
 
 Node *stmt()
 {
     pr_debug2("stmt");
+    // if文の判定とelseがついてるかどうか
+    if (consume_TokenKind(TK_IF))
+    {
+        Node *node = calloc(1, sizeof(Node));
+        node->name = generate_label_name("main");
+        expect("(");
+        node->condition = expr();
+        expect(")");
+        if (peek_next_TokenKind(TK_ELSE))
+        {
+            node->kind = ND_ELIF;
+            node->true_code = stmt();
+            if (!consume_TokenKind(TK_ELSE))
+                error_exit("unreachable");
+            node->false_code = stmt();
+        }
+        else
+        {
+            node->kind = ND_IF;
+            node->true_code = stmt();
+        }
+        return node;
+    }
+
+    // while文の判定
+    if (consume_TokenKind(TK_WHILE))
+    {
+        Node *node = calloc(1, sizeof(Node));
+        node->kind = ND_WHILE;
+        node->name = generate_label_name("main");
+        expect("(");
+        node->condition = expr();
+        expect(")");
+        node->true_code = stmt();
+        return node;
+    }
+
+    // for文の判定
+    if (consume_TokenKind(TK_FOR))
+    {
+        Node *node = calloc(1, sizeof(Node));
+        node->kind = ND_FOR;
+        node->name = generate_label_name("main");
+        expect("(");
+        if (!consume(";"))
+        {
+            node->init = expr();
+            expect(";");
+        }
+        if (!consume(";"))
+        {
+            node->condition = expr();
+            expect(";");
+        }
+        if (!consume(")"))
+        {
+            node->update = expr();
+            expect(")");
+        }
+        node->true_code = stmt();
+        return node;
+    }
+
     Node *node;
     if (consume_TokenKind(TK_RETURN))
     {

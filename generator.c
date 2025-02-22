@@ -18,7 +18,57 @@ void gen_lval(FILE *fout, Node *node)
 
 void gen(FILE *fout, Node *node)
 {
-    if(node->kind == ND_RETURN) {
+    if (node->kind == ND_IF)
+    {
+        gen(fout, node->condition);
+        fprintf(fout, "    pop rax\n");
+        fprintf(fout, "    cmp rax, 0\n");
+        fprintf(fout, "    je .Lend%s\n", node->name);
+        gen(fout, node->true_code);
+        fprintf(fout, ".Lend%s:\n", node->name);
+        return;
+    }
+    if (node->kind == ND_ELIF)
+    {
+        gen(fout, node->condition);
+        fprintf(fout, "    pop rax\n");
+        fprintf(fout, "    cmp rax, 0\n");
+        fprintf(fout, "    je .Lelse%s\n", node->name);
+        gen(fout, node->true_code);
+        fprintf(fout, "    jmp .Lend%s\n", node->name);
+        fprintf(fout, ".Lelse%s:\n", node->name);
+        gen(fout, node->false_code);
+        fprintf(fout, ".Lend%s:\n", node->name);
+        return;
+    }
+    if (node->kind == ND_WHILE)
+    {
+        fprintf(fout, ".Lbegin%s:\n", node->name);
+        gen(fout, node->condition);
+        fprintf(fout, "    pop rax\n");
+        fprintf(fout, "    cmp rax, 0\n");
+        fprintf(fout, "    je .Lend%s\n", node->name);
+        gen(fout, node->true_code);
+        fprintf(fout, "    jmp .Lbegin%s\n", node->name);
+        fprintf(fout, ".Lend%s:\n", node->name);
+        return;
+    }
+    if (node->kind == ND_FOR)
+    {
+        gen(fout, node->init);
+        fprintf(fout, ".Lbegin%s:\n", node->name);
+        gen(fout, node->condition);
+        fprintf(fout, "    pop rax\n");
+        fprintf(fout, "    cmp rax, 0\n");
+        fprintf(fout, "    je .Lend%s\n", node->name);
+        gen(fout, node->true_code);
+        gen(fout, node->update);
+        fprintf(fout, "    jmp .Lbegin%s\n", node->name);
+        fprintf(fout, ".Lend%s:\n", node->name);
+        return;
+    }
+    if (node->kind == ND_RETURN)
+    {
         gen(fout, node->rhs);
         fprintf(fout, "    pop rax\n");
         fprintf(fout, "    mov rsp, rbp\n");
@@ -29,7 +79,7 @@ void gen(FILE *fout, Node *node)
     switch (node->kind)
     {
     case ND_NUM:
-        fprintf(fout, "    push %d\n", node->val);
+        fprintf(fout, "    push %ld\n", node->val);
         return;
     case ND_LVAR:
         gen_lval(fout, node);
@@ -101,7 +151,7 @@ void gen(FILE *fout, Node *node)
 void generator(char *output_filename)
 {
     pr_debug("start generator");
-    pr_debug("output filepath: %s", output_filename);
+    pr_debug("output filename: %s", output_filename);
     FILE *fout = fopen(output_filename, "w");
     if (fout == NULL)
     {

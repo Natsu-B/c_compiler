@@ -1,7 +1,7 @@
 #ifndef ERROR_C_COMPILER
 #define ERROR_C_COMPILER
 
-// #define DEBUG 1
+#define DEBUG 0
 
 // デバッグ用のprintf管理
 // DEBUG が定義されてなければ何も出力されず、

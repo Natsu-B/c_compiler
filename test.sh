@@ -56,5 +56,7 @@ assert 6 'if (0) return 10; return 6;'
 assert 10 'if(1) return 10; return 6;'
 assert 45 'j=0;for(i=0;i < 10; i = i+1) j = j+i; return j;'
 assert 10 'i=0;j=1;while(i != 10) i = i+j+1; return i;'
+assert 10 '{} return 10;'
+assert 46 'i=0; j=1; while(i != 10) {j = j+i; i = i+1;} return j;'
 
 echo OK

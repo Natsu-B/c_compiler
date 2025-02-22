@@ -73,7 +73,16 @@ void _print_parse_result(Node *node, int nest, char **nodekindlist)
         {
             make_space(nest);
             fprintf(stdout, "|   [code]\n");
-            _print_parse_result(node->true_code, nest+1, nodekindlist);
+            _print_parse_result(node->true_code, nest + 1, nodekindlist);
+        }
+    }
+    else if (node->kind == ND_BLOCK)
+    {
+        fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);
+        fprintf(stdout, "|   [node]\n");
+        for (NDBlock *pointer = node->node; pointer; pointer = pointer->next)
+        {
+            _print_parse_result(pointer->node, nest + 1, nodekindlist);
         }
     }
     else

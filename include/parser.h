@@ -3,6 +3,11 @@
 
 #include "tokenizer.h"
 
+typedef struct Node Node;
+typedef struct LVar LVar;
+typedef struct GTLabel GTLabel;
+typedef struct NDBlock NDBlock;
+
 /**
  *  label の命名規則
  *
@@ -23,13 +28,11 @@
  */
 
 // goto labelを管理するstruct
-typedef struct GTLabel GTLabel;
-
 struct GTLabel
 {
     GTLabel *next; // 次の変数
     char *name;    // 変数名 e.g. _0_main
-    int len; //変数名の長さ
+    int len;       // 変数名の長さ
 };
 
 typedef enum
@@ -50,13 +53,12 @@ typedef enum
     ND_WHILE,  // while
     ND_LVAR,   // ローカル変数
     ND_NUM,    // 整数
+    ND_BLOCK,  // ブロック
     ND_END,    // デバッグ時利用
 } NodeKind;
 
 // デバッグ時利用 NodeKindに追加したら必ず追加すること
-#define NodeKindTable "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_RETURN", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE", "ND_LVAR", "ND_NUM"
-
-typedef struct Node Node;
+#define NodeKindTable "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_RETURN", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE", "ND_LVAR", "ND_NUM", "ND_BLOCK"
 
 struct Node
 {
@@ -69,10 +71,10 @@ struct Node
             Node *rhs; // 右辺 right-hand side
         };
         struct
-        {                        // if for while の場合
-            GTLabel *name; // ラベルの名前
-            Node *condition;     // 判定条件
-            Node *true_code;     // trueの際に実行されるコード
+        {                    // if for while の場合
+            GTLabel *name;   // ラベルの名前
+            Node *condition; // 判定条件
+            Node *true_code; // trueの際に実行されるコード
             union
             {
                 Node *false_code; // if else文 falseの際に実行されるコード
@@ -83,20 +85,26 @@ struct Node
                 };
             };
         };
+        NDBlock* node; // ND_BLOCKの場合 内部の式
         long val;   // ND_NUMの場合 数値
         int offset; // ND_LVARの場合 RBP - offset の位置に変数がある
     };
 };
 
 // 変数を管理するstruct
-typedef struct LVar LVar;
-
 struct LVar
 {
     LVar *next; // 次の変数
     char *name; // 変数名
     int len;    // 長さ
     int offset; // オフセット
+};
+
+// ブロックの中の式を管理するstruct
+struct NDBlock
+{
+    NDBlock *next; // 次の変数
+    Node *node;    // ブロック内の式
 };
 
 extern void parser();

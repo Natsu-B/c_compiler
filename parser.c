@@ -74,6 +74,7 @@ Node *new_node_num(int val)
 /**
  * program    = stmt*
  * stmt    = expr ";"
+ *         | "{" stmt "}"
  *         | "if" "(" expr ")" stmt ("else" stmt)?
  *         | "while" "(" expr ")" stmt
  *         | "for" "(" expr? ";" expr? ";" expr? ")" stmt
@@ -85,7 +86,9 @@ Node *new_node_num(int val)
  * add        = mul ("+" mul | "-" mul)*
  * mul        = unary ("*" unary | "/" unary)*
  * unary      = ("+" | "-")? primary
- * primary    = num | ident | "(" expr ")"
+ * primary    = num
+ *         | ident
+ *         | "(" expr ")"
  */
 
 void program();
@@ -128,6 +131,28 @@ void program()
 Node *stmt()
 {
     pr_debug2("stmt");
+    // ブロックの判定
+    if (consume("{"))
+    {
+        Node *node = calloc(1, sizeof(Node));
+        NDBlock head;
+        head.next = NULL;
+        NDBlock *pointer = &head;
+        node->kind = ND_BLOCK;
+        pr_debug("%llu", head.next);
+        for (;;)
+        {
+            if (consume("}"))
+                break;
+            NDBlock *next = calloc(1, sizeof(NDBlock));
+            pointer->next = next;
+            next->node = stmt();
+            pointer = next;
+        }
+        node->node = head.next;
+        return node;
+    }
+
     // if文の判定とelseがついてるかどうか
     if (consume_TokenKind(TK_IF))
     {

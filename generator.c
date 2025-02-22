@@ -18,6 +18,15 @@ void gen_lval(FILE *fout, Node *node)
 
 void gen(FILE *fout, Node *node)
 {
+    if (node->kind == ND_BLOCK)
+    {
+        for (NDBlock *pointer = node->node; pointer; pointer = pointer->next)
+        {
+            gen(fout, pointer->node);
+            fprintf(fout, "    pop rax\n");
+        }
+        return;
+    }
     if (node->kind == ND_IF)
     {
         gen(fout, node->condition);

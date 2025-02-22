@@ -23,9 +23,9 @@ void gen(FILE *fout, Node *node)
         gen(fout, node->condition);
         fprintf(fout, "    pop rax\n");
         fprintf(fout, "    cmp rax, 0\n");
-        fprintf(fout, "    je .Lend%s\n", node->name);
+        fprintf(fout, "    je .Lend%s\n", node->name->name);
         gen(fout, node->true_code);
-        fprintf(fout, ".Lend%s:\n", node->name);
+        fprintf(fout, ".Lend%s:\n", node->name->name);
         return;
     }
     if (node->kind == ND_ELIF)
@@ -33,38 +33,38 @@ void gen(FILE *fout, Node *node)
         gen(fout, node->condition);
         fprintf(fout, "    pop rax\n");
         fprintf(fout, "    cmp rax, 0\n");
-        fprintf(fout, "    je .Lelse%s\n", node->name);
+        fprintf(fout, "    je .Lelse%s\n", node->name->name);
         gen(fout, node->true_code);
-        fprintf(fout, "    jmp .Lend%s\n", node->name);
-        fprintf(fout, ".Lelse%s:\n", node->name);
+        fprintf(fout, "    jmp .Lend%s\n", node->name->name);
+        fprintf(fout, ".Lelse%s:\n", node->name->name);
         gen(fout, node->false_code);
-        fprintf(fout, ".Lend%s:\n", node->name);
+        fprintf(fout, ".Lend%s:\n", node->name->name);
         return;
     }
     if (node->kind == ND_WHILE)
     {
-        fprintf(fout, ".Lbegin%s:\n", node->name);
+        fprintf(fout, ".Lbegin%s:\n", node->name->name);
         gen(fout, node->condition);
         fprintf(fout, "    pop rax\n");
         fprintf(fout, "    cmp rax, 0\n");
-        fprintf(fout, "    je .Lend%s\n", node->name);
+        fprintf(fout, "    je .Lend%s\n", node->name->name);
         gen(fout, node->true_code);
-        fprintf(fout, "    jmp .Lbegin%s\n", node->name);
-        fprintf(fout, ".Lend%s:\n", node->name);
+        fprintf(fout, "    jmp .Lbegin%s\n", node->name->name);
+        fprintf(fout, ".Lend%s:\n", node->name->name);
         return;
     }
     if (node->kind == ND_FOR)
     {
         gen(fout, node->init);
-        fprintf(fout, ".Lbegin%s:\n", node->name);
+        fprintf(fout, ".Lbegin%s:\n", node->name->name);
         gen(fout, node->condition);
         fprintf(fout, "    pop rax\n");
         fprintf(fout, "    cmp rax, 0\n");
-        fprintf(fout, "    je .Lend%s\n", node->name);
+        fprintf(fout, "    je .Lend%s\n", node->name->name);
         gen(fout, node->true_code);
         gen(fout, node->update);
-        fprintf(fout, "    jmp .Lbegin%s\n", node->name);
-        fprintf(fout, ".Lend%s:\n", node->name);
+        fprintf(fout, "    jmp .Lbegin%s\n", node->name->name);
+        fprintf(fout, ".Lend%s:\n", node->name->name);
         return;
     }
     if (node->kind == ND_RETURN)

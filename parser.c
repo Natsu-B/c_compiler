@@ -24,7 +24,7 @@ GTLabel *head_label;
 
 GTLabel *generate_label_name(char *name)
 {
-    size_t namesize = strlen(name + 4);
+    size_t namesize = strlen(name) + 4;
     GTLabel *next = calloc(1, sizeof(GTLabel));
     next->len = namesize;
     next->next = head_label;

@@ -9,9 +9,6 @@ main: $(OBJS)
 test: main
 	./test.sh
 
-detail: $(OBJS)
-	$(CC) -o main $(OBJS) $(LDFLAGS) -g3
-
 clean:
 	rm -f main *.o *~ tmp*
 

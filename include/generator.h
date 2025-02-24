@@ -3,6 +3,6 @@
 
 #include "parser.h"
 
-extern void generator(char *output_filename);
+extern void generator(FuncBlock *parsed, char *output_filename);
 
 #endif // GENERATOR_C_COMPILER

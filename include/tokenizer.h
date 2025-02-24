@@ -7,6 +7,8 @@ typedef enum
 {
     TK_RESERVED, // 記号
     TK_IDENT,    // 識別子
+    TK_FUNCDEF,  // 関数定義
+    TK_FUNCCALL, // 関数呼び出し
     TK_NUM,      // 整数
     TK_RETURN,   // return
     TK_IF,       // if
@@ -18,7 +20,7 @@ typedef enum
 } TokenKind;     // トークンの種類
 
 // デバッグ出力用 TokenKindに追加したら必ず追加すること
-#define TokenKindTable "TK_RESERVED", "TK_IDENT", "TK_NUM", "TK_RETURN", "TK_IF", "TK_ELSE", "TK_FOR", "TK_WHILE", "TK_EOF"
+#define TokenKindTable "TK_RESERVED", "TK_IDENT", "TK_FUNCDEF", "TK_FUNCCALL", "TK_NUM", "TK_RETURN", "TK_IF", "TK_ELSE", "TK_FOR", "TK_WHILE", "TK_EOF"
 
 typedef struct Token Token;
 
@@ -30,7 +32,7 @@ struct Token
     union           // トークンの種類に応じたデータを保存
     {
         long val; // 整数の場合の値
-        int len;  // 識別子 記号の場合 トークンの長さ
+        int len;  // 識別子、関数、記号の場合 トークンの長さ
     };
 };
 

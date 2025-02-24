@@ -7,6 +7,7 @@ typedef struct Node Node;
 typedef struct LVar LVar;
 typedef struct GTLabel GTLabel;
 typedef struct NDBlock NDBlock;
+typedef struct FuncBlock FuncBlock;
 
 /**
  *  label の命名規則
@@ -37,28 +38,30 @@ struct GTLabel
 
 typedef enum
 {
-    ND_ADD,    // +
-    ND_SUB,    // -
-    ND_MUL,    // *
-    ND_DIV,    // /
-    ND_EQ,     // ==
-    ND_NEQ,    // !=
-    ND_LT,     // <
-    ND_LTE,    // <=
-    ND_ASSIGN, // =
-    ND_RETURN, // return
-    ND_IF,     // if
-    ND_ELIF,   // if else
-    ND_FOR,    // for
-    ND_WHILE,  // while
-    ND_LVAR,   // ローカル変数
-    ND_NUM,    // 整数
-    ND_BLOCK,  // ブロック
-    ND_END,    // デバッグ時利用
+    ND_ADD,      // +
+    ND_SUB,      // -
+    ND_MUL,      // *
+    ND_DIV,      // /
+    ND_EQ,       // ==
+    ND_NEQ,      // !=
+    ND_LT,       // <
+    ND_LTE,      // <=
+    ND_ASSIGN,   // =
+    ND_FUNCDEF,  // 関数定義
+    ND_FUNCCALL, // 関数呼び出し
+    ND_RETURN,   // return
+    ND_IF,       // if
+    ND_ELIF,     // if else
+    ND_FOR,      // for
+    ND_WHILE,    // while
+    ND_LVAR,     // ローカル変数
+    ND_NUM,      // 整数
+    ND_BLOCK,    // ブロック
+    ND_END,      // デバッグ時利用
 } NodeKind;
 
 // デバッグ時利用 NodeKindに追加したら必ず追加すること
-#define NodeKindTable "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_RETURN", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE", "ND_LVAR", "ND_NUM", "ND_BLOCK"
+#define NodeKindTable "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_FUNCDEF", "ND_FUNCCALL", "ND_RETURN", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE", "ND_LVAR", "ND_NUM", "ND_BLOCK"
 
 struct Node
 {
@@ -85,7 +88,14 @@ struct Node
                 };
             };
         };
-        NDBlock* node; // ND_BLOCKの場合 内部の式
+        struct
+        {                    // ND_BLOCK ND_FUNCCALL ND_FUNCDEF
+            NDBlock *expr;   // expr ND_FUNCCALL ND_FUNCDEFで利用
+            NDBlock *stmt;   // stmt ND_BLOCK ND_FUNCDEFで利用
+            char *func_name; // ND_FUNCCALL ND_FUNCDEF で利用 関数名
+            int func_len;    // ND_FUNCCALL ND_FUNCDEF のときのみ利用 関数名長さ
+        };
+
         long val;   // ND_NUMの場合 数値
         int offset; // ND_LVARの場合 RBP - offset の位置に変数がある
     };
@@ -100,16 +110,21 @@ struct LVar
     int offset; // オフセット
 };
 
-// ブロックの中の式を管理するstruct
+// 引数、またはブロックの中の式を管理するstruct
 struct NDBlock
 {
     NDBlock *next; // 次の変数
     Node *node;    // ブロック内の式
 };
 
-extern void parser();
+// 関数の中の式を管理するstruct
+struct FuncBlock
+{
+    FuncBlock *next; // 次の変数
+    Node *node;      // 関数内の式
+    int stacksize;   // スタックのサイズ byte単位
+};
 
-#define max_num 100
-extern Node *code[max_num];
+FuncBlock *parser();
 
 #endif // PARSER_C_COMPILER

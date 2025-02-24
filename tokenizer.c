@@ -110,7 +110,7 @@ void tokenizer(char *input)
             continue;
         }
 
-        if (strchr("+-*/()=!<>;{}", *input))
+        if (strchr("+-*/()=!<>;{},", *input))
         {
             cur = new_token(TK_RESERVED, cur, input);
             // "==", "<=", ">=", "!=" の場合
@@ -200,8 +200,30 @@ void tokenizer(char *input)
                     continue;
                 }
             }
+
+            // 関数名か否かを判別する
+            char *tmp = input;
+            while (isspace(*tmp))
+                tmp++;
+            if (*tmp == '(')
+            {
+                // 関数の定義か関数の呼び出しかを判別する
+                char *pointer = input;
+                while (*pointer != ')')
+                    pointer++;
+                pointer++;
+                while (isspace(*pointer))
+                    pointer++;
+                if (*pointer == '{')
+                    cur = new_token(TK_FUNCDEF, cur, input - i);
+                else
+                    cur = new_token(TK_FUNCCALL, cur, input - i);
+                cur->len = i;
+                continue;
+            }
+
             cur = new_token(TK_IDENT, cur, input - i);
-            cur->val = i;
+            cur->len = i;
             continue;
         }
 

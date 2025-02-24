@@ -21,10 +21,13 @@ LVar *find_lvar(Token *token)
 }
 
 GTLabel *head_label;
+// 現在パースしている関数名と名前
+char *program_name;
+int program_name_len;
 
-GTLabel *generate_label_name(char *name)
+GTLabel *generate_label_name()
 {
-    size_t namesize = strlen(name) + 4;
+    size_t namesize = program_name_len + 4;
     GTLabel *next = calloc(1, sizeof(GTLabel));
     next->len = namesize;
     next->next = head_label;
@@ -32,11 +35,12 @@ GTLabel *generate_label_name(char *name)
     int i = 0;
     for (;;)
     {
-        snprintf(mangle_name, namesize, "_%d_%s", i++, name);
+        snprintf(mangle_name, namesize, "_%d_%.*s", i++, program_name_len, program_name);
         GTLabel *var = head_label;
         for (;;)
         {
-            if (!var || !var->next)
+            // 全部探索し終えたら
+            if (!var)
             {
                 next->name = mangle_name;
                 head_label = next;
@@ -47,7 +51,6 @@ GTLabel *generate_label_name(char *name)
             {
                 break;
             }
-
             var = var->next;
         }
     }
@@ -72,7 +75,7 @@ Node *new_node_num(int val)
 }
 
 /**
- * program    = stmt*
+ * program    = ident "(" expr ("," expr )* ")"{stmt*}
  * stmt    = expr ";"
  *         | "{" stmt "}"
  *         | "if" "(" expr ")" stmt ("else" stmt)?
@@ -88,10 +91,11 @@ Node *new_node_num(int val)
  * unary      = ("+" | "-")? primary
  * primary    = num
  *         | ident
+ *         | ident "(" expr ("," expr )* ")"
  *         | "(" expr ")"
  */
 
-void program();
+Node *program();
 Node *stmt();
 Node *expr();
 Node *assign();
@@ -102,30 +106,77 @@ Node *mul();
 Node *unary();
 Node *primary();
 
-Node *code[max_num];
-
-void parser()
+FuncBlock *parser()
 {
     pr_debug("start parser...");
-    program();
-    pr_debug("complite parse");
-}
-
-void program()
-{
-    pr_debug2("program");
-    int i = 0;
+    FuncBlock head;
+    head.next = NULL;
+    FuncBlock *pointer = &head;
     while (!at_eof())
     {
-        code[i++] = stmt();
-        if (i == max_num)
-            error_exit("行数が多すぎます");
+        locals = NULL;
+        FuncBlock *new = calloc(1, sizeof(FuncBlock));
+        pointer->next = new;
+        new->node = program();
+        pointer = new;
+        int i = 0;
+        LVar *tmp = locals;
+        while (tmp)
+        {
+            i++;
+            tmp = tmp->next;
+        }
+        new->stacksize = i;
     }
-
 #ifdef DEBUG
     char *NodeKindList[ND_END] = {NodeKindTable};
-    print_parse_result(code, i, NodeKindList);
+    print_parse_result(head.next, NodeKindList);
 #endif
+    pr_debug("complite parse");
+    return head.next;
+}
+
+Node *program()
+{
+    pr_debug2("program");
+    Token *token = consume_TokenKind(TK_FUNCDEF);
+    if (token)
+    {
+        Node *node = calloc(1, sizeof(Node));
+        node->kind = ND_FUNCDEF;
+        node->func_name = token->str;
+        node->func_len = token->len;
+        program_name = token->str;
+        program_name_len = token->len;
+        NDBlock head;
+        head.next = NULL;
+        NDBlock *pointer = &head;
+        expect("(");
+        while (!consume(")"))
+        {
+            NDBlock *next = calloc(1, sizeof(NDBlock));
+            pointer->next = next;
+            next->node = expr();
+            pointer = next;
+            consume(","); // TODO 今の所 ",)" が許容されてしまう
+        }
+
+        node->expr = head.next;
+        head.next = NULL;
+        pointer = &head;
+        expect("{");
+        while (!consume("}"))
+        {
+            NDBlock *next = calloc(1, sizeof(NDBlock));
+            pointer->next = next;
+            next->node = stmt();
+            pointer = next;
+        }
+        node->stmt = head.next;
+        return node;
+    }
+    error_exit("function block required");
+    return NULL; // unreachable
 }
 
 Node *stmt()
@@ -139,7 +190,6 @@ Node *stmt()
         head.next = NULL;
         NDBlock *pointer = &head;
         node->kind = ND_BLOCK;
-        pr_debug("%llu", head.next);
         for (;;)
         {
             if (consume("}"))
@@ -149,7 +199,7 @@ Node *stmt()
             next->node = stmt();
             pointer = next;
         }
-        node->node = head.next;
+        node->stmt = head.next;
         return node;
     }
 
@@ -157,22 +207,19 @@ Node *stmt()
     if (consume_TokenKind(TK_IF))
     {
         Node *node = calloc(1, sizeof(Node));
-        node->name = generate_label_name("main");
+        node->name = generate_label_name();
         expect("(");
         node->condition = expr();
         expect(")");
-        if (peek_next_TokenKind(TK_ELSE))
+        node->true_code = stmt();
+        if (consume_TokenKind(TK_ELSE))
         {
             node->kind = ND_ELIF;
-            node->true_code = stmt();
-            if (!consume_TokenKind(TK_ELSE))
-                error_exit("unreachable");
             node->false_code = stmt();
         }
         else
         {
             node->kind = ND_IF;
-            node->true_code = stmt();
         }
         return node;
     }
@@ -182,7 +229,7 @@ Node *stmt()
     {
         Node *node = calloc(1, sizeof(Node));
         node->kind = ND_WHILE;
-        node->name = generate_label_name("main");
+        node->name = generate_label_name();
         expect("(");
         node->condition = expr();
         expect(")");
@@ -195,7 +242,7 @@ Node *stmt()
     {
         Node *node = calloc(1, sizeof(Node));
         node->kind = ND_FOR;
-        node->name = generate_label_name("main");
+        node->name = generate_label_name();
         expect("(");
         if (!consume(";"))
         {
@@ -332,7 +379,36 @@ Node *primary()
         return node;
     }
 
-    Token *token = consume_TokenKind(TK_IDENT);
+    Token *token = consume_TokenKind(TK_FUNCCALL);
+    // 関数
+    if (token)
+    {
+        expect("(");
+        Node *node = calloc(1, sizeof(Node));
+        NDBlock head;
+        head.next = NULL;
+        NDBlock *pointer = &head;
+        node->kind = ND_FUNCCALL;
+        node->func_name = token->str;
+        node->func_len = token->len;
+        while (!consume(")"))
+        {
+            NDBlock *next = calloc(1, sizeof(NDBlock));
+            pointer->next = next;
+            next->node = expr();
+            pointer = next;
+            if (!consume(","))
+            {
+                expect(")");
+                break;
+            }
+        }
+        node->expr = head.next;
+        return node;
+    }
+
+    token = consume_TokenKind(TK_IDENT);
+    // 変数
     if (token)
     {
         Node *node = calloc(1, sizeof(Node));

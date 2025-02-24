@@ -18,9 +18,9 @@ int main(int argc, char **argv)
     // トークナイザ
     tokenizer(input);
     // パーサ
-    parser();
+    FuncBlock *parse_result = parser();
     // コードジェネレーター
-    generator(argv[2]);
+    generator(parse_result, argv[2]);
 
     return 0;
 }

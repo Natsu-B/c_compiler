@@ -75,7 +75,7 @@ Node *new_node_num(int val)
 }
 
 /**
- * program    = ident "(" expr ("," expr )* ")"{stmt*}
+ * program    = type ident "(" expr ("," expr )* ")"{stmt*}
  * stmt    = expr ";"
  *         | "{" stmt "}"
  *         | "if" "(" expr ")" stmt ("else" stmt)?
@@ -141,7 +141,8 @@ FuncBlock *parser()
 Node *program()
 {
     pr_debug2("program");
-    Token *token = consume_TokenKind(TK_FUNCDEF);
+    expect_tokenkind(TK_INT);
+    Token *token = expect_tokenkind(TK_FUNCDEF);
     if (token)
     {
         Node *node = calloc(1, sizeof(Node));
@@ -177,7 +178,7 @@ Node *program()
         node->stmt = head.next;
         return node;
     }
-    error_exit("function block required");
+    error_exit("unreachable");
     return NULL; // unreachable
 }
 
@@ -206,7 +207,7 @@ Node *stmt()
     }
 
     // if文の判定とelseがついてるかどうか
-    if (consume_TokenKind(TK_IF))
+    if (consume_tokenkind(TK_IF))
     {
         Node *node = calloc(1, sizeof(Node));
         node->name = generate_label_name();
@@ -214,7 +215,7 @@ Node *stmt()
         node->condition = expr();
         expect(")");
         node->true_code = stmt();
-        if (consume_TokenKind(TK_ELSE))
+        if (consume_tokenkind(TK_ELSE))
         {
             node->kind = ND_ELIF;
             node->false_code = stmt();
@@ -227,7 +228,7 @@ Node *stmt()
     }
 
     // while文の判定
-    if (consume_TokenKind(TK_WHILE))
+    if (consume_tokenkind(TK_WHILE))
     {
         Node *node = calloc(1, sizeof(Node));
         node->kind = ND_WHILE;
@@ -240,7 +241,7 @@ Node *stmt()
     }
 
     // for文の判定
-    if (consume_TokenKind(TK_FOR))
+    if (consume_tokenkind(TK_FOR))
     {
         Node *node = calloc(1, sizeof(Node));
         node->kind = ND_FOR;
@@ -266,7 +267,7 @@ Node *stmt()
     }
 
     Node *node;
-    if (consume_TokenKind(TK_RETURN))
+    if (consume_tokenkind(TK_RETURN))
     {
         node = calloc(1, sizeof(Node));
         node->kind = ND_RETURN;
@@ -389,7 +390,7 @@ Node *primary()
         return node;
     }
 
-    Token *token = consume_TokenKind(TK_FUNCCALL);
+    Token *token = consume_tokenkind(TK_FUNCCALL);
     // 関数
     if (token)
     {
@@ -417,7 +418,9 @@ Node *primary()
         return node;
     }
 
-    token = consume_TokenKind(TK_IDENT);
+    // 変数の型
+    Token *is_new = consume_tokenkind(TK_INT);
+    token = consume_tokenkind(TK_IDENT);
     // 変数
     if (token)
     {
@@ -426,10 +429,14 @@ Node *primary()
         LVar *lvar = find_lvar(token);
         if (lvar)
         {
+            if (is_new)
+                error_at(token->str, "同じ名前の変数がすでにあります");
             node->offset = lvar->offset;
         }
         else
         {
+            if (!is_new)
+                error_at(token->str, "型が指定されていません");
             lvar = calloc(1, sizeof(LVar));
             lvar->next = locals;
             lvar->name = token->str;

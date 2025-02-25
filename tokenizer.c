@@ -13,24 +13,20 @@
 
 Token *token; // トークンの実体
 
-// 次の次のトークン(1つ先のトークン)が引数のトークンだったらtrueを変える
-bool peek_next_TokenKind(TokenKind kind)
+// 次のトークンが引数のトークンの種類であれば読み進め、そうでなければerror_atを呼び出す
+Token *expect_tokenkind(TokenKind kind)
 {
-    if (token->next->kind != kind)
-        return false;
-    return true;
-}
-
-bool peek_next(char *op)
-{
-    if (token->next->len == strlen(op) &&
-        !strncmp(token->next->str, op, token->next->len))
-        return true;
-    return false;
+    Token *new = consume_tokenkind(kind);
+    if (!new)
+    {
+        char* tokenkindlist[TK_END] = {TokenKindTable};
+        error_at(token->str, "トークンが %s ではありませんでした", tokenkindlist[kind]);
+    }
+    return new;
 }
 
 // 次のトークンが引数のトークンの種類だったら読み勧めてそのTokenを返す
-Token *consume_TokenKind(TokenKind kind)
+Token *consume_tokenkind(TokenKind kind)
 {
     if (token->kind != kind)
         return NULL;
@@ -174,6 +170,13 @@ void tokenizer(char *input)
                 if (!strncmp(input - i, "for", i))
                 {
                     cur = new_token(TK_FOR, cur, input - i);
+                    cur->len = i;
+                    continue;
+                }
+
+                if (!strncmp(input - i, "int", i))
+                {
+                    cur = new_token(TK_INT, cur, input - i);
                     cur->len = i;
                     continue;
                 }

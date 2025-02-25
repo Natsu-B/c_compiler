@@ -271,7 +271,11 @@ Node *stmt()
         node->rhs = expr();
     }
     else
-        node = expr();
+    {
+        node = calloc(1, sizeof(Node));
+        node->kind = ND_DISCARD_EXPR;
+        node->lhs = expr();
+    }
     expect(";");
     return node;
 }

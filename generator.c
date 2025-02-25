@@ -85,12 +85,17 @@ void gen(FILE *fout, Node *node)
         fprintf(fout, "# end calling %.*s\n", node->func_len, node->func_name);
         return;
     }
+    if (node->kind == ND_DISCARD_EXPR)
+    {
+        gen(fout, node->lhs);
+        fprintf(fout, "    add rsp, 8\n");
+        return;
+    }
     if (node->kind == ND_BLOCK)
     {
         for (NDBlock *pointer = node->stmt; pointer; pointer = pointer->next)
         {
             gen(fout, pointer->node);
-            fprintf(fout, "    pop rax\n");
         }
         return;
     }
@@ -308,7 +313,6 @@ void generator(FuncBlock *parsed, char *output_filename)
         }
         else
             error_exit_with_guard("unreachable");
-        fprintf(fout, "    pop rax\n");
     }
 
     fclose(fout);

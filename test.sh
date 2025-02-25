@@ -87,7 +87,9 @@ assert 5 'return_val() {return 5;} main() {return return_val();}'
 assert 194 'fibonacci(a, b) {return a+b;} main() {x = 0; y = 1; i = 0; while(i != 10) { i = i+ 1; x = fibonacci(x, y); y = fibonacci(x, y); } return y; }'
 assert_with_outer_code 10 'main() {i = func();return i;}' './test/include_test.o'
 assert_with_outer_code 0 'main() {x = 0; y = 1; i = 0; while(i != 10) { i = i+ 1; x = fibonacci(x, y); if (x != func(x)){ return 1;} y = fibonacci(x, y); if (y != func(y)) {return 1;}} return 0; }' './test/print_u64.o' './test/fibonacci.o'
-#assert_with_outer_code 0 'fibonacci(a, b) {return a+b;} main() {x = 0; y = 1; i = 0; while(i != 10) { i = i+ 1; x = fibonacci(x, y); if (x != func(x)) return 0; y = fibonacci(x, y); if (y != func(y)) return 1; } return 0; }' './test/print_u64.o'
+assert_with_outer_code 0 'fibonacci(a, b) {return a+b;} main() {x = 0; y = 1; i = 0; while(i != 10) { i = i+ 1; x = fibonacci(x, y); if (x != func(x)) return 0; y = fibonacci(x, y); if (y != func(y)) return 1; } return 0; }' './test/print_u64.o'
+assert 4 'main() { i = 4; x = &i; return *x;}'
+assert 6 'main() { K = 6; return *&K;}'
 
 (
   cd test

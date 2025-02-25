@@ -47,6 +47,8 @@ typedef enum
     ND_LT,           // <
     ND_LTE,          // <=
     ND_ASSIGN,       // =
+    ND_ADDR,         // &
+    ND_DEREF,        // *
     ND_FUNCDEF,      // 関数定義
     ND_FUNCCALL,     // 関数呼び出し
     ND_RETURN,       // return
@@ -62,7 +64,7 @@ typedef enum
 } NodeKind;
 
 // デバッグ時利用 NodeKindに追加したら必ず追加すること
-#define NodeKindTable "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_FUNCDEF", "ND_FUNCCALL", "ND_RETURN", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE", "ND_LVAR", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR"
+#define NodeKindTable "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF", "ND_FUNCDEF", "ND_FUNCCALL", "ND_RETURN", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE", "ND_LVAR", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR"
 
 struct Node
 {

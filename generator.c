@@ -174,26 +174,29 @@ void gen(FILE *fout, Node *node)
     {
     case ND_NUM:
         fprintf(fout, "    push %ld\n", node->val);
-
         return;
     case ND_LVAR:
         gen_lval(fout, node);
         fprintf(fout, "    pop rax\n");
-
         fprintf(fout, "    mov rax, [rax]\n");
         fprintf(fout, "    push rax\n");
-
         return;
     case ND_ASSIGN:
         gen_lval(fout, node->lhs);
         gen(fout, node->rhs);
         fprintf(fout, "    pop rdi\n");
-
         fprintf(fout, "    pop rax\n");
-
         fprintf(fout, "    mov [rax], rdi\n");
         fprintf(fout, "    push rdi\n");
-
+        return;
+    case ND_ADDR:
+        gen_lval(fout, node->lhs);
+        return;
+    case ND_DEREF:
+        gen(fout, node->lhs);
+        fprintf(fout, "    pop rax\n");
+        fprintf(fout, "    mov rax, [rax]\n");
+        fprintf(fout, "    push rax\n");
         return;
     default:
         break;
@@ -203,9 +206,7 @@ void gen(FILE *fout, Node *node)
     gen(fout, node->rhs);
 
     fprintf(fout, "    pop rdi\n");
-
     fprintf(fout, "    pop rax\n");
-
     switch (node->kind)
     {
     case ND_ADD:

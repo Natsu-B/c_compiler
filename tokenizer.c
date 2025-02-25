@@ -110,7 +110,7 @@ void tokenizer(char *input)
             continue;
         }
 
-        if (strchr("+-*/()=!<>;{},", *input))
+        if (strchr("+-*/()=!<>;{},&", *input))
         {
             cur = new_token(TK_RESERVED, cur, input);
             // "==", "<=", ">=", "!=" の場合

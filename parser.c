@@ -155,13 +155,20 @@ Node *program()
         head.next = NULL;
         NDBlock *pointer = &head;
         expect("(");
-        while (!consume(")"))
+        if (!consume(")"))
         {
             NDBlock *next = calloc(1, sizeof(NDBlock));
             pointer->next = next;
             next->node = expr();
             pointer = next;
-            consume(","); // TODO 今の所 ",)" が許容されてしまう
+            while (!consume(")"))
+            {
+                expect(",");
+                NDBlock *next = calloc(1, sizeof(NDBlock));
+                pointer->next = next;
+                next->node = expr();
+                pointer = next;
+            }
         }
 
         node->expr = head.next;

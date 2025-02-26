@@ -93,6 +93,8 @@ assert 6 'int main() {int K = 6; return *&K;}'
 assert_with_outer_code 5 'int main() {int x = 0; for(int i= 0; i < 10 ; i =i+1) { x = x+ i; if (x !=func(x)) return 1; }return 5;}' './test/print_u64.o'
 assert 0 'int main() {int x = 3; int *y = &x; *y = 0; return x;}'
 assert 3 'int main() {int x = 0; int *y = &x; int **z = &y;*y = 2; **z = 3; return x;}'
+assert_with_outer_code 3 'int main() {int *p; alloc(&p, 1, 3); int *q = p+1; return *q;}' './test/alloc2.o'
+assert_with_outer_code 1 'int main() {int *p; alloc(&p, 1, 3); int *q = p + 1; q = q-1; return *q;}' './test/alloc2.o'
 
 (
   cd test

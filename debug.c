@@ -31,7 +31,18 @@ void _print_parse_result(Node *node, int nest, char **nodekindlist)
 {
     make_space(nest);
     if (node->kind == ND_NUM)
-        fprintf(stdout, "NodeKind: %s value: %ld\n", nodekindlist[node->kind], node->val);
+    {
+        int type_name = __INT_MAX__;
+        int reference_counter = -1;
+        Type *pointer = node->type;
+        while (pointer)
+        {
+            reference_counter++;
+            type_name = pointer->type;
+            pointer = pointer->ptr_to;
+        }
+        fprintf(stdout, "NodeKind: %s value: %ld type:%.*s%d\n", nodekindlist[node->kind], node->val, reference_counter, "*****************************************************************************************************************",type_name);
+    }
     else if (node->kind == ND_LVAR)
     {
         int type_name = __INT_MAX__;

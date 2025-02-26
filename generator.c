@@ -22,6 +22,8 @@ FILE *fout;
         fprintf(fout, fmt "\n", ##__VA_ARGS__); \
     } while (0)
 
+void gen(Node *node);
+
 void gen_lval(Node *node)
 {
     if (node->kind == ND_LVAR)
@@ -188,8 +190,29 @@ void gen(Node *node)
     switch (node->kind)
     {
     case ND_NUM:
-        output_file("    push %ld", node->val);
-        return;
+        if (node->type->type == TYPE_INT)
+        {
+            output_file("# TYPE_INT");
+            output_file("    push %ld", node->val);
+            return;
+        }
+        if (node->type->type == TYPE_PTR)
+        {
+            if (node->type->ptr_to->type == TYPE_INT)
+            {
+                output_file("# TYPE_PTR -> TYPE_INT");
+                output_file("    push %ld", node->val * 8);
+                return;
+            }
+            if (node->type->ptr_to->type == TYPE_PTR)
+            {
+                output_file("# TYPE_PTR -> TYPE_PTR");
+                output_file("    push %ld", node->val * 8);
+                return;
+            }
+        }
+        error_exit_with_guard("unreachable");
+        break;
     case ND_LVAR:
         gen_lval(node);
         output_file("    pop rax");

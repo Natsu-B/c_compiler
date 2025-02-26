@@ -70,8 +70,9 @@ typedef enum
 struct Node
 {
     NodeKind kind; // ノードの種類
-    union
-    {
+    Type *type;    // 型
+    //union
+    //{
         struct
         {
             Node *lhs; // 左辺 left-hand side
@@ -99,14 +100,9 @@ struct Node
             char *func_name; // ND_FUNCCALL ND_FUNCDEF で利用 関数名
             int func_len;    // ND_FUNCCALL ND_FUNCDEF のときのみ利用 関数名長さ
         };
-
-        long val; // ND_NUMの場合 数値
-        struct
-        {               // ND_LVARの場合
-            int offset; // RBP - offset の位置に変数がある
-            Type *type; // 型
-        };
-    };
+        long val;   // ND_NUMの場合 数値
+        int offset; // ND_LVARの場合 RBP - offset の位置に変数がある
+    //};
 };
 
 // 変数を管理するstruct

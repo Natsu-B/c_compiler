@@ -71,7 +71,43 @@ Node *new_node_num(int val)
     Node *node = calloc(1, sizeof(Node));
     node->kind = ND_NUM;
     node->val = val;
+    Type *type = calloc(1, sizeof(Type));
+    type->type = TYPE_INT;
+    node->type = type;
     return node;
+}
+
+// 単一行のnodeの中から左辺を探し、変数だったら型を返す
+// 見つからなかった場合NULLを返す
+Type *search_expr_type(Node *node)
+{
+    if (!node)
+        error_exit("unreachable");
+    if (node->lhs)
+    {
+        if (node->lhs->kind == ND_LVAR)
+            return node->lhs->type;
+        Type *find_type = search_expr_type(node->lhs);
+        if (node->lhs->kind == ND_DEREF && find_type)
+            find_type->ptr_to;
+    }
+    return NULL;
+}
+
+void set_expr_type(Type *type, Node *node)
+{
+    if (!node)
+        error_exit("unreachable");
+    if (node->lhs)
+    {
+        node->lhs->type = type;
+        set_expr_type(type, node->lhs);
+    }
+    if (node->rhs)
+    {
+        node->rhs->type = type;
+        set_expr_type(type, node->rhs);
+    }
 }
 
 /**
@@ -299,7 +335,13 @@ Node *stmt()
 Node *expr()
 {
     pr_debug2("expr");
-    return assign();
+    // expr 以下の式は全部同じ型となるはずなので
+    // nodeを辿ってすべての型を等しくする
+    Node *node = assign();
+    Type *type = search_expr_type(node);
+    if (type)
+        set_expr_type(type, node);
+    return node;
 }
 
 Node *assign()
@@ -308,7 +350,9 @@ Node *assign()
     Node *node = equality();
 
     if (consume("="))
+    {
         node = new_node(ND_ASSIGN, node, assign());
+    }
     return node;
 }
 
@@ -355,9 +399,13 @@ Node *add()
     for (;;)
     {
         if (consume("+"))
+        {
             node = new_node(ND_ADD, node, mul());
+        }
         else if (consume("-"))
+        {
             node = new_node(ND_SUB, node, mul());
+        }
         else
             return node;
     }

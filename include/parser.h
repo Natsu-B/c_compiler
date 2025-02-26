@@ -71,38 +71,39 @@ struct Node
 {
     NodeKind kind; // ノードの種類
     Type *type;    // 型
-    //union
-    //{
-        struct
+
+    // 以下は Nodeの種類によってそれぞれ1つしか使わないが、
+    // あるNodeを起点にしてそれ以下のNodeを検索するプログラムを
+    // 簡略化するため一時的にunionを使わないことにする
+    struct
+    {
+        Node *lhs; // 左辺 left-hand side
+        Node *rhs; // 右辺 right-hand side
+    };
+    struct
+    {                    // if for while の場合
+        GTLabel *name;   // ラベルの名前
+        Node *condition; // 判定条件
+        Node *true_code; // trueの際に実行されるコード
+        union
         {
-            Node *lhs; // 左辺 left-hand side
-            Node *rhs; // 右辺 right-hand side
-        };
-        struct
-        {                    // if for while の場合
-            GTLabel *name;   // ラベルの名前
-            Node *condition; // 判定条件
-            Node *true_code; // trueの際に実行されるコード
-            union
-            {
-                Node *false_code; // if else文 falseの際に実行されるコード
-                struct
-                {                 // for文
-                    Node *init;   // 初期化時のコード e.g. int i = 0
-                    Node *update; // 毎ステップごとに実行されるコード e.g. i++
-                };
+            Node *false_code; // if else文 falseの際に実行されるコード
+            struct
+            {                 // for文
+                Node *init;   // 初期化時のコード e.g. int i = 0
+                Node *update; // 毎ステップごとに実行されるコード e.g. i++
             };
         };
-        struct
-        {                    // ND_BLOCK ND_FUNCCALL ND_FUNCDEF
-            NDBlock *expr;   // expr ND_FUNCCALL ND_FUNCDEFで利用
-            NDBlock *stmt;   // stmt ND_BLOCK ND_FUNCDEFで利用
-            char *func_name; // ND_FUNCCALL ND_FUNCDEF で利用 関数名
-            int func_len;    // ND_FUNCCALL ND_FUNCDEF のときのみ利用 関数名長さ
-        };
-        long val;   // ND_NUMの場合 数値
-        int offset; // ND_LVARの場合 RBP - offset の位置に変数がある
-    //};
+    };
+    struct
+    {                    // ND_BLOCK ND_FUNCCALL ND_FUNCDEF
+        NDBlock *expr;   // expr ND_FUNCCALL ND_FUNCDEFで利用
+        NDBlock *stmt;   // stmt ND_BLOCK ND_FUNCDEFで利用
+        char *func_name; // ND_FUNCCALL ND_FUNCDEF で利用 関数名
+        int func_len;    // ND_FUNCCALL ND_FUNCDEF のときのみ利用 関数名長さ
+    };
+    long val;   // ND_NUMの場合 数値
+    int offset; // ND_LVARの場合 RBP - offset の位置に変数がある
 };
 
 // 変数を管理するstruct

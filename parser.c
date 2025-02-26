@@ -89,7 +89,8 @@ Type *search_expr_type(Node *node)
             return node->lhs->type;
         Type *find_type = search_expr_type(node->lhs);
         if (node->lhs->kind == ND_DEREF && find_type)
-            find_type->ptr_to;
+            return find_type->ptr_to;
+        return find_type;
     }
     return NULL;
 }

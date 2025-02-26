@@ -33,7 +33,18 @@ void _print_parse_result(Node *node, int nest, char **nodekindlist)
     if (node->kind == ND_NUM)
         fprintf(stdout, "NodeKind: %s value: %ld\n", nodekindlist[node->kind], node->val);
     else if (node->kind == ND_LVAR)
-        fprintf(stdout, "NodeKind: %s offset: %d\n", nodekindlist[node->kind], node->offset);
+    {
+        int type_name = __INT_MAX__;
+        int reference_counter = -1;
+        Type *pointer = node->type;
+        while (pointer)
+        {
+            reference_counter++;
+            type_name = pointer->type;
+            pointer = pointer->ptr_to;
+        }
+        fprintf(stdout, "NodeKind: %s type:%.*s%d offset: %d\n", nodekindlist[node->kind], reference_counter, "*****************************************************************************************************************", type_name, node->offset);
+    }
     else if (node->kind == ND_IF || node->kind == ND_ELIF || node->kind == ND_WHILE)
     {
         fprintf(stdout, "NodeKind: %s labelname: %s\n", nodekindlist[node->kind], node->name->name);
@@ -110,7 +121,7 @@ void _print_parse_result(Node *node, int nest, char **nodekindlist)
         fprintf(stdout, "|   [body]\n");
         for (NDBlock *pointer = node->stmt; pointer; pointer = pointer->next)
         {
-            _print_parse_result(pointer->node, nest + 1,nodekindlist);
+            _print_parse_result(pointer->node, nest + 1, nodekindlist);
         }
     }
     else

@@ -75,7 +75,7 @@ Node *new_node_num(int val)
 }
 
 /**
- * program    = type ident "(" expr ("," expr )* ")"{stmt*}
+ * program    = type ( "*" )* ident "(" expr ("," expr )* ")"{stmt*}
  * stmt    = expr ";"
  *         | "{" stmt "}"
  *         | "if" "(" expr ")" stmt ("else" stmt)?
@@ -92,7 +92,7 @@ Node *new_node_num(int val)
  *         | "*" unary
  *         | "&" unary
  * primary    = num
- *         | ident
+ *         | ( type ( "*" )* )? ident
  *         | ident "(" expr ("," expr )* ")"
  *         | "(" expr ")"
  */
@@ -256,7 +256,10 @@ Node *stmt()
         expect("(");
         if (!consume(";"))
         {
-            node->init = expr();
+            Node *new = calloc(1, sizeof(Node));
+            node->init = new;
+            new->kind = ND_DISCARD_EXPR;
+            new->lhs = expr();
             expect(";");
         }
         if (!consume(";"))
@@ -266,7 +269,10 @@ Node *stmt()
         }
         if (!consume(")"))
         {
-            node->update = expr();
+            Node *new = calloc(1, sizeof(Node));
+            node->update = new;
+            new->kind = ND_DISCARD_EXPR;
+            new->lhs = expr();
             expect(")");
         }
         node->true_code = stmt();
@@ -427,7 +433,17 @@ Node *primary()
 
     // 変数の型
     Token *is_new = consume_tokenkind(TK_INT);
-    token = consume_tokenkind(TK_IDENT);
+    int pointer_counter = 0;
+    if (is_new)
+    {
+        while (consume("*"))
+        {
+            pointer_counter++;
+        }
+        token = expect_tokenkind(TK_IDENT);
+    }
+    else
+        token = consume_tokenkind(TK_IDENT);
     // 変数
     if (token)
     {
@@ -439,17 +455,31 @@ Node *primary()
             if (is_new)
                 error_at(token->str, "同じ名前の変数がすでにあります");
             node->offset = lvar->offset;
+            node->type = lvar->type;
         }
         else
         {
             if (!is_new)
                 error_at(token->str, "型が指定されていません");
+            // 型
+            Type *type = calloc(1, sizeof(LVar));
+            type->type = TYPE_INT;
+            while (pointer_counter--)
+            {
+                Type *new = calloc(1, sizeof(LVar));
+                new->type = TYPE_PTR;
+                new->ptr_to = type;
+                type = new;
+            }
+
             lvar = calloc(1, sizeof(LVar));
             lvar->next = locals;
             lvar->name = token->str;
             lvar->len = token->len;
             lvar->offset = (locals ? locals->offset : 0) + 8;
             node->offset = lvar->offset;
+            lvar->type = type;
+            node->type = type;
             locals = lvar;
         }
         return node;

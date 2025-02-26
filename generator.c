@@ -7,58 +7,73 @@
 #include <stdio.h>
 #include <string.h>
 
-#define error_exit_with_guard(fmt, ...)                                                      \
-    do                                                                                       \
-    {                                                                                        \
-        fprintf(fout, "error detected at %s:%d:%s() exit...", __FILE__, __LINE__, __func__); \
-        error_exit(fmt, ##__VA_ARGS__);                                                      \
+#define error_exit_with_guard(fmt, ...)                                                    \
+    do                                                                                     \
+    {                                                                                      \
+        output_file("error detected at %s:%d:%s() exit...", __FILE__, __LINE__, __func__); \
+        error_exit(fmt, ##__VA_ARGS__);                                                    \
     } while (0)
 
-void gen_lval(FILE *fout, Node *node)
-{
-    if (node->kind != ND_LVAR)
-        error_exit_with_guard("代入の左辺値が変数でありません");
+FILE *fout;
 
-    fprintf(fout, "    mov rax, rbp\n");
-    fprintf(fout, "    sub rax, %d\n", node->offset);
-    fprintf(fout, "    push rax\n");
+#define output_file(fmt, ...)                   \
+    do                                          \
+    {                                           \
+        fprintf(fout, fmt "\n", ##__VA_ARGS__); \
+    } while (0)
+
+void gen_lval(Node *node)
+{
+    if (node->kind == ND_LVAR)
+    {
+        output_file("    mov rax, rbp");
+        output_file("    sub rax, %d", node->offset);
+        output_file("    push rax");
+        return;
+    }
+    if (node->kind == ND_DEREF)
+    {
+        gen(node->lhs);
+        return;
+    }
+    error_exit_with_guard("代入の左辺値が変数でありません");
 }
 
 int align_counter;
 
-void gen(FILE *fout, Node *node)
+void gen(Node *node)
 {
     if (!node)
         error_exit_with_guard("null pointer");
     if (node->kind == ND_FUNCCALL)
     {
-        fprintf(fout, "# start calling %.*s\n", node->func_len, node->func_name);
+        output_file("# start calling %.*s", node->func_len, node->func_name);
         NDBlock *pointer = node->expr;
         int i = 0;
         while (pointer)
         {
-            gen(fout, pointer->node);
-            fprintf(fout, "    pop rax\n");
+            gen(pointer->node);
+            output_file("    pop rax");
 
             switch (++i)
             {
             case 1:
-                fprintf(fout, "    mov rdi, rax\n");
+                output_file("    mov rdi, rax");
                 break;
             case 2:
-                fprintf(fout, "    mov rsi, rax\n");
+                output_file("    mov rsi, rax");
                 break;
             case 3:
-                fprintf(fout, "    mov rdx, rax\n");
+                output_file("    mov rdx, rax");
                 break;
             case 4:
-                fprintf(fout, "    mov rcx, rax\n");
+                output_file("    mov rcx, rax");
                 break;
             case 5:
-                fprintf(fout, "    mov r8, rax\n");
+                output_file("    mov r8, rax");
                 break;
             case 6:
-                fprintf(fout, "    mov r9, rax\n");
+                output_file("    mov r9, rax");
                 break;
             default:
                 error_exit_with_guard("too much arguments");
@@ -67,187 +82,187 @@ void gen(FILE *fout, Node *node)
             pointer = pointer->next;
         }
         // rspの16byte alignment 対応
-        fprintf(fout, "    mov rax, rsp\n");
-        fprintf(fout, "    and rax, 15\n");
-        fprintf(fout, "    jnz .L_%d_unaligned\n", align_counter);
-        fprintf(fout, "    mov rax, 0\n");
-        fprintf(fout, "    call %.*s\n", node->func_len, node->func_name);
-        fprintf(fout, "    jmp .L_%d_aligned\n", align_counter);
-        fprintf(fout, ".L_%d_unaligned:\n", align_counter);
-        fprintf(fout, "    sub rsp, 8\n");
-        fprintf(fout, "    mov rax, 0\n");
-        fprintf(fout, "    call %.*s\n", node->func_len, node->func_name);
-        fprintf(fout, "    add rsp, 8\n");
-        fprintf(fout, ".L_%d_aligned:\n", align_counter);
-        fprintf(fout, "    push rax\n");
+        output_file("    mov rax, rsp");
+        output_file("    and rax, 15");
+        output_file("    jnz .L_%d_unaligned", align_counter);
+        output_file("    mov rax, 0");
+        output_file("    call %.*s", node->func_len, node->func_name);
+        output_file("    jmp .L_%d_aligned", align_counter);
+        output_file(".L_%d_unaligned:", align_counter);
+        output_file("    sub rsp, 8");
+        output_file("    mov rax, 0");
+        output_file("    call %.*s", node->func_len, node->func_name);
+        output_file("    add rsp, 8");
+        output_file(".L_%d_aligned:", align_counter);
+        output_file("    push rax");
         align_counter++;
 
-        fprintf(fout, "# end calling %.*s\n", node->func_len, node->func_name);
+        output_file("# end calling %.*s", node->func_len, node->func_name);
         return;
     }
     if (node->kind == ND_DISCARD_EXPR)
     {
-        gen(fout, node->lhs);
-        fprintf(fout, "    add rsp, 8\n");
+        gen(node->lhs);
+        output_file("    add rsp, 8");
         return;
     }
     if (node->kind == ND_BLOCK)
     {
         for (NDBlock *pointer = node->stmt; pointer; pointer = pointer->next)
         {
-            gen(fout, pointer->node);
+            gen(pointer->node);
         }
         return;
     }
     if (node->kind == ND_IF)
     {
-        fprintf(fout, "# start if block\n");
-        gen(fout, node->condition);
-        fprintf(fout, "    pop rax\n");
+        output_file("# start if block");
+        gen(node->condition);
+        output_file("    pop rax");
 
-        fprintf(fout, "    cmp rax, 0\n");
-        fprintf(fout, "    je .Lendif%s\n", node->name->name);
-        gen(fout, node->true_code);
-        fprintf(fout, ".Lendif%s:\n", node->name->name);
-        fprintf(fout, "# end if block\n");
+        output_file("    cmp rax, 0");
+        output_file("    je .Lendif%s", node->name->name);
+        gen(node->true_code);
+        output_file(".Lendif%s:", node->name->name);
+        output_file("# end if block");
         return;
     }
     if (node->kind == ND_ELIF)
     {
-        fprintf(fout, "# start elif block\n");
-        gen(fout, node->condition);
-        fprintf(fout, "    pop rax\n");
+        output_file("# start elif block");
+        gen(node->condition);
+        output_file("    pop rax");
 
-        fprintf(fout, "    cmp rax, 0\n");
-        fprintf(fout, "    je .Lelseif%s\n", node->name->name);
-        gen(fout, node->true_code);
-        fprintf(fout, "    jmp .Lendif%s\n", node->name->name);
-        fprintf(fout, ".Lelseif%s:\n", node->name->name);
-        gen(fout, node->false_code);
-        fprintf(fout, ".Lendif%s:\n", node->name->name);
-        fprintf(fout, "# end elif block\n");
+        output_file("    cmp rax, 0");
+        output_file("    je .Lelseif%s", node->name->name);
+        gen(node->true_code);
+        output_file("    jmp .Lendif%s", node->name->name);
+        output_file(".Lelseif%s:", node->name->name);
+        gen(node->false_code);
+        output_file(".Lendif%s:", node->name->name);
+        output_file("# end elif block");
         return;
     }
     if (node->kind == ND_WHILE)
     {
-        fprintf(fout, "# start while block\n");
-        fprintf(fout, ".Lbeginwhile%s:\n", node->name->name);
-        gen(fout, node->condition);
-        fprintf(fout, "    pop rax\n");
+        output_file("# start while block");
+        output_file(".Lbeginwhile%s:", node->name->name);
+        gen(node->condition);
+        output_file("    pop rax");
 
-        fprintf(fout, "    cmp rax, 0\n");
-        fprintf(fout, "    je .Lendwhile%s\n", node->name->name);
-        gen(fout, node->true_code);
-        fprintf(fout, "    jmp .Lbeginwhile%s\n", node->name->name);
-        fprintf(fout, ".Lendwhile%s:\n", node->name->name);
-        fprintf(fout, "# end while block\n");
+        output_file("    cmp rax, 0");
+        output_file("    je .Lendwhile%s", node->name->name);
+        gen(node->true_code);
+        output_file("    jmp .Lbeginwhile%s", node->name->name);
+        output_file(".Lendwhile%s:", node->name->name);
+        output_file("# end while block");
         return;
     }
     if (node->kind == ND_FOR)
     {
-        fprintf(fout, "# start for block\n");
-        gen(fout, node->init);
-        fprintf(fout, ".Lbeginfor%s:\n", node->name->name);
-        gen(fout, node->condition);
-        fprintf(fout, "    pop rax\n");
+        output_file("# start for block");
+        gen(node->init);
+        output_file(".Lbeginfor%s:", node->name->name);
+        gen(node->condition);
+        output_file("    pop rax");
 
-        fprintf(fout, "    cmp rax, 0\n");
-        fprintf(fout, "    je .Lendfor%s\n", node->name->name);
-        gen(fout, node->true_code);
-        gen(fout, node->update);
-        fprintf(fout, "    jmp .Lbeginfor%s\n", node->name->name);
-        fprintf(fout, ".Lendfor%s:\n", node->name->name);
-        fprintf(fout, "# end for block\n");
+        output_file("    cmp rax, 0");
+        output_file("    je .Lendfor%s", node->name->name);
+        gen(node->true_code);
+        gen(node->update);
+        output_file("    jmp .Lbeginfor%s", node->name->name);
+        output_file(".Lendfor%s:", node->name->name);
+        output_file("# end for block");
         return;
     }
     if (node->kind == ND_RETURN)
     {
-        gen(fout, node->rhs);
-        fprintf(fout, "    pop rax\n");
+        gen(node->rhs);
+        output_file("    pop rax");
 
-        fprintf(fout, "    mov rsp, rbp\n");
-        fprintf(fout, "    pop rbp\n");
-        fprintf(fout, "    ret\n");
+        output_file("    mov rsp, rbp");
+        output_file("    pop rbp");
+        output_file("    ret");
         return;
     }
     switch (node->kind)
     {
     case ND_NUM:
-        fprintf(fout, "    push %ld\n", node->val);
+        output_file("    push %ld", node->val);
         return;
     case ND_LVAR:
-        gen_lval(fout, node);
-        fprintf(fout, "    pop rax\n");
-        fprintf(fout, "    mov rax, [rax]\n");
-        fprintf(fout, "    push rax\n");
+        gen_lval(node);
+        output_file("    pop rax");
+        output_file("    mov rax, [rax]");
+        output_file("    push rax");
         return;
     case ND_ASSIGN:
-        gen_lval(fout, node->lhs);
-        gen(fout, node->rhs);
-        fprintf(fout, "    pop rdi\n");
-        fprintf(fout, "    pop rax\n");
-        fprintf(fout, "    mov [rax], rdi\n");
-        fprintf(fout, "    push rdi\n");
+        gen_lval(node->lhs);
+        gen(node->rhs);
+        output_file("    pop rdi");
+        output_file("    pop rax");
+        output_file("    mov [rax], rdi");
+        output_file("    push rdi");
         return;
     case ND_ADDR:
-        gen_lval(fout, node->lhs);
+        gen_lval(node->lhs);
         return;
     case ND_DEREF:
-        gen(fout, node->lhs);
-        fprintf(fout, "    pop rax\n");
-        fprintf(fout, "    mov rax, [rax]\n");
-        fprintf(fout, "    push rax\n");
+        gen(node->lhs);
+        output_file("    pop rax");
+        output_file("    mov rax, [rax]");
+        output_file("    push rax");
         return;
     default:
         break;
     }
 
-    gen(fout, node->lhs);
-    gen(fout, node->rhs);
+    gen(node->lhs);
+    gen(node->rhs);
 
-    fprintf(fout, "    pop rdi\n");
-    fprintf(fout, "    pop rax\n");
+    output_file("    pop rdi");
+    output_file("    pop rax");
     switch (node->kind)
     {
     case ND_ADD:
-        fprintf(fout, "    add rax, rdi\n");
+        output_file("    add rax, rdi");
         break;
     case ND_SUB:
-        fprintf(fout, "    sub rax, rdi\n");
+        output_file("    sub rax, rdi");
         break;
     case ND_MUL:
-        fprintf(fout, "    imul rax, rdi\n");
+        output_file("    imul rax, rdi");
         break;
     case ND_DIV:
-        fprintf(fout, "    cqo\n");
-        fprintf(fout, "    idiv rdi\n");
+        output_file("    cqo");
+        output_file("    idiv rdi");
         break;
     case ND_EQ:
-        fprintf(fout, "    cmp rax, rdi\n");
-        fprintf(fout, "    sete al\n");
-        fprintf(fout, "    movzb rax, al\n");
+        output_file("    cmp rax, rdi");
+        output_file("    sete al");
+        output_file("    movzb rax, al");
         break;
     case ND_NEQ:
-        fprintf(fout, "    cmp rax, rdi\n");
-        fprintf(fout, "    setne al\n");
-        fprintf(fout, "    movzb rax, al\n");
+        output_file("    cmp rax, rdi");
+        output_file("    setne al");
+        output_file("    movzb rax, al");
         break;
     case ND_LT:
-        fprintf(fout, "    cmp rax, rdi\n");
-        fprintf(fout, "    setl al\n");
-        fprintf(fout, "    movzb rax, al\n");
+        output_file("    cmp rax, rdi");
+        output_file("    setl al");
+        output_file("    movzb rax, al");
         break;
     case ND_LTE:
-        fprintf(fout, "    cmp rax, rdi\n");
-        fprintf(fout, "    setle al\n");
-        fprintf(fout, "    movzb rax, al\n");
+        output_file("    cmp rax, rdi");
+        output_file("    setle al");
+        output_file("    movzb rax, al");
         break;
     default:
         error_exit_with_guard("unreachable");
         break;
     }
 
-    fprintf(fout, "    push rax\n");
+    output_file("    push rax");
 }
 
 void generator(FuncBlock *parsed, char *output_filename)
@@ -255,14 +270,14 @@ void generator(FuncBlock *parsed, char *output_filename)
     pr_debug("start generator");
 
     pr_debug("output filename: %.*s", strlen(output_filename), output_filename);
-    FILE *fout = fopen(output_filename, "w");
+    fout = fopen(output_filename, "w");
     if (fout == NULL)
     {
         error_exit("ファイルに書き込めませんでした");
     }
     pr_debug("output file open");
-    fprintf(fout, ".intel_syntax noprefix\n");
-    fprintf(fout, ".global main\n");
+    output_file(".intel_syntax noprefix");
+    output_file(".global main");
 
     int i = 0;
     for (FuncBlock *pointer = parsed; pointer; pointer = pointer->next)
@@ -271,36 +286,36 @@ void generator(FuncBlock *parsed, char *output_filename)
         Node *node = pointer->node;
         if (node->kind == ND_FUNCDEF)
         {
-            fprintf(fout, "\n%.*s:\n", node->func_len, node->func_name);
-            fprintf(fout, "    push rbp\n");
-            fprintf(fout, "    mov rbp, rsp\n");
-            fprintf(fout, "    sub rsp, %d\n", pointer->stacksize * 8);
+            output_file("\n%.*s:", node->func_len, node->func_name);
+            output_file("    push rbp");
+            output_file("    mov rbp, rsp");
+            output_file("    sub rsp, %d", pointer->stacksize * 8);
             int j = 0;
             for (NDBlock *pointer = node->expr; pointer; pointer = pointer->next)
             {
                 if (pointer->node->kind != ND_LVAR)
                     error_exit_with_guard("invalid function arguments");
-                fprintf(fout, "    mov rax, rbp\n");
-                fprintf(fout, "    sub rax, %d\n", pointer->node->offset);
+                output_file("    mov rax, rbp");
+                output_file("    sub rax, %d", pointer->node->offset);
                 switch (++j)
                 {
                 case 1:
-                    fprintf(fout, "    mov [rax], rdi\n");
+                    output_file("    mov [rax], rdi");
                     break;
                 case 2:
-                    fprintf(fout, "    mov [rax], rsi\n");
+                    output_file("    mov [rax], rsi");
                     break;
                 case 3:
-                    fprintf(fout, "    mov [rax], rdx\n");
+                    output_file("    mov [rax], rdx");
                     break;
                 case 4:
-                    fprintf(fout, "    mov [rax], rcx\n");
+                    output_file("    mov [rax], rcx");
                     break;
                 case 5:
-                    fprintf(fout, "    mov [rax], r8\n");
+                    output_file("    mov [rax], r8");
                     break;
                 case 6:
-                    fprintf(fout, "    mov [rax], r9\n");
+                    output_file("    mov [rax], r9");
                     break;
                 default:
                     error_exit_with_guard("too much arguments");
@@ -310,7 +325,7 @@ void generator(FuncBlock *parsed, char *output_filename)
 
             align_counter = 0;
             for (NDBlock *pointer = node->stmt; pointer; pointer = pointer->next)
-                gen(fout, pointer->node);
+                gen(pointer->node);
         }
         else
             error_exit_with_guard("unreachable");

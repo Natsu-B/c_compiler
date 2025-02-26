@@ -88,8 +88,11 @@ assert 194 'int fibonacci(int a, int b) {return a+b;}int main() {int x = 0; int 
 assert_with_outer_code 10 'int main() {int i = func();return i;}' './test/include_test.o'
 assert_with_outer_code 0 'int main() {int x = 0;int y = 1; int i = 0; while(i != 10) { i = i+ 1; x = fibonacci(x, y); if (x != func(x)){ return 1;} y = fibonacci(x, y); if (y != func(y)) {return 1;}} return 0; }' './test/print_u64.o' './test/fibonacci.o'
 assert_with_outer_code 0 'int fibonacci(int a,int b) {return a+b;}int main() {int x = 0; int y = 1; int i = 0; while(i != 10) { i = i+ 1; x = fibonacci(x, y); if (x != func(x)) return 0; y = fibonacci(x, y); if (y != func(y)) return 1; } return 0; }' './test/print_u64.o'
-assert 4 'int main() {int i = 4;int x = &i; return *x;}'
+assert 4 'int main() {int i = 4;int *x = &i; return *x;}'
 assert 6 'int main() {int K = 6; return *&K;}'
+assert_with_outer_code 5 'int main() {int x = 0; for(int i= 0; i < 10 ; i =i+1) { x = x+ i; if (x !=func(x)) return 1; }return 5;}' './test/print_u64.o'
+assert 0 'int main() {int x = 3; int *y = &x; *y = 0; return x;}'
+assert 3 'int main() {int x = 0; int *y = &x; int **z = &y;*y = 2; **z = 3; return x;}'
 
 (
   cd test

@@ -8,6 +8,7 @@ typedef struct LVar LVar;
 typedef struct GTLabel GTLabel;
 typedef struct NDBlock NDBlock;
 typedef struct FuncBlock FuncBlock;
+typedef struct Type Type;
 
 /**
  *  label の命名規則
@@ -99,8 +100,12 @@ struct Node
             int func_len;    // ND_FUNCCALL ND_FUNCDEF のときのみ利用 関数名長さ
         };
 
-        long val;   // ND_NUMの場合 数値
-        int offset; // ND_LVARの場合 RBP - offset の位置に変数がある
+        long val; // ND_NUMの場合 数値
+        struct
+        {               // ND_LVARの場合
+            int offset; // RBP - offset の位置に変数がある
+            Type *type; // 型
+        };
     };
 };
 
@@ -109,8 +114,9 @@ struct LVar
 {
     LVar *next; // 次の変数
     char *name; // 変数名
-    int len;    // 長さ
+    int len;    // 変数名 長さ
     int offset; // オフセット
+    Type *type; // 型
 };
 
 // 引数、またはブロックの中の式を管理するstruct
@@ -126,6 +132,20 @@ struct FuncBlock
     FuncBlock *next; // 次の変数
     Node *node;      // 関数内の式
     int stacksize;   // スタックのサイズ byte単位
+};
+
+// サポートしている変数の型
+typedef enum
+{
+    TYPE_INT, // TODO int型 unsigned 64bit
+    TYPE_PTR, // 型へのポインタ
+} TypeKind;
+
+// 変数の型を管理するstruct
+struct Type
+{
+    TypeKind type;
+    Type *ptr_to;
 };
 
 FuncBlock *parser();

@@ -19,7 +19,7 @@ Token *expect_tokenkind(TokenKind kind)
     Token *new = consume_tokenkind(kind);
     if (!new)
     {
-        char* tokenkindlist[TK_END] = {TokenKindTable};
+        char *tokenkindlist[TK_END] = {TokenKindTable};
         error_at(token->str, "トークンが %s ではありませんでした", tokenkindlist[kind]);
     }
     return new;

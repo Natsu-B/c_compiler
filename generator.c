@@ -181,7 +181,6 @@ void gen(Node *node)
     {
         gen(node->rhs);
         output_file("    pop rax");
-
         output_file("    mov rsp, rbp");
         output_file("    pop rbp");
         output_file("    ret");
@@ -201,13 +200,13 @@ void gen(Node *node)
             if (node->type->ptr_to->type == TYPE_INT)
             {
                 output_file("# TYPE_PTR -> TYPE_INT");
-                output_file("    push %ld", node->val * 8);
+                output_file("    push %ld", node->val);
                 return;
             }
             if (node->type->ptr_to->type == TYPE_PTR)
             {
                 output_file("# TYPE_PTR -> TYPE_PTR");
-                output_file("    push %ld", node->val * 8);
+                output_file("    push %ld", node->val);
                 return;
             }
         }
@@ -349,6 +348,10 @@ void generator(FuncBlock *parsed, char *output_filename)
             align_counter = 0;
             for (NDBlock *pointer = node->stmt; pointer; pointer = pointer->next)
                 gen(pointer->node);
+            output_file("    pop rax");
+            output_file("    mov rsp, rbp");
+            output_file("    pop rbp");
+            output_file("    ret");
         }
         else
             error_exit_with_guard("unreachable");

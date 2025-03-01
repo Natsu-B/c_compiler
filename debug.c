@@ -2,11 +2,12 @@
 #include "include/error.h"
 #include "include/tokenizer.h"
 #include "include/parser.h"
+#include "include/analyzer.h"
 #include <stdio.h>
 
 extern GTLabel *head_label;
 
-void print_tokenize_result(Token *token, char **tokenkindlist)
+void print_tokenize_result(Token *token)
 {
     pr_debug("tokenize result:");
     for (;;)
@@ -27,7 +28,7 @@ void make_space(int nest)
         fprintf(stdout, "|   ");
 }
 
-void _print_parse_result(Node *node, int nest, char **nodekindlist)
+void _print_parse_result(Node *node, int nest)
 {
     make_space(nest);
     if (node->kind == ND_NUM)
@@ -61,15 +62,15 @@ void _print_parse_result(Node *node, int nest, char **nodekindlist)
         fprintf(stdout, "NodeKind: %s labelname: %s\n", nodekindlist[node->kind], node->name->name);
         make_space(nest);
         fprintf(stdout, "|   [condition]\n");
-        _print_parse_result(node->condition, nest + 1, nodekindlist);
+        _print_parse_result(node->condition, nest + 1);
         make_space(nest);
         fprintf(stdout, "|   [true_code]\n");
-        _print_parse_result(node->true_code, nest + 1, nodekindlist);
+        _print_parse_result(node->true_code, nest + 1);
         if (node->false_code)
         {
             make_space(nest);
             fprintf(stdout, "|    [false_code]\n");
-            _print_parse_result(node->false_code, nest + 1, nodekindlist);
+            _print_parse_result(node->false_code, nest + 1);
         }
     }
     else if (node->kind == ND_FOR)
@@ -79,25 +80,25 @@ void _print_parse_result(Node *node, int nest, char **nodekindlist)
         {
             make_space(nest);
             fprintf(stdout, "|   [init]\n");
-            _print_parse_result(node->init, nest + 1, nodekindlist);
+            _print_parse_result(node->init, nest + 1);
         }
         if (node->condition)
         {
             make_space(nest);
             fprintf(stdout, "|   [condition]\n");
-            _print_parse_result(node->condition, nest + 1, nodekindlist);
+            _print_parse_result(node->condition, nest + 1);
         }
         if (node->update)
         {
             make_space(nest);
             fprintf(stdout, "|   [update]\n");
-            _print_parse_result(node->update, nest + 1, nodekindlist);
+            _print_parse_result(node->update, nest + 1);
         }
         if (node->true_code)
         {
             make_space(nest);
             fprintf(stdout, "|   [code]\n");
-            _print_parse_result(node->true_code, nest + 1, nodekindlist);
+            _print_parse_result(node->true_code, nest + 1);
         }
     }
     else if (node->kind == ND_BLOCK)
@@ -107,7 +108,7 @@ void _print_parse_result(Node *node, int nest, char **nodekindlist)
         fprintf(stdout, "|   [node]\n");
         for (NDBlock *pointer = node->stmt; pointer; pointer = pointer->next)
         {
-            _print_parse_result(pointer->node, nest + 1, nodekindlist);
+            _print_parse_result(pointer->node, nest + 1);
         }
     }
     else if (node->kind == ND_FUNCCALL)
@@ -117,7 +118,7 @@ void _print_parse_result(Node *node, int nest, char **nodekindlist)
         fprintf(stdout, "|   [arguments]\n");
         for (NDBlock *pointer = node->expr; pointer; pointer = pointer->next)
         {
-            _print_parse_result(pointer->node, nest + 1, nodekindlist);
+            _print_parse_result(pointer->node, nest + 1);
         }
     }
     else if (node->kind == ND_FUNCDEF)
@@ -127,12 +128,12 @@ void _print_parse_result(Node *node, int nest, char **nodekindlist)
         fprintf(stdout, "|   [arguments]\n");
         for (NDBlock *pointer = node->expr; pointer; pointer = pointer->next)
         {
-            _print_parse_result(pointer->node, nest + 1, nodekindlist);
+            _print_parse_result(pointer->node, nest + 1);
         }
         fprintf(stdout, "|   [body]\n");
         for (NDBlock *pointer = node->stmt; pointer; pointer = pointer->next)
         {
-            _print_parse_result(pointer->node, nest + 1, nodekindlist);
+            _print_parse_result(pointer->node, nest + 1);
         }
     }
     else
@@ -142,25 +143,25 @@ void _print_parse_result(Node *node, int nest, char **nodekindlist)
         {
             make_space(nest);
             fprintf(stdout, "|   [lhs]\n");
-            _print_parse_result(node->lhs, nest + 1, nodekindlist);
+            _print_parse_result(node->lhs, nest + 1);
         }
         if (node->rhs)
         {
             make_space(nest);
             fprintf(stdout, "|   [rhs]\n");
-            _print_parse_result(node->rhs, nest + 1, nodekindlist);
+            _print_parse_result(node->rhs, nest + 1);
         }
     }
 }
 
-void print_parse_result(FuncBlock *node, char **nodekindlist)
+void print_parse_result(FuncBlock *node)
 {
     pr_debug("parse result:");
     int i = 0;
     for (FuncBlock *pointer = node; pointer; pointer = pointer->next)
     {
         fprintf(stdout, "node[%d]\n", i++);
-        _print_parse_result(pointer->node, 0, nodekindlist);
+        _print_parse_result(pointer->node, 0);
     }
     fprintf(stdout, "\njump label:\n");
     for (GTLabel *pointer = head_label; pointer; pointer = pointer->next)

@@ -11,7 +11,10 @@
 #include <string.h>
 #include <ctype.h>
 
-Token *token; // トークンの実体
+Token *token;     // トークンの実体
+Token *token_old; // tokenの一つあとのトークン
+
+const char *tokenkindlist[TK_END] = {TokenKindTable};
 
 // 次のトークンが引数のトークンの種類であれば読み進め、そうでなければerror_atを呼び出す
 Token *expect_tokenkind(TokenKind kind)
@@ -30,28 +33,38 @@ Token *consume_tokenkind(TokenKind kind)
 {
     if (token->kind != kind)
         return NULL;
-    Token *ret = token;
+    token_old = token;
     token = token->next;
-    return ret;
+    return token_old;
 }
 
-// 次のトークンが引数の記号だったら読み進めtrueをその他のときはfalseを返す関数
-bool consume(char *op)
+// 次のトークンが引数の記号だったら読み進めtokenをその他のときはNULLを返す関数
+Token *consume(char *op)
 {
     if (token->kind != TK_RESERVED ||
         strlen(op) != token->len ||
         memcmp(op, token->str, token->len))
-        return false;
-
+        return NULL;
+    token_old = token;
     token = token->next;
-    return true;
+    return token_old;
 }
 
 // 次のトークンが引数の記号だったら読み進め、そうでなければerror_atを呼び出す
-void expect(char *op)
+Token *expect(char *op)
 {
-    if (!consume(op))
+    Token *result = consume(op);
+    if (!result)
         error_at(token->str, "トークンが %.*s でありませんでした", token->len, op);
+    return result;
+}
+
+// 一つ前のトークンを取得する
+Token *get_old_token()
+{
+    if (token_old->next != token)
+        error_exit("unreachable");
+    return token_old;
 }
 
 // 次のトークンが整数だった場合読み進め、それ以外だったらエラーを返す関数
@@ -202,6 +215,13 @@ void tokenizer(char *input)
                     cur->val = i;
                     continue;
                 }
+
+                if (!strncmp(input - i, "sizeof", i))
+                {
+                    cur = new_token(TK_SIZEOF, cur, input - i);
+                    cur->val = i;
+                    continue;
+                }
             }
 
             // 関数名か否かを判別する
@@ -243,8 +263,7 @@ void tokenizer(char *input)
 
     pr_debug("complite tokenize");
 #ifdef DEBUG
-    char *TokenKindList[TK_END] = {TokenKindTable};
-    print_tokenize_result(head.next, TokenKindList);
+    print_tokenize_result(head.next);
 #endif
     token = head.next;
 }

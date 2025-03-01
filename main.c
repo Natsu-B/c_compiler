@@ -3,6 +3,7 @@
 #include "include/tokenizer.h"
 #include "include/parser.h"
 #include "include/generator.h"
+#include "include/analyzer.h"
 #include <stdio.h>
 
 int main(int argc, char **argv)
@@ -19,8 +20,10 @@ int main(int argc, char **argv)
     tokenizer(input);
     // パーサ
     FuncBlock *parse_result = parser();
+    // アナライザ(意味解析)
+    FuncBlock *analyze_result = analyzer(parse_result);
     // コードジェネレーター
-    generator(parse_result, argv[2]);
+    generator(analyze_result, argv[2]);
 
     return 0;
 }

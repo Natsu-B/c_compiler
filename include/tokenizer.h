@@ -11,6 +11,7 @@ typedef enum
     TK_FUNCCALL, // 関数呼び出し
     TK_NUM,      // 整数
     TK_RETURN,   // return
+    TK_SIZEOF,   // sizeof
     TK_INT,      // int
     TK_IF,       // if
     TK_ELSE,     // else
@@ -21,7 +22,8 @@ typedef enum
 } TokenKind;     // トークンの種類
 
 // デバッグ出力用 TokenKindに追加したら必ず追加すること
-#define TokenKindTable "TK_RESERVED", "TK_IDENT", "TK_FUNCDEF", "TK_FUNCCALL", "TK_NUM", "TK_RETURN", "TK_INT", "TK_IF", "TK_ELSE", "TK_FOR", "TK_WHILE", "TK_EOF"
+#define TokenKindTable "TK_RESERVED", "TK_IDENT", "TK_FUNCDEF", "TK_FUNCCALL", "TK_NUM", "TK_RETURN", "TK_SIZEOF", "TK_INT", "TK_IF", "TK_ELSE", "TK_FOR", "TK_WHILE", "TK_EOF"
+extern const char *tokenkindlist[TK_END];
 
 typedef struct Token Token;
 
@@ -43,8 +45,9 @@ extern bool at_eof();
 
 extern Token *expect_tokenkind(TokenKind kind);
 extern Token *consume_tokenkind(TokenKind kind);
-extern bool consume(char *op);
-extern void expect(char *op);
+extern Token *consume(char *op);
+extern Token *expect(char *op);
+extern Token *get_old_token();
 
 extern long expect_number();
 

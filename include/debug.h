@@ -3,7 +3,7 @@
 #include "tokenizer.h"
 #include "parser.h"
 
-void print_tokenize_result(Token* token, char** tokenkindlist);
-void print_parse_result(FuncBlock *node, char **nodekindlist);
+void print_tokenize_result(Token* token);
+void print_parse_result(FuncBlock *node);
 
 #endif

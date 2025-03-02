@@ -311,7 +311,7 @@ void generator(FuncBlock *parsed, char *output_filename)
             output_file("\n%.*s:", node->func_len, node->func_name);
             output_file("    push rbp");
             output_file("    mov rbp, rsp");
-            output_file("    sub rsp, %d", pointer->stacksize * 8);
+            output_file("    sub rsp, %d", pointer->stacksize);
             int j = 0;
             for (NDBlock *pointer = node->expr; pointer; pointer = pointer->next)
             {

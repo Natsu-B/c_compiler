@@ -140,7 +140,7 @@ FuncBlock *parser()
         LVar *tmp = locals;
         while (tmp)
         {
-            i++;
+            i += 8;
             tmp = tmp->next;
         }
         new->stacksize = i;
@@ -156,7 +156,7 @@ Node *program()
 {
     pr_debug2("program");
     expect_tokenkind(TK_INT);
-    Token *token = expect_tokenkind(TK_FUNCDEF);
+    Token *token = expect_tokenkind(TK_IDENT);
     if (token)
     {
         Node *node = calloc(1, sizeof(Node));
@@ -425,7 +425,7 @@ Node *primary()
         return node;
     }
 
-    Token *token = consume_tokenkind(TK_FUNCCALL);
+    Token *token = consume_token_if_next_matches(TK_IDENT, '(');
     // 関数
     if (token)
     {

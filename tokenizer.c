@@ -16,6 +16,36 @@ Token *token_old; // tokenの一つあとのトークン
 
 const char *tokenkindlist[TK_END] = {TokenKindTable};
 
+// 次の次のトークン(1つ先のトークン)が引数のトークンだったらtrueを変える
+bool peek_next_TokenKind(TokenKind kind)
+{
+    if (token->next->kind != kind)
+        return false;
+    return true;
+}
+
+bool peek_next(char *op)
+{
+    if (token->next->len == strlen(op) &&
+        !strncmp(token->next->str, op, token->next->len))
+        return true;
+    return false;
+}
+
+// 次のトークンが引数のkindのトークンで、その次のトークンがTK_RESERVEDで
+// 引数のreservedと等しければ消費する その他の場合NULLを返す
+Token *consume_token_if_next_matches(TokenKind kind, char reserved)
+{
+    if (token->kind == kind &&
+        *(token->next->str) == reserved)
+    {
+        Token* token_old = token;
+        token = token_old->next;
+        return token_old;
+    }
+    return NULL;
+}
+
 // 次のトークンが引数のトークンの種類であれば読み進め、そうでなければerror_atを呼び出す
 Token *expect_tokenkind(TokenKind kind)
 {
@@ -119,7 +149,7 @@ void tokenizer(char *input)
             continue;
         }
 
-        if (strchr("+-*/()=!<>;{},&", *input))
+        if (strchr("+-*/()=!<>;{},&[]", *input))
         {
             cur = new_token(TK_RESERVED, cur, input);
             // "==", "<=", ">=", "!=" の場合
@@ -222,27 +252,6 @@ void tokenizer(char *input)
                     cur->val = i;
                     continue;
                 }
-            }
-
-            // 関数名か否かを判別する
-            char *tmp = input;
-            while (isspace(*tmp))
-                tmp++;
-            if (*tmp == '(')
-            {
-                // 関数の定義か関数の呼び出しかを判別する
-                char *pointer = input;
-                while (*pointer != ')')
-                    pointer++;
-                pointer++;
-                while (isspace(*pointer))
-                    pointer++;
-                if (*pointer == '{')
-                    cur = new_token(TK_FUNCDEF, cur, input - i);
-                else
-                    cur = new_token(TK_FUNCCALL, cur, input - i);
-                cur->len = i;
-                continue;
             }
 
             cur = new_token(TK_IDENT, cur, input - i);

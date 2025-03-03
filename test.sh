@@ -96,6 +96,7 @@ assert 3 'int main() {int x = 0; int *y = &x; int **z = &y;*y = 2; **z = 3; retu
 assert_with_outer_code 3 'int main() {int *p; alloc(&p, 1, 3); int *q = p+1; return *q;}' './test/alloc2.o'
 assert_with_outer_code 1 'int main() {int *p; alloc(&p, 1, 3); int *q = p + 1; q = q-1; return *q;}' './test/alloc2.o'
 assert 0 'int main() {int x; if (sizeof(x) != 8) return 1; int* y; if (sizeof(y) != 8) return 1; if (sizeof(*y) != 8) return 1; if (sizeof(x + 1) != 8) return 1; if (sizeof(sizeof(1)) != sizeof(1))return 1;  return 0;}'
+assert 2 'int main() {int x[2]; int y; *(x+1) = 1; *x = 2; y = 5; return (y - *(x+1)) / *x;}'
 
 (
   cd test

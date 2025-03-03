@@ -103,9 +103,10 @@ Type *alloc_type(TypeKind kind)
  * add        = mul ("+" mul | "-" mul)*
  * mul        = unary ("*" unary | "/" unary)*
  * unary      = "sizeof" unary
- *         | ("+" | "-")? primary
+ *         | ("+" | "-")? postfix
  *         | "*" unary
  *         | "&" unary
+ * postfix    = primary ( "[" expr "]" )*
  * primary    = num
  *         | ( type ( "*" )* )? ident
  *         | ident "(" expr ("," expr )* ")"
@@ -121,6 +122,7 @@ Node *relational();
 Node *add();
 Node *mul();
 Node *unary();
+Node *postfix();
 Node *primary();
 
 FuncBlock *parser()
@@ -405,14 +407,29 @@ Node *unary()
     if (consume_tokenkind(TK_SIZEOF))
         return new_node(ND_SIZEOF, unary(), NULL, get_old_token());
     if (consume("+"))
-        return primary();
+        return postfix();
     if (consume("-"))
-        return new_node(ND_SUB, new_node_num(0), primary(), get_old_token());
+        return new_node(ND_SUB, new_node_num(0), postfix(), get_old_token());
     if (consume("*"))
         return new_node(ND_DEREF, unary(), NULL, get_old_token());
     if (consume("&"))
         return new_node(ND_ADDR, unary(), NULL, get_old_token());
-    return primary();
+    return postfix();
+}
+
+Node *postfix()
+{
+    pr_debug2("postfix");
+    Node *node = primary();
+    for (;;)
+    {
+        if (consume("["))
+        {
+            node = new_node(ND_ARRAY, node, new_node_num(expect_number()), get_old_token());
+            expect("]");
+        }
+        return node;
+    }
 }
 
 Node *primary()

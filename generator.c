@@ -102,6 +102,11 @@ void gen(Node *node)
         output_file("# end calling %.*s", node->func_len, node->func_name);
         return;
     }
+    if (node->kind == ND_ARRAY)
+    {
+        gen(node->lhs);
+        return;
+    }
     if (node->kind == ND_DISCARD_EXPR)
     {
         gen(node->lhs);
@@ -195,7 +200,8 @@ void gen(Node *node)
             output_file("    push %ld", node->val);
             return;
         }
-        if (node->type->type == TYPE_PTR)
+        if (node->type->type == TYPE_PTR ||
+            node->type->type == TYPE_ARRAY)
         {
             if (node->type->ptr_to->type == TYPE_INT)
             {

@@ -2,6 +2,7 @@
 #define PARSER_C_COMPILER
 
 #include "tokenizer.h"
+#include <stddef.h>
 
 typedef struct Node Node;
 typedef struct LVar LVar;
@@ -59,6 +60,7 @@ typedef enum
     ND_FOR,          // for
     ND_WHILE,        // while
     ND_LVAR,         // ローカル変数
+    ND_ARRAY,        // 配列
     ND_NUM,          // 整数
     ND_BLOCK,        // ブロック
     ND_DISCARD_EXPR, // 式文
@@ -66,8 +68,8 @@ typedef enum
 } NodeKind;
 
 // デバッグ時利用 NodeKindに追加したら必ず追加すること
-#define NodeKindTable "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF", "ND_FUNCDEF", "ND_FUNCCALL", "ND_RETURN", "ND_SIZEOF", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE", "ND_LVAR", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR"
-extern const char* nodekindlist[ND_END];
+#define NodeKindTable "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF", "ND_FUNCDEF", "ND_FUNCCALL", "ND_RETURN", "ND_SIZEOF", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE", "ND_LVAR", "ND_ARRAY", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR"
+extern const char *nodekindlist[ND_END];
 
 struct Node
 {
@@ -139,15 +141,17 @@ struct FuncBlock
 // サポートしている変数の型
 typedef enum
 {
-    TYPE_INT, // TODO int型 unsigned 64bit
-    TYPE_PTR, // 型へのポインタ
+    TYPE_INT,   // TODO int型 unsigned 64bit
+    TYPE_PTR,   // 型へのポインタ
+    TYPE_ARRAY, // 配列
 } TypeKind;
 
 // 変数の型を管理するstruct
 struct Type
 {
     TypeKind type;
-    Type *ptr_to;
+    Type *ptr_to; // TYPE_PTR, TYPE_ARRAYのとき利用
+    size_t size;  // TYPE_ARRAYのとき利用
 };
 
 Type *alloc_type(TypeKind kind);

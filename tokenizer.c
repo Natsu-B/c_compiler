@@ -16,7 +16,7 @@ Token *token_old; // tokenの一つあとのトークン
 
 const char *tokenkindlist[TK_END] = {TokenKindTable};
 
-// 次の次のトークン(1つ先のトークン)が引数のトークンだったらtrueを変える
+// 次の次のトークン(1つ先のトークン)が引数のトークンだったらtrueを返す
 bool peek_next_TokenKind(TokenKind kind)
 {
     if (token->next->kind != kind)

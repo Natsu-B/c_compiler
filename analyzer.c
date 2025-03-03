@@ -12,7 +12,8 @@ bool is_equal_type(Type *lhs, Type *rhs)
 {
     if (lhs->type == rhs->type)
     {
-        if (lhs->type == TYPE_PTR)
+        if (lhs->type == TYPE_PTR ||
+            lhs->type == TYPE_ARRAY)
             return is_equal_type(lhs->ptr_to, rhs->ptr_to);
         return true;
     }
@@ -57,7 +58,8 @@ void add_type(Node *node)
     }
     if (node->kind == ND_DEREF)
     {
-        if (node->lhs->type->type != TYPE_PTR)
+        if (node->lhs->type->type != TYPE_PTR &&
+            node->lhs->type->type != TYPE_ARRAY)
             error_at(node->token->str, "invalid dereference");
         node->lhs->type = node->lhs->type->ptr_to;
         node->type = node->lhs->type;
@@ -67,28 +69,20 @@ void add_type(Node *node)
     {
         int flag = 0;
         Type *type = alloc_type(TYPE_INT);
-        if (node->lhs->type->type == TYPE_PTR)
+        if (node->lhs->type->type == TYPE_PTR ||
+            node->lhs->type->type == TYPE_ARRAY)
         {
             type = node->lhs->type;
             flag++;
         }
-        if (node->rhs->type->type == TYPE_PTR)
+        if (node->rhs->type->type == TYPE_PTR ||
+            node->rhs->type->type == TYPE_ARRAY)
         {
             type = node->rhs->type;
-            flag += 2;
+            flag++;
         }
-        switch (flag)
-        {
-        case 1:
-            break;
-        case 2:
-            break;
-        case 3:
+        if (flag >= 2)
             error_at(node->token->str, "invalid use of the '+' operator");
-            break;
-        default:
-            break;
-        }
         node->lhs->type = type;
         node->rhs->type = type;
         node->type = type;
@@ -107,15 +101,22 @@ void add_type(Node *node)
             node->type = alloc_type(TYPE_INT);
         return;
     }
-    if (node->kind == ND_ASSIGN)
-    {
-        if (!is_equal_type(node->lhs->type, node->rhs->type))
-            error_at(node->token->str, "the types on both sides of '=' must match");
-        return;
-    }
     if (node->kind == ND_SIZEOF)
     {
         node->type = alloc_type(TYPE_INT);
+        return;
+    }
+    if (node->kind == ND_ARRAY)
+    {
+        // old1 -> old2 -> old3 ... のように並んでいた Typeを
+        // old1 -> new -> old2 -> old3 ... に変更することで同じ変数の Typeを変更する
+        Type *new = alloc_type(node->lhs->type->type);
+        new->ptr_to = node->lhs->type->ptr_to;
+        new->size = node->lhs->type->size;
+        node->lhs->type->type = TYPE_ARRAY;
+        node->lhs->type->ptr_to = new;
+        node->lhs->type->size = node->rhs->val;
+        node->rhs->type = node->lhs->type;
         return;
     }
 }
@@ -141,6 +142,12 @@ void analyze_type(Node *node)
         for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
             analyze_type(tmp->node);
 
+    if (node->kind == ND_ASSIGN)
+    {
+        if (!is_equal_type(node->lhs->type, node->rhs->type))
+            error_at(node->token->str, "the types on both sides of '=' must match");
+        return;
+    }
     if (node->kind == ND_NUM)
     {
         if (node->type->type == TYPE_PTR)

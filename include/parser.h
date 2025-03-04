@@ -109,18 +109,23 @@ struct Node
         char *func_name; // ND_FUNCCALL ND_FUNCDEF で利用 関数名
         int func_len;    // ND_FUNCCALL ND_FUNCDEF のときのみ利用 関数名長さ
     };
-    long val;   // ND_NUMの場合 数値
-    int offset; // ND_LVARの場合 RBP - offset の位置に変数がある
+    long val; // ND_NUMの場合 数値
+    struct
+    {                // ND_LVARの場合
+        int counter; // 何番目の変数か
+        int offset;  // RBP - offset の位置に変数がある
+        bool is_new; // 初めて定義された変数か否か
+    };
 };
 
 // 変数を管理するstruct
 struct LVar
 {
-    LVar *next; // 次の変数
-    char *name; // 変数名
-    int len;    // 変数名 長さ
-    int offset; // オフセット
-    Type *type; // 型
+    LVar *next;  // 次の変数
+    char *name;  // 変数名
+    int len;     // 変数名 長さ
+    Type *type;  // 型
+    int counter; // 何番目の変数か
 };
 
 // 引数、またはブロックの中の式を管理するstruct

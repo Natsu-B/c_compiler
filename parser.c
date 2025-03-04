@@ -137,15 +137,8 @@ FuncBlock *parser()
         FuncBlock *new = calloc(1, sizeof(FuncBlock));
         pointer->next = new;
         new->node = program();
+        new->node->offset = locals ? locals->counter : 0;
         pointer = new;
-        int i = 0;
-        LVar *tmp = locals;
-        while (tmp)
-        {
-            i += 8;
-            tmp = tmp->next;
-        }
-        new->stacksize = i;
     }
 #ifdef DEBUG
     print_parse_result(head.next);
@@ -425,7 +418,8 @@ Node *postfix()
     {
         if (consume("["))
         {
-            node = new_node(ND_ARRAY, node, new_node_num(expect_number()), get_old_token());
+            Token *old_token = get_old_token();
+            node = new_node(ND_ARRAY, node, new_node_num(expect_number()), old_token);
             expect("]");
         }
         return node;
@@ -495,8 +489,9 @@ Node *primary()
         {
             if (is_new)
                 error_at(token->str, "同じ名前の変数がすでにあります");
-            node->offset = lvar->offset;
+            node->counter = lvar->counter;
             node->type = lvar->type;
+            node->is_new = false;
             while (pointer_counter--)
             {
                 Node *new = calloc(1, sizeof(Node));
@@ -514,8 +509,6 @@ Node *primary()
             lvar->next = locals;
             lvar->name = token->str;
             lvar->len = token->len;
-            lvar->offset = (locals ? locals->offset : 0) + 8;
-            node->offset = lvar->offset;
             // 型の指定
             Type *type = alloc_type(TYPE_INT);
             while (pointer_counter--)
@@ -524,8 +517,19 @@ Node *primary()
                 new->ptr_to = type;
                 type = new;
             }
+            if (!locals)
+            {
+                node->counter = 0;
+                lvar->counter = 0;
+            }
+            else
+            {
+                node->counter = locals->counter + 1;
+                lvar->counter = locals->counter + 1;
+            }
             lvar->type = type;
             node->type = type;
+            node->is_new = true;
             locals = lvar;
         }
         return node;

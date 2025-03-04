@@ -20,6 +20,23 @@ bool is_equal_type(Type *lhs, Type *rhs)
     return false;
 }
 
+// TYPE_INT TYPE_ARRAY 等を受け取ってその大きさを返す関数
+int size_of(TypeKind type)
+{
+    switch (type)
+    {
+    case TYPE_INT:
+        return 8;
+    case TYPE_PTR:
+        return 8;
+    case TYPE_ARRAY:
+        return 8;
+    default:
+        error_exit("unreachable");
+        break;
+    }
+}
+
 void add_type(Node *node)
 {
     if (node->lhs)
@@ -117,30 +134,33 @@ void add_type(Node *node)
         node->lhs->type->ptr_to = new;
         node->lhs->type->size = node->rhs->val;
         node->rhs->type = node->lhs->type;
+        node->lhs->val = node->rhs->val;
         return;
     }
 }
 
-void analyze_type(Node *node)
+void analyze_type(Node *node, int *offset)
 {
     if (node->lhs)
-        analyze_type(node->lhs);
+        analyze_type(node->lhs, offset);
     if (node->rhs)
-        analyze_type(node->rhs);
+        analyze_type(node->rhs, offset);
+    if (node->init)
+        analyze_type(node->init, offset);
     if (node->condition)
-        analyze_type(node->condition);
+        analyze_type(node->condition, offset);
     if (node->true_code)
-        analyze_type(node->true_code);
+        analyze_type(node->true_code, offset);
     if (node->false_code) // node->init も同じ
-        analyze_type(node->false_code);
+        analyze_type(node->false_code, offset);
     if (node->update)
-        analyze_type(node->update);
+        analyze_type(node->update, offset);
     if (node->expr)
         for (NDBlock *tmp = node->expr; tmp; tmp = tmp->next)
-            analyze_type(tmp->node);
+            analyze_type(tmp->node, offset);
     if (node->stmt)
         for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
-            analyze_type(tmp->node);
+            analyze_type(tmp->node, offset);
 
     if (node->kind == ND_ASSIGN)
     {
@@ -152,19 +172,30 @@ void analyze_type(Node *node)
     {
         if (node->type->type == TYPE_PTR)
         {
-            switch (node->type->ptr_to->type)
+            node->val = node->val * size_of(node->type->ptr_to->type);
+        }
+        return;
+    }
+    if (node->kind == ND_LVAR)
+    {
+        if (node->is_new)
+        {
+            switch (node->type->type)
             {
-            case TYPE_PTR:
-                node->val = node->val * 8;
-                break;
             case TYPE_INT:
-                node->val = node->val * 8;
+            case TYPE_PTR:
+                offset[node->counter] = (node->counter ? offset[node->counter - 1] : 0) + size_of(node->type->type);
+                break;
+            case TYPE_ARRAY:
+                offset[node->counter] = (node->counter ? offset[node->counter - 1] : 0) + size_of(node->type->ptr_to->type) * node->val;
                 break;
             default:
                 error_exit("unreachable");
                 break;
             }
         }
+        node->offset = offset[node->counter];
+        return;
     }
     if (node->kind == ND_SIZEOF)
     {
@@ -172,10 +203,11 @@ void analyze_type(Node *node)
         switch (node->lhs->type->type)
         {
         case TYPE_PTR:
-            node->val = 8;
-            break;
         case TYPE_INT:
-            node->val = 8;
+            node->val = size_of(node->lhs->type->type);
+            break;
+        case TYPE_ARRAY:
+            node->val = size_of(node->lhs->type->type) * node->lhs->val;
             break;
         default:
             error_exit("unreachable");
@@ -201,6 +233,8 @@ FuncBlock *analyzer(FuncBlock *funcblock)
                 add_type(tmp->node);
             }
         }
+        else
+            error_exit("unreachable");
     }
 #ifdef DEBUG
     print_parse_result(funcblock);
@@ -210,15 +244,20 @@ FuncBlock *analyzer(FuncBlock *funcblock)
         Node *node = pointer->node;
         if (node->kind == ND_FUNCDEF)
         {
+            int offset[node->offset + 1];
+            offset[0] = 0;
             for (NDBlock *tmp = node->expr; tmp; tmp = tmp->next)
             {
-                analyze_type(tmp->node);
+                analyze_type(tmp->node, offset);
             }
             for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
             {
-                analyze_type(tmp->node);
+                analyze_type(tmp->node, offset);
             }
+            pointer->stacksize = offset[node->offset];
         }
+        else
+            error_exit("unreachable");
     }
 #ifdef DEBUG
     print_parse_result(funcblock);

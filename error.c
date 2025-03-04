@@ -37,6 +37,7 @@ void _debug2(char *file, int line, const char *func, char *fmt, ...)
 }
 
 // エラー時にログを出力し、終了する関数 errorから呼び出される
+[[noreturn]]
 void _error(char *file, int line, const char *func, char *fmt, ...)
 {
     va_list ap;
@@ -54,6 +55,7 @@ void error_init(char *input)
 }
 
 // 入力プログラムがおかしいとき、エラー箇所を可視化するプログラム
+[[noreturn]]
 void error_at(char *error_location, char *fmt, ...)
 {
     va_list ap;

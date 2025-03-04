@@ -125,16 +125,30 @@ void add_type(Node *node)
     }
     if (node->kind == ND_ARRAY)
     {
-        // old1 -> old2 -> old3 ... のように並んでいた Typeを
-        // old1 -> new -> old2 -> old3 ... に変更することで同じ変数の Typeを変更する
-        Type *new = alloc_type(node->lhs->type->type);
-        new->ptr_to = node->lhs->type->ptr_to;
-        new->size = node->lhs->type->size;
-        node->lhs->type->type = TYPE_ARRAY;
-        node->lhs->type->ptr_to = new;
-        node->lhs->type->size = node->rhs->val;
-        node->rhs->type = node->lhs->type;
-        node->lhs->val = node->rhs->val;
+        if (node->lhs->is_new)
+        {
+            // old1 -> old2 -> old3 ... のように並んでいた Typeを
+            // old1 -> new -> old2 -> old3 ... に変更することで同じ変数の Typeを変更する
+            Type *new = alloc_type(node->lhs->type->type);
+            new->ptr_to = node->lhs->type->ptr_to;
+            new->size = node->lhs->type->size;
+            node->lhs->type->type = TYPE_ARRAY;
+            node->lhs->type->ptr_to = new;
+            node->lhs->type->size = node->rhs->val;
+            node->rhs->type = node->lhs->type;
+            node->rhs->type = node->lhs->type;
+            node->lhs->val = node->rhs->val;
+        }
+        else
+        {
+            if (node->rhs->val < 0 || node->rhs->val >= node->lhs->type->size)
+                error_at(node->token->str, "index out of bounds for type array");
+            node->kind = ND_DEREF;
+            node->lhs = new_node(ND_ADD, node->lhs, node->rhs, node->token);
+            node->rhs = NULL;
+            node->lhs->type = node->lhs->lhs->type;
+            add_type(node);
+        }
         return;
     }
 }

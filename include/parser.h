@@ -159,6 +159,7 @@ struct Type
     size_t size;  // TYPE_ARRAYのとき利用
 };
 
+Node *new_node(NodeKind kind, Node *lhs, Node *rhs, Token *token);
 Type *alloc_type(TypeKind kind);
 FuncBlock *parser();
 

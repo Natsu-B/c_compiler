@@ -12,14 +12,25 @@
 
 const char *nodekindlist[ND_END] = {NodeKindTable};
 
-LVar *locals;
+NestedBlockVariables *top;
+Var *locals;
+int variables_counter;
 
-LVar *find_lvar(Token *token)
+Var *find_lvar_in_same_nestedblock(Token *token)
 {
-    for (LVar *var = locals; var; var = var->next)
+    for (Var *var = locals; var; var = var->next)
         if (var->len == token->len && !memcmp(var->name, token->str, var->len))
             return var;
     return NULL;
+}
+
+Var *find_var_all(Token *token)
+{
+    for (NestedBlockVariables *pointer = top->next; pointer; pointer = pointer->next)
+        for (Var *var = pointer->var; var; var = var->next)
+            if (var->len == token->len && !memcmp(var->name, token->str, var->len))
+                return var;
+    return find_lvar_in_same_nestedblock(token);
 }
 
 GTLabel *head_label;
@@ -131,13 +142,15 @@ FuncBlock *parser()
     FuncBlock head;
     head.next = NULL;
     FuncBlock *pointer = &head;
+    top = calloc(1, sizeof(NestedBlockVariables));
     while (!at_eof())
     {
         locals = NULL;
         FuncBlock *new = calloc(1, sizeof(FuncBlock));
         pointer->next = new;
         new->node = program();
-        new->node->offset = locals ? locals->counter : 0;
+        new->node->offset = variables_counter;
+        variables_counter = 0;
         pointer = new;
     }
 #ifdef DEBUG
@@ -150,55 +163,75 @@ FuncBlock *parser()
 Node *program()
 {
     pr_debug2("program");
-    if (!consume_tokenkind(TK_INT) &&
-        !consume_tokenkind(TK_LONG))
+    bool is_int = consume_tokenkind(TK_INT);
+    bool is_long = consume_tokenkind(TK_LONG);
+    if (!is_int && !is_long)
         error_exit("型が指定されていません");
+    int pointer_counter = 0;
+    if (is_int || is_long)
+    {
+        while (consume("*"))
+        {
+            pointer_counter++;
+        }
+    }
 
     Token *token = expect_tokenkind(TK_IDENT);
     if (token)
     {
-        Node *node = calloc(1, sizeof(Node));
-        node->kind = ND_FUNCDEF;
-        node->func_name = token->str;
-        node->func_len = token->len;
-        program_name = token->str;
-        program_name_len = token->len;
-        NDBlock head;
-        head.next = NULL;
-        NDBlock *pointer = &head;
-        expect("(");
-        if (!consume(")"))
+        // 関数宣言
+        if (consume("("))
         {
-            NDBlock *next = calloc(1, sizeof(NDBlock));
-            pointer->next = next;
-            next->node = expr();
-            pointer = next;
-            while (!consume(")"))
+            Node *node = calloc(1, sizeof(Node));
+            node->kind = ND_FUNCDEF;
+            node->func_name = token->str;
+            node->func_len = token->len;
+            program_name = token->str;
+            program_name_len = token->len;
+            NDBlock head;
+            head.next = NULL;
+            NDBlock *pointer = &head;
+            NestedBlockVariables *next = calloc(1, sizeof(NestedBlockVariables));
+            next->next = top;
+            top = next;
+            if (!consume(")"))
             {
-                expect(",");
                 NDBlock *next = calloc(1, sizeof(NDBlock));
                 pointer->next = next;
                 next->node = expr();
                 pointer = next;
+                while (!consume(")"))
+                {
+                    expect(",");
+                    NDBlock *next = calloc(1, sizeof(NDBlock));
+                    pointer->next = next;
+                    next->node = expr();
+                    pointer = next;
+                }
             }
+
+            node->expr = head.next;
+            head.next = NULL;
+            pointer = &head;
+            expect("{");
+            while (!consume("}"))
+            {
+                NDBlock *next = calloc(1, sizeof(NDBlock));
+                pointer->next = next;
+                next->node = stmt();
+                pointer = next;
+            }
+            node->stmt = head.next;
+            variables_counter += top->counter;
+            top = top->next;
+            return node;
         }
 
-        node->expr = head.next;
-        head.next = NULL;
-        pointer = &head;
-        expect("{");
-        while (!consume("}"))
-        {
-            NDBlock *next = calloc(1, sizeof(NDBlock));
-            pointer->next = next;
-            next->node = stmt();
-            pointer = next;
-        }
-        node->stmt = head.next;
-        return node;
+        // グローバル変数宣言
+        Node *node = calloc(1, sizeof(Node));
     }
     error_exit("unreachable");
-    return NULL; // definitely unreachable
+    return NULL; // unreachable
 }
 
 Node *stmt()
@@ -212,6 +245,12 @@ Node *stmt()
         head.next = NULL;
         NDBlock *pointer = &head;
         node->kind = ND_BLOCK;
+        NestedBlockVariables *next = calloc(1, sizeof(NestedBlockVariables));
+        next->next = top;
+        next->counter = top->counter;
+        top->var = locals;
+        top = next;
+        locals = NULL;
         for (;;)
         {
             if (consume("}"))
@@ -221,6 +260,10 @@ Node *stmt()
             next->node = stmt();
             pointer = next;
         }
+        top->var = locals;
+        variables_counter += top->counter - top->next->counter;
+        top = top->next;
+        locals = top->var;
         node->stmt = head.next;
         return node;
     }
@@ -471,8 +514,6 @@ Node *primary()
     // 変数の型
     Token *is_new1 = consume_tokenkind(TK_INT);
     Token *is_new2 = consume_tokenkind(TK_LONG);
-    if (is_new1 && is_new2)
-        error_at(is_new2->str, "型が指定されていません");
     int pointer_counter = 0;
     if (is_new1 || is_new2)
     {
@@ -490,12 +531,15 @@ Node *primary()
         Node *node = calloc(1, sizeof(Node));
         node->token = token;
         node->kind = ND_LVAR;
-        LVar *lvar = find_lvar(token);
-        if (lvar)
-        {
+        Var *lvar = find_lvar_in_same_nestedblock(token);
+        Var *tmp = find_var_all(token);
+        if (lvar || (tmp && !is_new1 && !is_new2))
+        { // 同じネストで同じ変数名がある、浅いネストに初期化式がある既知の式に代入するとき
             if (is_new1 || is_new2)
                 error_at(token->str, "同じ名前の変数がすでにあります");
-            node->counter = lvar->counter;
+            if (!lvar)
+                lvar = tmp;
+            node->var = lvar;
             node->type = lvar->type;
             node->is_new = false;
             while (pointer_counter--)
@@ -511,7 +555,7 @@ Node *primary()
         {
             if (!is_new1 && !is_new2)
                 error_at(token->str, "型が指定されていません");
-            lvar = calloc(1, sizeof(LVar));
+            lvar = calloc(1, sizeof(Var));
             lvar->next = locals;
             lvar->name = token->str;
             lvar->len = token->len;
@@ -527,16 +571,12 @@ Node *primary()
                 new->ptr_to = type;
                 type = new;
             }
-            if (!locals)
-            {
-                node->counter = 0;
-                lvar->counter = 0;
-            }
+            node->var = lvar;
+            if (!locals) // そのネストで初めての初期化式
+                lvar->counter = top->next->var ? top->next->var->counter + 1 : 0;
             else
-            {
-                node->counter = locals->counter + 1;
                 lvar->counter = locals->counter + 1;
-            }
+            top->counter++;
             lvar->type = type;
             node->type = type;
             node->is_new = true;

@@ -36,10 +36,9 @@ int size_of(TypeKind type)
         return 8;
     case TYPE_ARRAY:
         return 8;
-    default:
-        error_exit("unreachable");
-        break;
     }
+    error_exit("unreachable");
+    return 0; // unreachable
 }
 
 typedef enum
@@ -565,6 +564,8 @@ void generator(FuncBlock *parsed, char *output_filename)
             output_file("    push rbp");
             output_file("    mov rbp, rsp");
             output_file("    sub rsp, %d", pointer->stacksize);
+            if (pointer->stacksize > 30)
+                error_exit_with_guard("too many stack used!!!");
             int j = 0;
             for (NDBlock *pointer = node->expr; pointer; pointer = pointer->next)
             {

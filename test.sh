@@ -103,6 +103,8 @@ assert_with_outer_code 'int main() {int *p; alloc(&p, 1, 3); int *q = p + 1; q =
 assert 'int main() {int x; long z; if (sizeof(x) != 4) return 1; int* y; if (sizeof(y) != 8) return 1; if (sizeof(*y) != 4) return 1; if (sizeof(x + 1) != 4) return 1; if (sizeof(z) != 8) return 1; if (sizeof(sizeof(1)) != 8)return 1;  return 0;}'
 assert 'int main() {int x[2]; int y; long z; *(x+1) = 1; *x = 2; y = 5; return (y - *(x+1)) / *x;}'
 assert 'int main() {int x[2]; int y = 1; x[0] = y; x[1] = y + 1; return x[1] + x[0];}'
+assert 'int main() {int i = 0; {int i = 1; return i;}}'
+assert 'int main() {int i = 0; {int i = 1; } return i;}'
 
 (
   cd test

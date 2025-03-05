@@ -5,11 +5,12 @@
 #include <stddef.h>
 
 typedef struct Node Node;
-typedef struct LVar LVar;
+typedef struct Var Var;
 typedef struct GTLabel GTLabel;
 typedef struct NDBlock NDBlock;
 typedef struct FuncBlock FuncBlock;
 typedef struct Type Type;
+typedef struct NestedBlockVariables NestedBlockVariables;
 
 /**
  *  label の命名規則
@@ -59,6 +60,7 @@ typedef enum
     ND_ELIF,         // if else
     ND_FOR,          // for
     ND_WHILE,        // while
+    ND_GVAR,         // グローバル変数
     ND_LVAR,         // ローカル変数
     ND_ARRAY,        // 配列
     ND_NUM,          // 整数
@@ -68,7 +70,7 @@ typedef enum
 } NodeKind;
 
 // デバッグ時利用 NodeKindに追加したら必ず追加すること
-#define NodeKindTable "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF", "ND_FUNCDEF", "ND_FUNCCALL", "ND_RETURN", "ND_SIZEOF", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE", "ND_LVAR", "ND_ARRAY", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR"
+#define NodeKindTable "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF", "ND_FUNCDEF", "ND_FUNCCALL", "ND_RETURN", "ND_SIZEOF", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE", "ND_GVAR", "ND_LVAR", "ND_ARRAY", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR"
 extern const char *nodekindlist[ND_END];
 
 struct Node
@@ -112,16 +114,24 @@ struct Node
     long val; // ND_NUMの場合 数値
     struct
     {                // ND_LVARの場合
-        int counter; // 何番目の変数か
         int offset;  // RBP - offset の位置に変数がある
         bool is_new; // 初めて定義された変数か否か
+        Var *var;    // 変数の情報
     };
 };
 
-// 変数を管理するstruct
-struct LVar
+// グローバル変数やローカル変数を調べるstruct
+struct NestedBlockVariables
 {
-    LVar *next;  // 次の変数
+    NestedBlockVariables *next; // 一つ前のネストを指す
+    Var *var;                   // そのネスト内の変数
+    int counter;                // 変数が同じネストにいくつあるか
+};
+
+// 変数を管理するstruct
+struct Var
+{
+    Var *next;   // 次の変数
     char *name;  // 変数名
     int len;     // 変数名 長さ
     Type *type;  // 型

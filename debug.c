@@ -55,7 +55,7 @@ void _print_parse_result(Node *node, int nest)
             type_name = pointer->type;
             pointer = pointer->ptr_to;
         }
-        fprintf(stdout, "NodeKind: %s type: %.*s%d offset: %d counter: %d is_new: %s\n", nodekindlist[node->kind], reference_counter, "*****************************************************************************************************************", type_name, node->offset, node->counter, node->is_new ? "true" : "false");
+        fprintf(stdout, "NodeKind: %s type: %.*s%d offset: %d counter: %d is_new: %s\n", nodekindlist[node->kind], reference_counter, "*****************************************************************************************************************", type_name, node->offset, node->var->counter, node->is_new ? "true" : "false");
     }
     else if (node->kind == ND_IF || node->kind == ND_ELIF || node->kind == ND_WHILE)
     {
@@ -123,7 +123,7 @@ void _print_parse_result(Node *node, int nest)
     }
     else if (node->kind == ND_FUNCDEF)
     {
-        fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);
+        fprintf(stdout, "NodeKind: %s counter: %d\n", nodekindlist[node->kind], node->offset);
         make_space(nest);
         fprintf(stdout, "|   [arguments]\n");
         for (NDBlock *pointer = node->expr; pointer; pointer = pointer->next)

@@ -150,7 +150,10 @@ FuncBlock *parser()
 Node *program()
 {
     pr_debug2("program");
-    expect_tokenkind(TK_INT);
+    if (!consume_tokenkind(TK_INT) &&
+        !consume_tokenkind(TK_LONG))
+        error_exit("型が指定されていません");
+
     Token *token = expect_tokenkind(TK_IDENT);
     if (token)
     {
@@ -466,9 +469,12 @@ Node *primary()
     }
 
     // 変数の型
-    Token *is_new = consume_tokenkind(TK_INT);
+    Token *is_new1 = consume_tokenkind(TK_INT);
+    Token *is_new2 = consume_tokenkind(TK_LONG);
+    if (is_new1 && is_new2)
+        error_at(is_new2->str, "型が指定されていません");
     int pointer_counter = 0;
-    if (is_new)
+    if (is_new1 || is_new2)
     {
         while (consume("*"))
         {
@@ -487,7 +493,7 @@ Node *primary()
         LVar *lvar = find_lvar(token);
         if (lvar)
         {
-            if (is_new)
+            if (is_new1 || is_new2)
                 error_at(token->str, "同じ名前の変数がすでにあります");
             node->counter = lvar->counter;
             node->type = lvar->type;
@@ -503,14 +509,18 @@ Node *primary()
         }
         else
         {
-            if (!is_new)
+            if (!is_new1 && !is_new2)
                 error_at(token->str, "型が指定されていません");
             lvar = calloc(1, sizeof(LVar));
             lvar->next = locals;
             lvar->name = token->str;
             lvar->len = token->len;
+            Type *type = NULL;
             // 型の指定
-            Type *type = alloc_type(TYPE_INT);
+            if (is_new1)
+                type = alloc_type(TYPE_INT);
+            if (is_new2)
+                type = alloc_type(TYPE_LONG);
             while (pointer_counter--)
             {
                 Type *new = alloc_type(TYPE_PTR);

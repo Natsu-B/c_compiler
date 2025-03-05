@@ -5,6 +5,7 @@
 #include "include/generator.h"
 #include "include/error.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define error_exit_with_guard(fmt, ...)                                                    \
@@ -22,14 +23,274 @@ FILE *fout;
         fprintf(fout, fmt "\n", ##__VA_ARGS__); \
     } while (0)
 
+// TYPE_INT TYPE_ARRAY 等を受け取ってその大きさを返す関数
+int size_of(TypeKind type)
+{
+    switch (type)
+    {
+    case TYPE_INT:
+        return 4;
+    case TYPE_LONG:
+        return 8;
+    case TYPE_PTR:
+        return 8;
+    case TYPE_ARRAY:
+        return 8;
+    default:
+        error_exit("unreachable");
+        break;
+    }
+}
+
+typedef enum
+{
+    rax,
+    rcx,
+    rdx,
+    rbx,
+    rsp,
+    rbp,
+    rsi,
+    rdi,
+    r8,
+    r9,
+    r10,
+    r11,
+    r12,
+    r13,
+    r14,
+    r15,
+} register_type;
+
+char *chose_register(int size, register_type reg_type)
+{
+    switch (size)
+    {
+    case 1:
+    case 2:
+        break;
+    case 4:
+        size = 3;
+        break;
+    case 8:
+        size = 4;
+        break;
+    default:
+        error_exit_with_guard("unknown register size");
+        break;
+    }
+    char *tmp;
+    int type = reg_type * 4 + size;
+    switch (type)
+    {
+    case 1:
+        tmp = "al";
+        break;
+    case 2:
+        tmp = "ax";
+        break;
+    case 3:
+        tmp = "eax";
+        break;
+    case 4:
+        tmp = "rax";
+        break;
+    case 5:
+        tmp = "cl";
+        break;
+    case 6:
+        tmp = "cx";
+        break;
+    case 7:
+        tmp = "ecx";
+        break;
+    case 8:
+        tmp = "rcx";
+        break;
+    case 9:
+        tmp = "dl";
+        break;
+    case 10:
+        tmp = "dx";
+        break;
+    case 11:
+        tmp = "edx";
+        break;
+    case 12:
+        tmp = "rdx";
+        break;
+    case 13:
+        tmp = "bl";
+        break;
+    case 14:
+        tmp = "bx";
+        break;
+    case 15:
+        tmp = "ebx";
+        break;
+    case 16:
+        tmp = "rbx";
+        break;
+    case 17:
+        tmp = "spl";
+        break;
+    case 18:
+        tmp = "sp";
+        break;
+    case 19:
+        tmp = "esp";
+        break;
+    case 20:
+        tmp = "rsp";
+        break;
+    case 21:
+        tmp = "bpl";
+        break;
+    case 22:
+        tmp = "bp";
+        break;
+    case 23:
+        tmp = "ebp";
+        break;
+    case 24:
+        tmp = "rbp";
+        break;
+    case 25:
+        tmp = "sil";
+        break;
+    case 26:
+        tmp = "si";
+        break;
+    case 27:
+        tmp = "esi";
+        break;
+    case 28:
+        tmp = "rsi";
+        break;
+    case 29:
+        tmp = "dil";
+        break;
+    case 30:
+        tmp = "di";
+        break;
+    case 31:
+        tmp = "edi";
+        break;
+    case 32:
+        tmp = "rdi";
+        break;
+    case 33:
+        tmp = "r8b";
+        break;
+    case 34:
+        tmp = "r8w";
+        break;
+    case 35:
+        tmp = "r8d";
+        break;
+    case 36:
+        tmp = "r8";
+        break;
+    case 37:
+        tmp = "r9b";
+        break;
+    case 38:
+        tmp = "r9w";
+        break;
+    case 39:
+        tmp = "r9d";
+        break;
+    case 40:
+        tmp = "r9";
+        break;
+    case 41:
+        tmp = "r10b";
+        break;
+    case 42:
+        tmp = "r10w";
+        break;
+    case 43:
+        tmp = "r10d";
+        break;
+    case 44:
+        tmp = "r10";
+        break;
+    case 45:
+        tmp = "r11b";
+        break;
+    case 46:
+        tmp = "r11w";
+        break;
+    case 47:
+        tmp = "r11d";
+        break;
+    case 48:
+        tmp = "r11";
+        break;
+    case 49:
+        tmp = "r12b";
+        break;
+    case 50:
+        tmp = "r12w";
+        break;
+    case 51:
+        tmp = "r12d";
+        break;
+    case 52:
+        tmp = "r12";
+        break;
+    case 53:
+        tmp = "r13b";
+        break;
+    case 54:
+        tmp = "r13w";
+        break;
+    case 55:
+        tmp = "r13d";
+        break;
+    case 56:
+        tmp = "r13";
+        break;
+    case 57:
+        tmp = "r14b";
+        break;
+    case 58:
+        tmp = "r14w";
+        break;
+    case 59:
+        tmp = "r14d";
+        break;
+    case 60:
+        tmp = "r14";
+        break;
+    case 61:
+        tmp = "r15b";
+        break;
+    case 62:
+        tmp = "r15w";
+        break;
+    case 63:
+        tmp = "r15d";
+        break;
+    case 64:
+        tmp = "r15";
+        break;
+    default:
+        error_exit_with_guard("unknown register type");
+        break;
+    }
+    char *register_name = calloc(1, sizeof(char) * 5);
+    strncpy(register_name, tmp, 5);
+    return register_name;
+}
+
 void gen(Node *node);
 
 void gen_lval(Node *node)
 {
     if (node->kind == ND_LVAR)
     {
-        output_file("    mov rax, rbp");
-        output_file("    sub rax, %d", node->offset);
+        output_file("    lea rax, [rbp-%d]", node->offset);
         output_file("    push rax");
         return;
     }
@@ -194,34 +455,15 @@ void gen(Node *node)
     switch (node->kind)
     {
     case ND_NUM:
-        if (node->type->type == TYPE_INT)
-        {
-            output_file("# TYPE_INT");
-            output_file("    push %ld", node->val);
-            return;
-        }
-        if (node->type->type == TYPE_PTR ||
-            node->type->type == TYPE_ARRAY)
-        {
-            if (node->type->ptr_to->type == TYPE_INT)
-            {
-                output_file("# TYPE_PTR -> TYPE_INT");
-                output_file("    push %ld", node->val);
-                return;
-            }
-            if (node->type->ptr_to->type == TYPE_PTR)
-            {
-                output_file("# TYPE_PTR -> TYPE_PTR");
-                output_file("    push %ld", node->val);
-                return;
-            }
-        }
-        error_exit_with_guard("unreachable");
-        break;
+        output_file("    push %ld", node->val);
+        return;
     case ND_LVAR:
         gen_lval(node);
         output_file("    pop rax");
-        output_file("    mov rax, [rax]");
+        if (node->type->type == TYPE_INT)
+            output_file("    movsxd rax, DWORD PTR [rax]");
+        else
+            output_file("    mov rax, [rax]");
         output_file("    push rax");
         return;
     case ND_ASSIGN:
@@ -229,7 +471,7 @@ void gen(Node *node)
         gen(node->rhs);
         output_file("    pop rdi");
         output_file("    pop rax");
-        output_file("    mov [rax], rdi");
+        output_file("    mov [rax], %s", chose_register(size_of(node->type->type), rdi));
         output_file("    push rdi");
         return;
     case ND_ADDR:
@@ -238,7 +480,10 @@ void gen(Node *node)
     case ND_DEREF:
         gen(node->lhs);
         output_file("    pop rax");
-        output_file("    mov rax, [rax]");
+        if (node->type->type == TYPE_INT)
+            output_file("    movsxd rax, DWORD PTR [rax]");
+        else
+            output_file("    mov rax, [rax]");
         output_file("    push rax");
         return;
     default:
@@ -305,7 +550,8 @@ void generator(FuncBlock *parsed, char *output_filename)
     }
     pr_debug("output file open");
     output_file(".intel_syntax noprefix");
-    output_file(".global main");
+    output_file(".data");
+    output_file(".text");
 
     int i = 0;
     for (FuncBlock *pointer = parsed; pointer; pointer = pointer->next)
@@ -314,7 +560,8 @@ void generator(FuncBlock *parsed, char *output_filename)
         Node *node = pointer->node;
         if (node->kind == ND_FUNCDEF)
         {
-            output_file("\n%.*s:", node->func_len, node->func_name);
+            output_file("\n.global %.*s", node->func_len, node->func_name);
+            output_file("%.*s:", node->func_len, node->func_name);
             output_file("    push rbp");
             output_file("    mov rbp, rsp");
             output_file("    sub rsp, %d", pointer->stacksize);
@@ -323,27 +570,25 @@ void generator(FuncBlock *parsed, char *output_filename)
             {
                 if (pointer->node->kind != ND_LVAR)
                     error_exit_with_guard("invalid function arguments");
-                output_file("    mov rax, rbp");
-                output_file("    sub rax, %d", pointer->node->offset);
                 switch (++j)
                 {
                 case 1:
-                    output_file("    mov [rax], rdi");
+                    output_file("    mov [rbp-%d], %s", pointer->node->offset, chose_register(size_of(pointer->node->type->type), rdi));
                     break;
                 case 2:
-                    output_file("    mov [rax], rsi");
+                    output_file("    mov [rbp-%d], %s", pointer->node->offset, chose_register(size_of(pointer->node->type->type), rsi));
                     break;
                 case 3:
-                    output_file("    mov [rax], rdx");
+                    output_file("    mov [rbp-%d], %s", pointer->node->offset, chose_register(size_of(pointer->node->type->type), rdx));
                     break;
                 case 4:
-                    output_file("    mov [rax], rcx");
+                    output_file("    mov [rbp-%d], %s", pointer->node->offset, chose_register(size_of(pointer->node->type->type), rcx));
                     break;
                 case 5:
-                    output_file("    mov [rax], r8");
+                    output_file("    mov [rbp-%d], %s", pointer->node->offset, chose_register(size_of(pointer->node->type->type), r8));
                     break;
                 case 6:
-                    output_file("    mov [rax], r9");
+                    output_file("    mov [rbp-%d], %s", pointer->node->offset, chose_register(size_of(pointer->node->type->type), r9));
                     break;
                 default:
                     error_exit_with_guard("too much arguments");

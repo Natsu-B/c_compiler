@@ -1,8 +1,7 @@
 #include <stdio.h>
-#include <ctype.h>
 
-__uint64_t func(__uint64_t a)
+int func(int a)
 {
-    printf("%llu\n", a);
+    printf("%d\n", a);
     return a;
 }

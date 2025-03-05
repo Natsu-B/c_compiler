@@ -4,6 +4,7 @@
 #include "parser.h"
 #include "analyzer.h"
 
+extern int size_of(TypeKind kind);
 extern void generator(FuncBlock *parsed, char *output_filename);
 
 #endif // GENERATOR_C_COMPILER

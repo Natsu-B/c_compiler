@@ -2,7 +2,7 @@
 
 int i;
 
-long long func()
+int func()
 {
     printf("OK!: %d\n", i++);
     return 10;

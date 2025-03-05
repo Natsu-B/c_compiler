@@ -20,23 +20,6 @@ bool is_equal_type(Type *lhs, Type *rhs)
     return false;
 }
 
-// TYPE_INT TYPE_ARRAY 等を受け取ってその大きさを返す関数
-int size_of(TypeKind type)
-{
-    switch (type)
-    {
-    case TYPE_INT:
-        return 8;
-    case TYPE_PTR:
-        return 8;
-    case TYPE_ARRAY:
-        return 8;
-    default:
-        error_exit("unreachable");
-        break;
-    }
-}
-
 void add_type(Node *node)
 {
     if (node->lhs)
@@ -62,6 +45,7 @@ void add_type(Node *node)
         node->kind == ND_DIV ||
         node->kind == ND_FUNCCALL)
     {
+        // TODO
         node->type = alloc_type(TYPE_INT);
         return;
     }
@@ -78,22 +62,19 @@ void add_type(Node *node)
         if (node->lhs->type->type != TYPE_PTR &&
             node->lhs->type->type != TYPE_ARRAY)
             error_at(node->token->str, "invalid dereference");
-        node->lhs->type = node->lhs->type->ptr_to;
-        node->type = node->lhs->type;
+        node->type = node->lhs->type->ptr_to;
         return;
     }
     if (node->kind == ND_ADD)
     {
         int flag = 0;
         Type *type = alloc_type(TYPE_INT);
-        if (node->lhs->type->type == TYPE_PTR ||
-            node->lhs->type->type == TYPE_ARRAY)
+        if (node->lhs->type->type != TYPE_INT)
         {
             type = node->lhs->type;
             flag++;
         }
-        if (node->rhs->type->type == TYPE_PTR ||
-            node->rhs->type->type == TYPE_ARRAY)
+        if (node->rhs->type->type != TYPE_INT)
         {
             type = node->rhs->type;
             flag++;
@@ -180,6 +161,7 @@ void analyze_type(Node *node, int *offset)
     {
         if (!is_equal_type(node->lhs->type, node->rhs->type))
             error_at(node->token->str, "the types on both sides of '=' must match");
+        node->type = node->lhs->type;
         return;
     }
     if (node->kind == ND_NUM)
@@ -197,6 +179,7 @@ void analyze_type(Node *node, int *offset)
             switch (node->type->type)
             {
             case TYPE_INT:
+            case TYPE_LONG:
             case TYPE_PTR:
                 offset[node->counter] = (node->counter ? offset[node->counter - 1] : 0) + size_of(node->type->type);
                 break;
@@ -218,6 +201,7 @@ void analyze_type(Node *node, int *offset)
         {
         case TYPE_PTR:
         case TYPE_INT:
+        case TYPE_LONG:
             node->val = size_of(node->lhs->type->type);
             break;
         case TYPE_ARRAY:
@@ -268,7 +252,8 @@ FuncBlock *analyzer(FuncBlock *funcblock)
             {
                 analyze_type(tmp->node, offset);
             }
-            pointer->stacksize = offset[node->offset];
+            // stacksizeは8byte単位で揃える
+            pointer->stacksize = offset[node->offset] + (8 - offset[node->offset] % 8);
         }
         else
             error_exit("unreachable");

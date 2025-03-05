@@ -1,6 +1,6 @@
 #include <ctype.h>
 
-__uint64_t fibonacci(__uint64_t a, __uint64_t b)
+int fibonacci(int a, int b)
 {
     return a+b;
 }

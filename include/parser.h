@@ -146,7 +146,8 @@ struct FuncBlock
 // サポートしている変数の型
 typedef enum
 {
-    TYPE_INT,   // TODO int型 unsigned 64bit
+    TYPE_INT,   // int型 signed 32bit
+    TYPE_LONG,  // long型 signed 64bit
     TYPE_PTR,   // 型へのポインタ
     TYPE_ARRAY, // 配列
 } TypeKind;

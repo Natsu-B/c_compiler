@@ -39,7 +39,7 @@ Token *consume_token_if_next_matches(TokenKind kind, char reserved)
     if (token->kind == kind &&
         *(token->next->str) == reserved)
     {
-        Token* token_old = token;
+        Token *token_old = token;
         token = token_old->next;
         return token_old;
     }
@@ -220,6 +220,16 @@ void tokenizer(char *input)
                 if (!strncmp(input - i, "int", i))
                 {
                     cur = new_token(TK_INT, cur, input - i);
+                    cur->len = i;
+                    continue;
+                }
+            }
+
+            if (i == 4)
+            {
+                if (!strncmp(input - i, "long", i))
+                {
+                    cur = new_token(TK_LONG, cur, input - i);
                     cur->len = i;
                     continue;
                 }

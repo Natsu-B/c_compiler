@@ -10,7 +10,8 @@ typedef enum
     TK_NUM,      // 整数
     TK_RETURN,   // return
     TK_SIZEOF,   // sizeof
-    TK_INT,      // int
+    TK_INT,      // int 32bit
+    TK_LONG,     // long 64bit
     TK_IF,       // if
     TK_ELSE,     // else
     TK_FOR,      // for

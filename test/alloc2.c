@@ -1,9 +1,8 @@
 #include <stdlib.h>
-#include <ctype.h>
 
-void alloc(__uint64_t **p, __uint64_t x, __uint64_t y)
+void alloc(int **p, int x, int y)
 {
-    *p = malloc(2 * sizeof(__uint64_t));
+    *p = malloc(2 * sizeof(int));
     (*p)[0] = x;
     (*p)[1] = y;
 }

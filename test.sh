@@ -95,8 +95,8 @@ assert 0 'int main() {int x = 3; int *y = &x; *y = 0; return x;}'
 assert 3 'int main() {int x = 0; int *y = &x; int **z = &y;*y = 2; **z = 3; return x;}'
 assert_with_outer_code 3 'int main() {int *p; alloc(&p, 1, 3); int *q = p+1; return *q;}' './test/alloc2.o'
 assert_with_outer_code 1 'int main() {int *p; alloc(&p, 1, 3); int *q = p + 1; q = q-1; return *q;}' './test/alloc2.o'
-assert 0 'int main() {int x; if (sizeof(x) != 8) return 1; int* y; if (sizeof(y) != 8) return 1; if (sizeof(*y) != 8) return 1; if (sizeof(x + 1) != 8) return 1; if (sizeof(sizeof(1)) != sizeof(1))return 1;  return 0;}'
-assert 2 'int main() {int x[2]; int y; *(x+1) = 1; *x = 2; y = 5; return (y - *(x+1)) / *x;}'
+assert 0 'int main() {int x; long z; if (sizeof(x) != 4) return 1; int* y; if (sizeof(y) != 8) return 1; if (sizeof(*y) != 4) return 1; if (sizeof(x + 1) != 4) return 1; if (sizeof(z) != 8) return 1; if (sizeof(sizeof(1)) != sizeof(1))return 1;  return 0;}'
+assert 2 'int main() {int x[2]; int y; long z; *(x+1) = 1; *x = 2; y = 5; return (y - *(x+1)) / *x;}'
 assert 3 'int main() {int x[2]; int y = 1; x[0] = y; x[1] = y + 1; return x[1] + x[0];}'
 
 (

@@ -101,7 +101,7 @@ void add_type(Node *node)
     }
     if (node->kind == ND_SIZEOF)
     {
-        node->type = alloc_type(TYPE_INT);
+        node->type = alloc_type(TYPE_LONG);
         return;
     }
     if (node->kind == ND_ARRAY)

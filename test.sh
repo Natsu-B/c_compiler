@@ -20,18 +20,15 @@ assert() {
 }
 
 assert_with_outer_code() {
-  input="$1"
+  expected="$1"
+  input="$2"
   shift 2
   linkcode=("$@")
 
   echo "$input" > out/tmp.cpp
-  gcc -c out/tmp.cpp -o out/gcc.o
-  gcc -o out/gcc out/gcc.o "${linkcode[@]}"
-  ./out/gcc
-  expected="$?"
   ./main out/tmp.cpp out/out.s
-  gcc -c out/out.s -o out/out.o
-  gcc -o out/out out/out.o "${linkcode[@]}"
+  cc -c out/out.s -o out/out.o
+  cc -o out/out out/out.o "${linkcode[@]}"
   ./out/out
   actual="$?"
 
@@ -90,21 +87,24 @@ assert 'int main(){{} return 10;}'
 assert 'int main(){int i=0; int j=1; while(i != 10) {j = j+i; i = i+1;} return j;}'
 assert 'int return_val() {return 5;}int main() {return return_val();}'
 assert 'int fibonacci(int a, int b) {return a+b;}int main() {int x = 0; int y = 1; int i = 0; while(i != 10) { i = i+ 1; x = fibonacci(x, y); y = fibonacci(x, y); } return y; }'
-assert_with_outer_code 'int main() {int i = func();return i;}' './test/include_test.o'
-assert_with_outer_code 'int main() {int x = 0;int y = 1; int i = 0; while(i != 10) { i = i+ 1; x = fibonacci(x, y); if (x != func(x)){ return 1;} y = fibonacci(x, y); if (y != func(y)) {return 1;}} return 0; }' './test/print_u64.o' './test/fibonacci.o'
-assert_with_outer_code 'int fibonacci(int a,int b) {return a+b;}int main() {int x = 0; int y = 1; int i = 0; while(i != 10) { i = i+ 1; x = fibonacci(x, y); if (x != func(x)) return 0; y = fibonacci(x, y); if (y != func(y)) return 1; } return 0; }' './test/print_u64.o'
+assert_with_outer_code 10 'int main() {int i = func();return i;}' './test/include_test.o'
+assert_with_outer_code 0 'int main() {int x = 0;int y = 1; int i = 0; while(i != 10) { i = i+ 1; x = fibonacci(x, y); if (x != func(x)){ return 1;} y = fibonacci(x, y); if (y != func(y)) {return 1;}} return 0; }' './test/print_u64.o' './test/fibonacci.o'
+assert_with_outer_code 0 'int fibonacci(int a,int b) {return a+b;}int main() {int x = 0; int y = 1; int i = 0; while(i != 10) { i = i+ 1; x = fibonacci(x, y); if (x != func(x)) return 0; y = fibonacci(x, y); if (y != func(y)) return 1; } return 0; }' './test/print_u64.o'
 assert 'int main() {int i = 4;int *x = &i; return *x;}'
 assert 'int main() {int K = 6; return *&K;}'
-assert_with_outer_code 'int main() {int x = 0; for(int i= 0; i < 10 ; i =i+1) { x = x+ i; if (x !=func(x)) return 1; }return 5;}' './test/print_u64.o'
+assert_with_outer_code 5 'int main() {int x = 0; for(int i= 0; i < 10 ; i =i+1) { x = x+ i; if (x !=func(x)) return 1; }return 5;}' './test/print_u64.o'
 assert 'int main() {int x = 3; int *y = &x; *y = 0; return x;}'
 assert 'int main() {int x = 0; int *y = &x; int **z = &y;*y = 2; **z = 3; return x;}'
-assert_with_outer_code 'int main() {int *p; alloc(&p, 1, 3); int *q = p+1; return *q;}' './test/alloc2.o'
-assert_with_outer_code 'int main() {int *p; alloc(&p, 1, 3); int *q = p + 1; q = q-1; return *q;}' './test/alloc2.o'
+assert_with_outer_code 3 'int main() {int *p; alloc(&p, 1, 3); int *q = p+1; return *q;}' './test/alloc2.o'
+assert_with_outer_code 1 'int main() {int *p; alloc(&p, 1, 3); int *q = p + 1; q = q-1; return *q;}' './test/alloc2.o'
 assert 'int main() {int x; long z; if (sizeof(x) != 4) return 1; int* y; if (sizeof(y) != 8) return 1; if (sizeof(*y) != 4) return 1; if (sizeof(x + 1) != 4) return 1; if (sizeof(z) != 8) return 1; if (sizeof(sizeof(1)) != 8)return 1;  return 0;}'
 assert 'int main() {int x[2]; int y; long z; *(x+1) = 1; *x = 2; y = 5; return (y - *(x+1)) / *x;}'
 assert 'int main() {int x[2]; int y = 1; x[0] = y; x[1] = y + 1; return x[1] + x[0];}'
 assert 'int main() {int i = 0; {int i = 1; return i;}}'
 assert 'int main() {int i = 0; {int i = 1; } return i;}'
+assert 'int i; int main() {int i = 5; return i;}'
+assert 'int i; int main() {int j = 5; return i;}'
+assert 'int i; int main() {i= 5; return i;}'
 
 (
   cd test

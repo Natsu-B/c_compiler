@@ -42,6 +42,7 @@ extern void tokenizer(char *input);
 
 extern bool at_eof();
 
+extern void set_token(Token* next);
 extern bool peek_next_TokenKind(TokenKind kind);
 extern bool peek_next(char *op);
 extern Token *consume_token_if_next_matches(TokenKind kind, char reserved);

@@ -60,8 +60,7 @@ typedef enum
     ND_ELIF,         // if else
     ND_FOR,          // for
     ND_WHILE,        // while
-    ND_GVAR,         // グローバル変数
-    ND_LVAR,         // ローカル変数
+    ND_VAR,          // 変数
     ND_ARRAY,        // 配列
     ND_NUM,          // 整数
     ND_BLOCK,        // ブロック
@@ -70,7 +69,7 @@ typedef enum
 } NodeKind;
 
 // デバッグ時利用 NodeKindに追加したら必ず追加すること
-#define NodeKindTable "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF", "ND_FUNCDEF", "ND_FUNCCALL", "ND_RETURN", "ND_SIZEOF", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE", "ND_GVAR", "ND_LVAR", "ND_ARRAY", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR"
+#define NodeKindTable "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF", "ND_FUNCDEF", "ND_FUNCCALL", "ND_RETURN", "ND_SIZEOF", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE", "ND_VAR", "ND_ARRAY", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR"
 extern const char *nodekindlist[ND_END];
 
 struct Node
@@ -113,8 +112,8 @@ struct Node
     };
     long val; // ND_NUMの場合 数値
     struct
-    {                // ND_LVARの場合
-        int offset;  // RBP - offset の位置に変数がある
+    {                // 変数の場合
+        int offset;  // RBP - offset の位置に変数がある ND_LVARのときのみ
         bool is_new; // 初めて定義された変数か否か
         Var *var;    // 変数の情報
     };
@@ -131,11 +130,12 @@ struct NestedBlockVariables
 // 変数を管理するstruct
 struct Var
 {
-    Var *next;   // 次の変数
-    char *name;  // 変数名
-    int len;     // 変数名 長さ
-    Type *type;  // 型
-    int counter; // 何番目の変数か
+    Var *next;     // 次の変数
+    char *name;    // 変数名
+    int len;       // 変数名 長さ
+    Type *type;    // 型
+    int counter;   // 何番目の変数か
+    bool is_local; // ローカル変数かグローバル変数か
 };
 
 // 引数、またはブロックの中の式を管理するstruct

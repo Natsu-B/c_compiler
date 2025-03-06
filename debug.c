@@ -44,7 +44,7 @@ void _print_parse_result(Node *node, int nest)
         }
         fprintf(stdout, "NodeKind: %s value: %ld type: %.*s%d\n", nodekindlist[node->kind], node->val, reference_counter, "*****************************************************************************************************************", type_name);
     }
-    else if (node->kind == ND_LVAR)
+    else if (node->kind == ND_VAR)
     {
         int type_name = __INT_MAX__;
         int reference_counter = -1;
@@ -55,7 +55,7 @@ void _print_parse_result(Node *node, int nest)
             type_name = pointer->type;
             pointer = pointer->ptr_to;
         }
-        fprintf(stdout, "NodeKind: %s type: %.*s%d offset: %d counter: %d is_new: %s\n", nodekindlist[node->kind], reference_counter, "*****************************************************************************************************************", type_name, node->offset, node->var->counter, node->is_new ? "true" : "false");
+        fprintf(stdout, "NodeKind: %s type: %.*s%d offset: %d counter: %d is_new: %s is_local: %s\n", nodekindlist[node->kind], reference_counter, "*****************************************************************************************************************", type_name, node->offset, node->var->counter, node->is_new ? "true" : "false", node->var->is_local ? "true" : "false");
     }
     else if (node->kind == ND_IF || node->kind == ND_ELIF || node->kind == ND_WHILE)
     {

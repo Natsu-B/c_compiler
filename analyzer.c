@@ -173,27 +173,30 @@ void analyze_type(Node *node, int *offset)
         }
         return;
     }
-    if (node->kind == ND_LVAR)
+    if (node->kind == ND_VAR)
     {
-        if (node->is_new)
+        if (node->var->is_local)
         {
-            switch (node->type->type)
+            if (node->is_new)
             {
-            case TYPE_INT:
-            case TYPE_LONG:
-            case TYPE_PTR:
-                offset[node->var->counter] = (node->var->counter ? offset[node->var->counter - 1] : 0) + size_of(node->type->type);
-                break;
-            case TYPE_ARRAY:
-                offset[node->var->counter] = (node->var->counter ? offset[node->var->counter - 1] : 0) + size_of(node->type->ptr_to->type) * node->val;
-                break;
-            default:
-                error_exit("unreachable");
-                break;
+                switch (node->type->type)
+                {
+                case TYPE_INT:
+                case TYPE_LONG:
+                case TYPE_PTR:
+                    offset[node->var->counter] = (node->var->counter ? offset[node->var->counter - 1] : 0) + size_of(node->type->type);
+                    break;
+                case TYPE_ARRAY:
+                    offset[node->var->counter] = (node->var->counter ? offset[node->var->counter - 1] : 0) + size_of(node->type->ptr_to->type) * node->val;
+                    break;
+                default:
+                    error_exit("unreachable");
+                    break;
+                }
             }
+            node->offset = offset[node->var->counter];
+            return;
         }
-        node->offset = offset[node->var->counter];
-        return;
     }
     if (node->kind == ND_SIZEOF)
     {
@@ -232,6 +235,11 @@ FuncBlock *analyzer(FuncBlock *funcblock)
                 add_type(tmp->node);
             }
         }
+        else if (node->kind == ND_VAR)
+        {
+            if (node->var->is_local)
+                error_exit("failed to parse correctly");
+        }
         else
             error_exit("unreachable");
     }
@@ -244,16 +252,23 @@ FuncBlock *analyzer(FuncBlock *funcblock)
         if (node->kind == ND_FUNCDEF)
         {
             int offset[node->offset];
+            int *offset_pointer = offset;
+            if (!node->offset)
+                offset_pointer = NULL;
             for (NDBlock *tmp = node->expr; tmp; tmp = tmp->next)
             {
-                analyze_type(tmp->node, offset);
+                analyze_type(tmp->node, offset_pointer);
             }
             for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
             {
-                analyze_type(tmp->node, offset);
+                analyze_type(tmp->node, offset_pointer);
             }
             // stacksizeは8byte単位で揃える
             pointer->stacksize = node->offset ? (offset[node->offset - 1] / 8 + 1) * 8 : 0;
+        }
+        else if (node->kind == ND_VAR)
+        {
+            analyze_type(node, NULL);
         }
         else
             error_exit("unreachable");

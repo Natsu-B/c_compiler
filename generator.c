@@ -287,9 +287,12 @@ void gen(Node *node);
 
 void gen_lval(Node *node)
 {
-    if (node->kind == ND_LVAR)
+    if (node->kind == ND_VAR)
     {
-        output_file("    lea rax, [rbp-%d]", node->offset);
+        if (node->var->is_local)
+            output_file("    lea rax, [rbp-%d]", node->offset);
+        else
+            output_file("    lea rax,  [rip+%.*s]", node->var->len, node->var->name);
         output_file("    push rax");
         return;
     }
@@ -456,7 +459,7 @@ void gen(Node *node)
     case ND_NUM:
         output_file("    push %ld", node->val);
         return;
-    case ND_LVAR:
+    case ND_VAR:
         gen_lval(node);
         output_file("    pop rax");
         if (node->type->type == TYPE_INT)
@@ -549,8 +552,6 @@ void generator(FuncBlock *parsed, char *output_filename)
     }
     pr_debug("output file open");
     output_file(".intel_syntax noprefix");
-    output_file(".data");
-    output_file(".text");
 
     int i = 0;
     for (FuncBlock *pointer = parsed; pointer; pointer = pointer->next)
@@ -559,17 +560,18 @@ void generator(FuncBlock *parsed, char *output_filename)
         Node *node = pointer->node;
         if (node->kind == ND_FUNCDEF)
         {
+            output_file(".text");
             output_file("\n.global %.*s", node->func_len, node->func_name);
             output_file("%.*s:", node->func_len, node->func_name);
             output_file("    push rbp");
             output_file("    mov rbp, rsp");
             output_file("    sub rsp, %d", pointer->stacksize);
-            if (pointer->stacksize > 30)
+            if (pointer->stacksize > 30 || pointer->stacksize < 0) // うまいことスタックの計算がいかないときがあるのでその修正用
                 error_exit_with_guard("too many stack used!!!");
             int j = 0;
             for (NDBlock *pointer = node->expr; pointer; pointer = pointer->next)
             {
-                if (pointer->node->kind != ND_LVAR)
+                if (pointer->node->kind != ND_VAR)
                     error_exit_with_guard("invalid function arguments");
                 switch (++j)
                 {
@@ -604,6 +606,12 @@ void generator(FuncBlock *parsed, char *output_filename)
             output_file("    mov rsp, rbp");
             output_file("    pop rbp");
             output_file("    ret");
+        }
+        else if (node->kind == ND_VAR)
+        {
+            output_file(".data");
+            output_file("%.*s:", node->var->len, node->var->name);
+            output_file("    .zero %ld", size_of(node->type->type) * (node->type->type == TYPE_ARRAY ? node->type->size : 1));
         }
         else
             error_exit_with_guard("unreachable");

@@ -16,6 +16,13 @@ Token *token_old; // tokenの一つあとのトークン
 
 const char *tokenkindlist[TK_END] = {TokenKindTable};
 
+// トークンの位置を引数の位置に変更する
+// かなり危険なため利用は注意を
+void set_token(Token *next)
+{
+    token = next;
+}
+
 // 次の次のトークン(1つ先のトークン)が引数のトークンだったらtrueを返す
 bool peek_next_TokenKind(TokenKind kind)
 {
@@ -26,7 +33,8 @@ bool peek_next_TokenKind(TokenKind kind)
 
 bool peek_next(char *op)
 {
-    if (token->next->len == strlen(op) &&
+    if (token->next->kind == TK_RESERVED &&
+        token->next->len == strlen(op) &&
         !strncmp(token->next->str, op, token->next->len))
         return true;
     return false;

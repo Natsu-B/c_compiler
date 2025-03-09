@@ -30,15 +30,91 @@ int size_of(TypeKind type)
     {
     case TYPE_INT:
         return 4;
+    case TYPE_CHAR:
+        return 1;
     case TYPE_LONG:
         return 8;
     case TYPE_PTR:
         return 8;
     case TYPE_ARRAY:
         return 8;
+    default:
+        break;
     }
     error_exit("unreachable");
     return 0; // unreachable
+}
+
+// 移すサイズによってmv命令を変更する
+char *mv_instruction_specifier(int size, bool is_sighed)
+{
+    static char mv_instruction[7] = {};
+    char *tmp;
+    if (is_sighed)
+    {
+        switch (size)
+        {
+        case 1:
+        case 2:
+            tmp = "movsx";
+            break;
+        case 4:
+            tmp = "movsxd";
+            break;
+        case 8:
+            tmp = "mov";
+            break;
+        default:
+            error_exit("unknown access size specifier");
+            break;
+        }
+    }
+    else
+    {
+        switch (size)
+        {
+        case 1:
+        case 2:
+            tmp = "movzx";
+            break;
+        case 4:
+        case 8:
+            tmp = "mov";
+            break;
+        default:
+            error_exit("unknown access size specifier");
+            break;
+        }
+    }
+    memcpy(mv_instruction, tmp, 7);
+    return mv_instruction;
+}
+
+// アクセスサイズの指定子を作成する
+char *access_size_specifier(int size)
+{
+    static char size_specifier[10] = {};
+    char *tmp;
+    switch (size)
+    {
+    case 1:
+        tmp = "BYTE PTR";
+        break;
+    case 2:
+        tmp = "WORD PTR";
+        break;
+    case 4:
+        tmp = "DWORD PTR";
+        break;
+    case 8:
+        tmp = "QWORD PTR";
+        break;
+    default:
+        error_exit("unknown access size specifier");
+        break;
+    }
+    memcpy(size_specifier, tmp, 10);
+    return size_specifier;
 }
 
 typedef enum
@@ -78,6 +154,7 @@ char *chose_register(int size, register_type reg_type)
         error_exit_with_guard("unknown register size");
         break;
     }
+    static char register_name[5] = {};
     char *tmp;
     int type = reg_type * 4 + size;
     switch (type)
@@ -278,8 +355,7 @@ char *chose_register(int size, register_type reg_type)
         error_exit_with_guard("unknown register type");
         break;
     }
-    char *register_name = calloc(1, sizeof(char) * 5);
-    strncpy(register_name, tmp, 5);
+    memcpy(register_name, tmp, 5);
     return register_name;
 }
 
@@ -462,10 +538,11 @@ void gen(Node *node)
     case ND_VAR:
         gen_lval(node);
         output_file("    pop rax");
-        if (node->type->type == TYPE_INT)
-            output_file("    movsxd rax, DWORD PTR [rax]");
-        else
-            output_file("    mov rax, [rax]");
+        // workaround
+        if (node->type->type != TYPE_ARRAY)
+            output_file("    %s rax, %s [rax]",
+                        mv_instruction_specifier(size_of(node->type->type), true),
+                        access_size_specifier(size_of(node->type->type)));
         output_file("    push rax");
         return;
     case ND_ASSIGN:
@@ -473,7 +550,9 @@ void gen(Node *node)
         gen(node->rhs);
         output_file("    pop rdi");
         output_file("    pop rax");
-        output_file("    mov [rax], %s", chose_register(size_of(node->type->type), rdi));
+        output_file("    mov %s [rax], %s",
+                    access_size_specifier(size_of(node->type->type)),
+                    chose_register(size_of(node->type->type), rdi));
         output_file("    push rdi");
         return;
     case ND_ADDR:
@@ -482,10 +561,9 @@ void gen(Node *node)
     case ND_DEREF:
         gen(node->lhs);
         output_file("    pop rax");
-        if (node->type->type == TYPE_INT)
-            output_file("    movsxd rax, DWORD PTR [rax]");
-        else
-            output_file("    mov rax, [rax]");
+        output_file("    %s rax, %s [rax]",
+                    mv_instruction_specifier(size_of(node->type->type), true),
+                    access_size_specifier(size_of(node->type->type)));
         output_file("    push rax");
         return;
     default:
@@ -566,8 +644,8 @@ void generator(FuncBlock *parsed, char *output_filename)
             output_file("    push rbp");
             output_file("    mov rbp, rsp");
             output_file("    sub rsp, %d", pointer->stacksize);
-            if (pointer->stacksize > 30 || pointer->stacksize < 0) // うまいことスタックの計算がいかないときがあるのでその修正用
-                error_exit_with_guard("too many stack used!!!");
+            if (pointer->stacksize > 90 || pointer->stacksize < 0) // うまいことスタックの計算がいかないときがあるのでその修正用
+                error_exit_with_guard("too many stack are used!!! :%d", pointer->stacksize);
             int j = 0;
             for (NDBlock *pointer = node->expr; pointer; pointer = pointer->next)
             {

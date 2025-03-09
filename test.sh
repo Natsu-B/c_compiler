@@ -2,11 +2,11 @@
 assert() {
   input="$1"
 
-  echo "$input" > out/tmp.cpp
-  gcc -o out/gcc out/tmp.cpp
+  echo "$input" > out/tmp.c
+  gcc -o out/gcc out/tmp.c
   ./out/gcc
   expected="$?"
-  ./main out/tmp.cpp out/out.s
+  ./main out/tmp.c out/out.s
   gcc -o out/out out/out.s
   ./out/out
   actual="$?"
@@ -25,8 +25,8 @@ assert_with_outer_code() {
   shift 2
   linkcode=("$@")
 
-  echo "$input" > out/tmp.cpp
-  ./main out/tmp.cpp out/out.s
+  echo "$input" > out/tmp.c
+  ./main out/tmp.c out/out.s
   cc -c out/out.s -o out/out.o
   cc -o out/out out/out.o "${linkcode[@]}"
   ./out/out
@@ -105,6 +105,10 @@ assert 'int main() {int i = 0; {int i = 1; } return i;}'
 assert 'int i; int main() {int i = 5; return i;}'
 assert 'int i; int main() {int j = 5; return i;}'
 assert 'int i; int main() {i= 5; return i;}'
+assert 'int main() {long i = 0; i = i+ 1; return i;}'
+assert 'int main() {char i; i= 3; return i;}'
+assert 'int main() {char i[4]; i[3] = 10; i[2] = 0; int j = 2; return i[2] + i[3] +j;}'
+assert 'int main() {char i; char a = 100; char b = 3; char c = 4; i = a * b /c; return i;}'
 
 (
   cd test

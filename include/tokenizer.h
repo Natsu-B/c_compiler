@@ -11,6 +11,7 @@ typedef enum
     TK_RETURN,   // return
     TK_SIZEOF,   // sizeof
     TK_INT,      // int 32bit
+    TK_CHAR,     // char 8bit
     TK_LONG,     // long 64bit
     TK_IF,       // if
     TK_ELSE,     // else
@@ -21,7 +22,7 @@ typedef enum
 } TokenKind;     // トークンの種類
 
 // デバッグ出力用 TokenKindに追加したら必ず追加すること
-#define TokenKindTable "TK_RESERVED", "TK_IDENT", "TK_NUM", "TK_RETURN", "TK_SIZEOF", "TK_INT", "TK_IF", "TK_ELSE", "TK_FOR", "TK_WHILE", "TK_EOF"
+#define TokenKindTable "TK_RESERVED", "TK_IDENT", "TK_NUM", "TK_RETURN", "TK_SIZEOF", "TK_INT", "TK_CHAR", "TK_LONG", "TK_IF", "TK_ELSE", "TK_FOR", "TK_WHILE", "TK_EOF"
 extern const char *tokenkindlist[TK_END];
 
 typedef struct Token Token;
@@ -42,7 +43,7 @@ extern void tokenizer(char *input);
 
 extern bool at_eof();
 
-extern void set_token(Token* next);
+extern void set_token(Token *next);
 extern bool peek_next_TokenKind(TokenKind kind);
 extern bool peek_next(char *op);
 extern Token *consume_token_if_next_matches(TokenKind kind, char reserved);
@@ -51,6 +52,7 @@ extern Token *consume_tokenkind(TokenKind kind);
 extern Token *consume(char *op);
 extern Token *expect(char *op);
 extern Token *get_old_token();
+extern Token *get_token();
 
 extern long expect_number();
 

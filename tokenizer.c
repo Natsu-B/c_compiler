@@ -23,6 +23,11 @@ void set_token(Token *next)
     token = next;
 }
 
+Token* get_token()
+{
+    return token;
+}
+
 // 次の次のトークン(1つ先のトークン)が引数のトークンだったらtrueを返す
 bool peek_next_TokenKind(TokenKind kind)
 {
@@ -235,6 +240,12 @@ void tokenizer(char *input)
 
             if (i == 4)
             {
+                if (!strncmp(input - i, "char", i))
+                {
+                    cur = new_token(TK_CHAR, cur, input - i);
+                    cur->len = i;
+                    continue;
+                }
                 if (!strncmp(input - i, "long", i))
                 {
                     cur = new_token(TK_LONG, cur, input - i);

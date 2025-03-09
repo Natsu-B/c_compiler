@@ -99,6 +99,20 @@ Type *alloc_type(TypeKind kind)
     return new;
 }
 
+TypeKind find_type()
+{
+    Token *is_int = consume_tokenkind(TK_INT);
+    Token *is_long = consume_tokenkind(TK_LONG);
+    Token *is_char = consume_tokenkind(TK_CHAR);
+    if (is_long && !is_char)
+        return TYPE_LONG;
+    if (is_int && !is_long && !is_char)
+        return TYPE_INT;
+    if (is_char && !is_int && !is_long)
+        return TYPE_CHAR;
+    return TYPE_NULL;
+}
+
 /**
  * program    = function_definiton | declaration
  * function_definition = type ( "*" )* ident "(" expr ("," expr )* ")"{stmt*}
@@ -163,18 +177,16 @@ FuncBlock *parser()
 Node *program()
 {
     pr_debug2("program");
-    Token *is_int = consume_tokenkind(TK_INT);
-    Token *is_long = consume_tokenkind(TK_LONG);
-    if (!is_int && !is_long)
+    Token *token_before = get_token();
+    TypeKind type_kind = find_type();
+    if (type_kind == TYPE_NULL)
         error_at(get_old_token()->str, "型が指定されていません");
     int pointer_counter = 0;
-    if (is_int || is_long)
+    while (consume("*"))
     {
-        while (consume("*"))
-        {
-            pointer_counter++;
-        }
+        pointer_counter++;
     }
+
     // 関数宣言かどうか
     Token *token = consume_token_if_next_matches(TK_IDENT, '(');
     if (token)
@@ -228,10 +240,7 @@ Node *program()
         return node;
     }
     // tokenにおいてtypeをconsumeしたのを戻す
-    if (is_int)
-        set_token(is_int);
-    if (is_long)
-        set_token(is_long);
+    set_token(token_before);
     // グローバル変数宣言
     Node *node = expr();
     expect(";");
@@ -516,10 +525,9 @@ Node *primary()
     }
 
     // 変数の型
-    Token *is_new1 = consume_tokenkind(TK_INT);
-    Token *is_new2 = consume_tokenkind(TK_LONG);
+    TypeKind type_kind = find_type();
     int pointer_counter = 0;
-    if (is_new1 || is_new2)
+    if (type_kind != TYPE_NULL)
     {
         while (consume("*"))
         {
@@ -537,10 +545,8 @@ Node *primary()
         node->kind = ND_VAR;
         Var *lvar = find_lvar_in_same_nestedblock(token);
         Var *tmp = find_var_all(token);
-        if (lvar || (tmp && !is_new1 && !is_new2))
+        if (lvar || (tmp && type_kind == TYPE_NULL))
         { // 同じネストで同じ変数名がある、浅いネストに初期化式がある既知の式に代入するとき
-            if (is_new1 || is_new2)
-                error_at(token->str, "同じ名前の変数がすでにあります");
             if (!lvar)
                 lvar = tmp;
             node->var = lvar;
@@ -557,18 +563,13 @@ Node *primary()
         }
         else
         {
-            if (!is_new1 && !is_new2)
+            if (type_kind == TYPE_NULL)
                 error_at(token->str, "変数の型が指定されていません");
             lvar = calloc(1, sizeof(Var));
             lvar->next = locals;
             lvar->name = token->str;
             lvar->len = token->len;
-            Type *type = NULL;
-            // 型の指定
-            if (is_new1)
-                type = alloc_type(TYPE_INT);
-            if (is_new2)
-                type = alloc_type(TYPE_LONG);
+            Type *type = alloc_type(type_kind);
             while (pointer_counter--)
             {
                 Type *new = alloc_type(TYPE_PTR);

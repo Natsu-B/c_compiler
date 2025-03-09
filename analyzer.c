@@ -8,6 +8,7 @@
 #include "include/error.h"
 #include "include/debug.h"
 #include <stdlib.h>
+#include <assert.h>
 
 bool is_equal_type(Type *lhs, Type *rhs)
 {
@@ -19,6 +20,20 @@ bool is_equal_type(Type *lhs, Type *rhs)
         return true;
     }
     return false;
+}
+
+TypeKind implicit_type_conversion(Type *lhs, Type *rhs)
+{
+    if (lhs->type == TYPE_PTR || lhs->type == TYPE_ARRAY ||
+        rhs->type == TYPE_PTR || rhs->type == TYPE_ARRAY)
+        return TYPE_NULL;
+    if (lhs->type == TYPE_LONG || rhs->type == TYPE_LONG)
+        return TYPE_LONG;
+    if (lhs->type == TYPE_INT || rhs->type == TYPE_INT)
+        return TYPE_INT;
+    if (lhs->type == TYPE_CHAR || rhs->type == TYPE_CHAR)
+        return TYPE_CHAR;
+    return TYPE_NULL;
 }
 
 void add_type(Node *node)
@@ -81,7 +96,11 @@ void add_type(Node *node)
             flag++;
         }
         if (flag >= 2)
-            error_at(node->token->str, "invalid use of the '+' operator");
+            if (node->lhs->type->type == TYPE_PTR ||
+                node->lhs->type->type == TYPE_ARRAY ||
+                node->rhs->type->type == TYPE_PTR ||
+                node->rhs->type->type == TYPE_ARRAY)
+                error_at(node->token->str, "invalid use of the '+' operator");
         node->lhs->type = type;
         node->rhs->type = type;
         node->type = type;
@@ -113,7 +132,7 @@ void add_type(Node *node)
             // old1 -> new -> old2 -> old3 ... に変更することで同じ変数の Typeを変更する
             Type *new = alloc_type(node->lhs->type->type);
             new->ptr_to = node->lhs->type->ptr_to;
-            new->size = node->lhs->type->size;
+            new->size = node->rhs->val;
             node->lhs->type->type = TYPE_ARRAY;
             node->lhs->type->ptr_to = new;
             node->lhs->type->size = node->rhs->val;
@@ -161,8 +180,14 @@ void analyze_type(Node *node, int *offset)
     if (node->kind == ND_ASSIGN)
     {
         if (!is_equal_type(node->lhs->type, node->rhs->type))
-            error_at(node->token->str, "the types on both sides of '=' must match");
-        node->type = node->lhs->type;
+        {
+            TypeKind converted_type = !implicit_type_conversion(node->lhs->type, node->rhs->type);
+            if (converted_type == TYPE_NULL)
+                error_at(node->token->str, "cannot convert both sides of '=' types");
+            node->type = alloc_type(converted_type);
+        }
+        else
+            node->type = node->lhs->type;
         return;
     }
     if (node->kind == ND_NUM)
@@ -183,12 +208,12 @@ void analyze_type(Node *node, int *offset)
                 {
                 case TYPE_INT:
                 case TYPE_LONG:
+                case TYPE_CHAR:
                 case TYPE_PTR:
                     offset[node->var->counter] = (node->var->counter ? offset[node->var->counter - 1] : 0) + size_of(node->type->type);
                     break;
                 case TYPE_ARRAY:
-                    offset[node->var->counter] = (node->var->counter ? offset[node->var->counter - 1] : 0) + size_of(node->type->ptr_to->type) * node->val;
-                    break;
+                    offset[node->var->counter] = (node->var->counter ? offset[node->var->counter - 1] : 0) + size_of(node->type->ptr_to->type) * node->type->size;                    break;
                 default:
                     error_exit("unreachable");
                     break;
@@ -206,6 +231,9 @@ void analyze_type(Node *node, int *offset)
         case TYPE_PTR:
         case TYPE_INT:
         case TYPE_LONG:
+            node->val = size_of(node->lhs->type->type);
+            break;
+        case TYPE_CHAR:
             node->val = size_of(node->lhs->type->type);
             break;
         case TYPE_ARRAY:

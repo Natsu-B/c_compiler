@@ -157,9 +157,11 @@ struct FuncBlock
 typedef enum
 {
     TYPE_INT,   // int型 signed 32bit
+    TYPE_CHAR,  // char型 8bit
     TYPE_LONG,  // long型 signed 64bit
     TYPE_PTR,   // 型へのポインタ
     TYPE_ARRAY, // 配列
+    TYPE_NULL,  // 失敗時等に返す 実際の型ではない
 } TypeKind;
 
 // 変数の型を管理するstruct

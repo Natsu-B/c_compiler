@@ -109,6 +109,8 @@ assert 'int main() {long i = 0; i = i+ 1; return i;}'
 assert 'int main() {char i; i= 3; return i;}'
 assert 'int main() {char i[4]; i[3] = 10; i[2] = 0; int j = 2; return i[2] + i[3] +j;}'
 assert 'int main() {char i; char a = 100; char b = 3; char c = 4; i = a * b /c; return i;}'
+assert 'int main() {char *i = "abc"; return i[0];}'
+assert 'int main() {char*i = "abc"; return i[2];}'
 
 (
   cd test

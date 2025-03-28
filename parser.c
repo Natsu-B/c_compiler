@@ -10,11 +10,12 @@
 #include <string.h>
 #include <stdio.h>
 
-const char *nodekindlist[ND_END] = {NodeKindTable};
+const char *nodekindlist[] = {NodeKindTable};
 
 NestedBlockVariables *top;
 Var *locals;
 int variables_counter;
+int string_literal_counter;
 
 Var *find_lvar_in_same_nestedblock(Token *token)
 {
@@ -137,6 +138,7 @@ TypeKind find_type()
  *         | ( type ( "*" )* )? ident
  *         | ident "(" expr ("," expr )* ")"
  *         | "(" expr ")"
+ *         | """ stirng-literal """
  */
 
 Node *program();
@@ -584,7 +586,8 @@ Node *primary()
             else
                 lvar->is_local = false;
             if (!locals) // そのネストで初めての初期化式のとき
-            {            // counterはローカル変数とグローバル変数で異なるので、top->next->nextがNULLなら関数内の初めてのローカル変数と考える
+            {            // counterはローカル変数とグローバル変数で異なるので、
+                // top->next->nextがNULLなら関数内の初めてのローカル変数と考える
                 if (!top->next || !top->next->next || !top->next->var)
                     lvar->counter = 0;
                 else
@@ -598,6 +601,15 @@ Node *primary()
             node->is_new = true;
             locals = lvar;
         }
+        return node;
+    }
+
+    if (consume_tokenkind(TK_STRING))
+    {
+        Node *node = calloc(1, sizeof(Node));
+        node->kind = ND_STRING;
+        node->token = get_old_token();
+        node->string_counter = string_literal_counter++;
         return node;
     }
 

@@ -17,12 +17,13 @@ typedef enum
     TK_ELSE,     // else
     TK_FOR,      // for
     TK_WHILE,    // while
+    TK_STRING,   // string literal
     TK_EOF,      // 入力終了
     TK_END,      // デバッグ出力用
 } TokenKind;     // トークンの種類
 
 // デバッグ出力用 TokenKindに追加したら必ず追加すること
-#define TokenKindTable "TK_RESERVED", "TK_IDENT", "TK_NUM", "TK_RETURN", "TK_SIZEOF", "TK_INT", "TK_CHAR", "TK_LONG", "TK_IF", "TK_ELSE", "TK_FOR", "TK_WHILE", "TK_EOF"
+#define TokenKindTable "TK_RESERVED", "TK_IDENT", "TK_NUM", "TK_RETURN", "TK_SIZEOF", "TK_INT", "TK_CHAR", "TK_LONG", "TK_IF", "TK_ELSE", "TK_FOR", "TK_WHILE", "TK_STRING", "TK_EOF"
 extern const char *tokenkindlist[TK_END];
 
 typedef struct Token Token;

@@ -23,7 +23,7 @@ void set_token(Token *next)
     token = next;
 }
 
-Token* get_token()
+Token *get_token()
 {
     return token;
 }
@@ -106,7 +106,7 @@ Token *expect(char *op)
 Token *get_old_token()
 {
     if (token_old->next != token)
-        error_exit("unreachable");
+        unreachable();
     return token_old;
 }
 
@@ -186,6 +186,18 @@ void tokenizer(char *input)
             cur = new_token(TK_NUM, cur, input);
             cur->val = strtol(input, &input, 10);
             pr_debug2("find NUM token: %ld", cur->val);
+            continue;
+        }
+
+        // 文字列の検知
+        if (*input == '"')
+        {
+            int i = 0; // 文字列のサイズ("は除く)
+            while (*(++input) != '"')
+                i++;
+            input++; // 終了まで送る
+            cur = new_token(TK_STRING, cur, input - i - 2);
+            cur->len = i + 2;
             continue;
         }
 

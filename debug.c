@@ -4,6 +4,7 @@
 #include "include/parser.h"
 #include "include/analyzer.h"
 #include <stdio.h>
+#include <assert.h>
 
 extern GTLabel *head_label;
 
@@ -31,7 +32,9 @@ void make_space(int nest)
 void _print_parse_result(Node *node, int nest)
 {
     make_space(nest);
-    if (node->kind == ND_NUM)
+    switch (node->kind)
+    {
+    case ND_NUM:
     {
         int type_name = __INT_MAX__;
         int reference_counter = -1;
@@ -42,9 +45,12 @@ void _print_parse_result(Node *node, int nest)
             type_name = pointer->type;
             pointer = pointer->ptr_to;
         }
-        fprintf(stdout, "NodeKind: %s value: %ld type: %.*s%d\n", nodekindlist[node->kind], node->val, reference_counter, "*****************************************************************************************************************", type_name);
+        fprintf(stdout, "NodeKind: %s value: %ld type: %.*s%d\n",
+                nodekindlist[node->kind], node->val, reference_counter,
+                "*****************************************************************************************************************", type_name);
+        break;
     }
-    else if (node->kind == ND_VAR)
+    case ND_VAR:
     {
         int type_name = __INT_MAX__;
         int reference_counter = -1;
@@ -55,9 +61,16 @@ void _print_parse_result(Node *node, int nest)
             type_name = pointer->type;
             pointer = pointer->ptr_to;
         }
-        fprintf(stdout, "NodeKind: %s type: %.*s%d offset: %d counter: %d is_new: %s is_local: %s\n", nodekindlist[node->kind], reference_counter, "*****************************************************************************************************************", type_name, node->offset, node->var->counter, node->is_new ? "true" : "false", node->var->is_local ? "true" : "false");
+        fprintf(stdout, "NodeKind: %s type: %.*s%d offset: %d counter: %d is_new: %s is_local: %s\n",
+                nodekindlist[node->kind], reference_counter,
+                "*****************************************************************************************************************", type_name,
+                node->offset, node->var->counter, node->is_new ? "true" : "false",
+                node->var->is_local ? "true" : "false");
+        break;
     }
-    else if (node->kind == ND_IF || node->kind == ND_ELIF || node->kind == ND_WHILE)
+    case ND_IF:
+    case ND_ELIF:
+    case ND_WHILE:
     {
         fprintf(stdout, "NodeKind: %s labelname: %s\n", nodekindlist[node->kind], node->name->name);
         make_space(nest);
@@ -72,8 +85,9 @@ void _print_parse_result(Node *node, int nest)
             fprintf(stdout, "|    [false_code]\n");
             _print_parse_result(node->false_code, nest + 1);
         }
+        break;
     }
-    else if (node->kind == ND_FOR)
+    case ND_FOR:
     {
         fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);
         if (node->init)
@@ -100,8 +114,9 @@ void _print_parse_result(Node *node, int nest)
             fprintf(stdout, "|   [code]\n");
             _print_parse_result(node->true_code, nest + 1);
         }
+        break;
     }
-    else if (node->kind == ND_BLOCK)
+    case ND_BLOCK:
     {
         fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);
         make_space(nest);
@@ -110,8 +125,9 @@ void _print_parse_result(Node *node, int nest)
         {
             _print_parse_result(pointer->node, nest + 1);
         }
+        break;
     }
-    else if (node->kind == ND_FUNCCALL)
+    case ND_FUNCCALL:
     {
         fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);
         make_space(nest);
@@ -120,8 +136,9 @@ void _print_parse_result(Node *node, int nest)
         {
             _print_parse_result(pointer->node, nest + 1);
         }
+        break;
     }
-    else if (node->kind == ND_FUNCDEF)
+    case ND_FUNCDEF:
     {
         fprintf(stdout, "NodeKind: %s counter: %d\n", nodekindlist[node->kind], node->offset);
         make_space(nest);
@@ -135,8 +152,14 @@ void _print_parse_result(Node *node, int nest)
         {
             _print_parse_result(pointer->node, nest + 1);
         }
+        break;
     }
-    else
+    case ND_STRING:
+    {
+        fprintf(stdout, "NodeKind: %s name: %.*s\n", nodekindlist[node->kind], node->token->len, node->token->str);
+        break;
+    }
+    default:
     {
         fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);
         if (node->lhs)
@@ -151,6 +174,8 @@ void _print_parse_result(Node *node, int nest)
             fprintf(stdout, "|   [rhs]\n");
             _print_parse_result(node->rhs, nest + 1);
         }
+        break;
+    }
     }
 }
 

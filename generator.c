@@ -41,7 +41,7 @@ int size_of(TypeKind type)
     default:
         break;
     }
-    error_exit("unreachable");
+    unreachable();
     return 0; // unreachable
 }
 
@@ -525,8 +525,7 @@ void gen(Node *node)
     {
         gen(node->rhs);
         output_file("    pop rax");
-        output_file("    mov rsp, rbp");
-        output_file("    pop rbp");
+        output_file("    leave");
         output_file("    ret");
         return;
     }
@@ -630,7 +629,19 @@ void generator(FuncBlock *parsed, char *output_filename)
     }
     pr_debug("output file open");
     output_file(".intel_syntax noprefix");
+    output_file(".data");
 
+    for (FuncBlock *pointer = parsed; pointer; pointer = pointer->next)
+    {
+        Node *node = pointer->node;
+        if (node->kind == ND_VAR)
+        {
+            output_file("%.*s:", node->var->len, node->var->name);
+            output_file("    .zero %ld", size_of(node->type->type) * (node->type->type == TYPE_ARRAY ? node->type->size : 1));
+        }
+    }
+
+    output_file(".text");
     int i = 0;
     for (FuncBlock *pointer = parsed; pointer; pointer = pointer->next)
     {
@@ -638,7 +649,6 @@ void generator(FuncBlock *parsed, char *output_filename)
         Node *node = pointer->node;
         if (node->kind == ND_FUNCDEF)
         {
-            output_file(".text");
             output_file("\n.global %.*s", node->func_len, node->func_name);
             output_file("%.*s:", node->func_len, node->func_name);
             output_file("    push rbp");
@@ -681,17 +691,11 @@ void generator(FuncBlock *parsed, char *output_filename)
             for (NDBlock *pointer = node->stmt; pointer; pointer = pointer->next)
                 gen(pointer->node);
             output_file("    pop rax");
-            output_file("    mov rsp, rbp");
-            output_file("    pop rbp");
+            output_file("    leave");
             output_file("    ret");
+            continue;
         }
-        else if (node->kind == ND_VAR)
-        {
-            output_file(".data");
-            output_file("%.*s:", node->var->len, node->var->name);
-            output_file("    .zero %ld", size_of(node->type->type) * (node->type->type == TYPE_ARRAY ? node->type->size : 1));
-        }
-        else
+        if (node->kind != ND_VAR)
             error_exit_with_guard("unreachable");
     }
 

@@ -22,6 +22,9 @@
 #define pr_debug2(fmt, ...)
 #endif // pr_debug2
 
+#define unreachable() \
+    error_exit("unreachable")
+
 #define error_exit(fmt, ...) \
     _error(__FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 

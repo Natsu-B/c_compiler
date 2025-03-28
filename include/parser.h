@@ -65,12 +65,13 @@ typedef enum
     ND_NUM,          // 整数
     ND_BLOCK,        // ブロック
     ND_DISCARD_EXPR, // 式文
+    ND_STRING,       // string literal
     ND_END,          // デバッグ時利用
 } NodeKind;
 
 // デバッグ時利用 NodeKindに追加したら必ず追加すること
-#define NodeKindTable "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF", "ND_FUNCDEF", "ND_FUNCCALL", "ND_RETURN", "ND_SIZEOF", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE", "ND_VAR", "ND_ARRAY", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR"
-extern const char *nodekindlist[ND_END];
+#define NodeKindTable "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF", "ND_FUNCDEF", "ND_FUNCCALL", "ND_RETURN", "ND_SIZEOF", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE", "ND_VAR", "ND_ARRAY", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR", "ND_STIRNG"
+extern const char *nodekindlist[];
 
 struct Node
 {
@@ -112,10 +113,22 @@ struct Node
     };
     long val; // ND_NUMの場合 数値
     struct
-    {                // 変数の場合
-        int offset;  // RBP - offset の位置に変数がある ND_LVARのときのみ
+    {               // 変数の場合
+        int offset; // RBP - offset の位置に変数がある LVARのときのみ
+        enum
+        {                 // global変数のとき 初期化をどうするか
+            reserved,     // 0を使わないように
+            init_zero,    // ゼロクリア
+            init_val,     // 数字での初期値
+            init_pointer, // ポインタでの初期化
+            init_string,  // 文字列での初期化
+        }how2_init;
         bool is_new; // 初めて定義された変数か否か
         Var *var;    // 変数の情報
+    };
+    struct
+    {                       // string型 ND_STRINGの場合
+        int string_counter; // 何回目に出てきたstringか
     };
 };
 

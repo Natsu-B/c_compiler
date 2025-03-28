@@ -142,8 +142,9 @@ void add_type(Node *node)
         }
         else
         {
-            if (node->rhs->val < 0 || node->rhs->val >= node->lhs->type->size)
-                error_at(node->token->str, "index out of bounds for type array");
+            // char *i = "hoge"; i[3]; 等が使えなくなるためコメントアウト
+            // if (node->rhs->val < 0 || node->rhs->val >= node->lhs->type->size)
+            //     error_at(node->token->str, "index out of bounds for type array");
             node->kind = ND_DEREF;
             node->lhs = new_node(ND_ADD, node->lhs, node->rhs, node->token);
             node->rhs = NULL;
@@ -213,7 +214,8 @@ void analyze_type(Node *node, int *offset)
                     offset[node->var->counter] = (node->var->counter ? offset[node->var->counter - 1] : 0) + size_of(node->type->type);
                     break;
                 case TYPE_ARRAY:
-                    offset[node->var->counter] = (node->var->counter ? offset[node->var->counter - 1] : 0) + size_of(node->type->ptr_to->type) * node->type->size;                    break;
+                    offset[node->var->counter] = (node->var->counter ? offset[node->var->counter - 1] : 0) + size_of(node->type->ptr_to->type) * node->type->size;
+                    break;
                 default:
                     error_exit("unreachable");
                     break;

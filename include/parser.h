@@ -36,7 +36,7 @@ struct GTLabel
 {
     GTLabel *next; // 次の変数
     char *name;    // 変数名 e.g. _0_main
-    int len;       // 変数名の長さ
+    size_t len;       // 変数名の長さ
 };
 
 typedef enum
@@ -86,7 +86,7 @@ struct Node
     {
         Node *lhs;     // 左辺 left-hand side
         Node *rhs;     // 右辺 right-hand side
-        int real_size; // 置き換えられるサイズ sizeof演算子のみで用いる
+        size_t real_size; // 置き換えられるサイズ sizeof演算子のみで用いる
     };
 
     struct
@@ -105,30 +105,22 @@ struct Node
         };
     };
     struct
-    {                    // ND_BLOCK ND_FUNCCALL ND_FUNCDEF
-        NDBlock *expr;   // expr ND_FUNCCALL ND_FUNCDEFで利用
-        NDBlock *stmt;   // stmt ND_BLOCK ND_FUNCDEFで利用
-        char *func_name; // ND_FUNCCALL ND_FUNCDEF で利用 関数名
-        int func_len;    // ND_FUNCCALL ND_FUNCDEF のときのみ利用 関数名長さ
+    {                                   // ND_BLOCK ND_FUNCCALL ND_FUNCDEF
+        NDBlock *expr;                  // expr ND_FUNCCALL ND_FUNCDEFで利用
+        NDBlock *stmt;                  // stmt ND_BLOCK ND_FUNCDEFで利用
+        char *func_name;                // ND_FUNCCALL ND_FUNCDEF で利用 関数名
+        size_t func_len;                   // ND_FUNCCALL ND_FUNCDEF のときのみ利用 関数名長さ
+        NestedBlockVariables *var_list; // ND_FUNCDEF ND_BLOCK のとき利用 変数リスト
     };
     long val; // ND_NUMの場合 数値
     struct
-    {               // 変数の場合
-        int offset; // RBP - offset の位置に変数がある LVARのときのみ
-        enum
-        {                 // global変数のとき 初期化をどうするか
-            reserved,     // 0を使わないように
-            init_zero,    // ゼロクリア
-            init_val,     // 数字での初期値
-            init_pointer, // ポインタでの初期化
-            init_string,  // 文字列での初期化
-        }how2_init;
+    {                // 変数(ND_VAR)の場合
         bool is_new; // 初めて定義された変数か否か
         Var *var;    // 変数の情報
     };
     struct
-    {                       // string型 ND_STRINGの場合
-        int string_counter; // 何回目に出てきたstringか
+    {                         // string型 ND_STRINGの場合
+        char *string_counter; // stirng literal にアクセスする名前
     };
 };
 
@@ -137,7 +129,7 @@ struct NestedBlockVariables
 {
     NestedBlockVariables *next; // 一つ前のネストを指す
     Var *var;                   // そのネスト内の変数
-    int counter;                // 変数が同じネストにいくつあるか
+    size_t counter;                // 変数が同じネストにいくつあるか
 };
 
 // 変数を管理するstruct
@@ -145,10 +137,22 @@ struct Var
 {
     Var *next;     // 次の変数
     char *name;    // 変数名
-    int len;       // 変数名 長さ
+    size_t len;       // 変数名 長さ
     Type *type;    // 型
     int counter;   // 何番目の変数か
     bool is_local; // ローカル変数かグローバル変数か
+    union
+    {
+        enum
+        {                 // global変数のとき 初期化をどうするか
+            reserved,     // 0を使わないように
+            init_zero,    // ゼロクリア
+            init_val,     // 数字での初期値
+            init_pointer, // ポインタでの初期化
+            init_string,  // 文字列での初期化
+        } how2_init;
+        size_t offset; // ローカル変数の場合 RBP - offsetの位置に変数がある
+    };
 };
 
 // 引数、またはブロックの中の式を管理するstruct
@@ -163,7 +167,7 @@ struct FuncBlock
 {
     FuncBlock *next; // 次の変数
     Node *node;      // 関数内の式
-    int stacksize;   // スタックのサイズ byte単位
+    size_t stacksize;   // スタックのサイズ byte単位
 };
 
 // サポートしている変数の型

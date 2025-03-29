@@ -18,7 +18,7 @@ void print_tokenize_result(Token *token)
         if (token->kind == TK_NUM)
             fprintf(stdout, "%ld\t: %s\n", token->val, tokenkindlist[token->kind]);
         else
-            fprintf(stdout, "%.*s\t: %s\n", token->len, token->str, tokenkindlist[token->kind]);
+            fprintf(stdout, "%.*s\t: %s\n", (int)token->len, token->str, tokenkindlist[token->kind]);
         token = token->next;
     }
 }
@@ -45,6 +45,7 @@ void _print_parse_result(Node *node, int nest)
             type_name = pointer->type;
             pointer = pointer->ptr_to;
         }
+        assert(reference_counter >= 0);
         fprintf(stdout, "NodeKind: %s value: %ld type: %.*s%d\n",
                 nodekindlist[node->kind], node->val, reference_counter,
                 "*****************************************************************************************************************", type_name);
@@ -61,10 +62,10 @@ void _print_parse_result(Node *node, int nest)
             type_name = pointer->type;
             pointer = pointer->ptr_to;
         }
-        fprintf(stdout, "NodeKind: %s type: %.*s%d offset: %d counter: %d is_new: %s is_local: %s\n",
+        fprintf(stdout, "NodeKind: %s type: %.*s%d offset: %lu counter: %d is_new: %s is_local: %s\n",
                 nodekindlist[node->kind], reference_counter,
                 "*****************************************************************************************************************", type_name,
-                node->offset, node->var->counter, node->is_new ? "true" : "false",
+                node->var->offset, node->var->counter, node->is_new ? "true" : "false",
                 node->var->is_local ? "true" : "false");
         break;
     }
@@ -140,7 +141,7 @@ void _print_parse_result(Node *node, int nest)
     }
     case ND_FUNCDEF:
     {
-        fprintf(stdout, "NodeKind: %s counter: %d\n", nodekindlist[node->kind], node->offset);
+        fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);
         make_space(nest);
         fprintf(stdout, "|   [arguments]\n");
         for (NDBlock *pointer = node->expr; pointer; pointer = pointer->next)
@@ -156,7 +157,7 @@ void _print_parse_result(Node *node, int nest)
     }
     case ND_STRING:
     {
-        fprintf(stdout, "NodeKind: %s name: %.*s\n", nodekindlist[node->kind], node->token->len, node->token->str);
+        fprintf(stdout, "NodeKind: %s name: %.*s\n", nodekindlist[node->kind], (int)node->token->len, node->token->str);
         break;
     }
     default:
@@ -191,6 +192,6 @@ void print_parse_result(FuncBlock *node)
     fprintf(stdout, "\njump label:\n");
     for (GTLabel *pointer = head_label; pointer; pointer = pointer->next)
     {
-        fprintf(stdout, "%.*s\n", pointer->len, pointer->name);
+        fprintf(stdout, "%.*s\n", (int)pointer->len, pointer->name);
     }
 }

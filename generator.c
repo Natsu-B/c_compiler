@@ -24,7 +24,7 @@ FILE *fout;
     } while (0)
 
 // TYPE_INT TYPE_ARRAY 等を受け取ってその大きさを返す関数
-int size_of(TypeKind type)
+size_t size_of(TypeKind type)
 {
     switch (type)
     {
@@ -366,9 +366,9 @@ void gen_lval(Node *node)
     if (node->kind == ND_VAR)
     {
         if (node->var->is_local)
-            output_file("    lea rax, [rbp-%d]", node->offset);
+            output_file("    lea rax, [rbp-%d]", (int)node->var->offset);
         else
-            output_file("    lea rax,  [rip+%.*s]", node->var->len, node->var->name);
+            output_file("    lea rax,  [rip+%.*s]", (int)node->var->len, node->var->name);
         output_file("    push rax");
         return;
     }
@@ -388,7 +388,7 @@ void gen(Node *node)
         error_exit_with_guard("null pointer");
     if (node->kind == ND_FUNCCALL)
     {
-        output_file("# start calling %.*s", node->func_len, node->func_name);
+        output_file("# start calling %.*s", (int)node->func_len, node->func_name);
         NDBlock *pointer = node->expr;
         int i = 0;
         while (pointer)
@@ -427,18 +427,18 @@ void gen(Node *node)
         output_file("    and rax, 15");
         output_file("    jnz .L_%d_unaligned", align_counter);
         output_file("    mov rax, 0");
-        output_file("    call %.*s", node->func_len, node->func_name);
+        output_file("    call %.*s", (int)node->func_len, node->func_name);
         output_file("    jmp .L_%d_aligned", align_counter);
         output_file(".L_%d_unaligned:", align_counter);
         output_file("    sub rsp, 8");
         output_file("    mov rax, 0");
-        output_file("    call %.*s", node->func_len, node->func_name);
+        output_file("    call %.*s", (int)node->func_len, node->func_name);
         output_file("    add rsp, 8");
         output_file(".L_%d_aligned:", align_counter);
         output_file("    push rax");
         align_counter++;
 
-        output_file("# end calling %.*s", node->func_len, node->func_name);
+        output_file("# end calling %.*s", (int)node->func_len, node->func_name);
         return;
     }
     if (node->kind == ND_ARRAY)
@@ -636,26 +636,22 @@ void generator(FuncBlock *parsed, char *output_filename)
         Node *node = pointer->node;
         if (node->kind == ND_VAR)
         {
-            output_file("%.*s:", node->var->len, node->var->name);
+            output_file("%.*s:", (int)node->var->len, node->var->name);
             output_file("    .zero %ld", size_of(node->type->type) * (node->type->type == TYPE_ARRAY ? node->type->size : 1));
         }
     }
 
     output_file(".text");
-    int i = 0;
     for (FuncBlock *pointer = parsed; pointer; pointer = pointer->next)
     {
-        pr_debug2("code[%d]", i++);
         Node *node = pointer->node;
         if (node->kind == ND_FUNCDEF)
         {
-            output_file("\n.global %.*s", node->func_len, node->func_name);
-            output_file("%.*s:", node->func_len, node->func_name);
+            output_file("\n.global %.*s", (int)node->func_len, node->func_name);
+            output_file("%.*s:", (int)node->func_len, node->func_name);
             output_file("    push rbp");
             output_file("    mov rbp, rsp");
-            output_file("    sub rsp, %d", pointer->stacksize);
-            if (pointer->stacksize > 90 || pointer->stacksize < 0) // うまいことスタックの計算がいかないときがあるのでその修正用
-                error_exit_with_guard("too many stack are used!!! :%d", pointer->stacksize);
+            output_file("    sub rsp, %lu", pointer->stacksize);
             int j = 0;
             for (NDBlock *pointer = node->expr; pointer; pointer = pointer->next)
             {
@@ -664,22 +660,22 @@ void generator(FuncBlock *parsed, char *output_filename)
                 switch (++j)
                 {
                 case 1:
-                    output_file("    mov [rbp-%d], %s", pointer->node->offset, chose_register(size_of(pointer->node->type->type), rdi));
+                    output_file("    mov [rbp-%lu], %s", pointer->node->var->offset, chose_register(size_of(pointer->node->type->type), rdi));
                     break;
                 case 2:
-                    output_file("    mov [rbp-%d], %s", pointer->node->offset, chose_register(size_of(pointer->node->type->type), rsi));
+                    output_file("    mov [rbp-%lu], %s", pointer->node->var->offset, chose_register(size_of(pointer->node->type->type), rsi));
                     break;
                 case 3:
-                    output_file("    mov [rbp-%d], %s", pointer->node->offset, chose_register(size_of(pointer->node->type->type), rdx));
+                    output_file("    mov [rbp-%lu], %s", pointer->node->var->offset, chose_register(size_of(pointer->node->type->type), rdx));
                     break;
                 case 4:
-                    output_file("    mov [rbp-%d], %s", pointer->node->offset, chose_register(size_of(pointer->node->type->type), rcx));
+                    output_file("    mov [rbp-%lu], %s", pointer->node->var->offset, chose_register(size_of(pointer->node->type->type), rcx));
                     break;
                 case 5:
-                    output_file("    mov [rbp-%d], %s", pointer->node->offset, chose_register(size_of(pointer->node->type->type), r8));
+                    output_file("    mov [rbp-%lu], %s", pointer->node->var->offset, chose_register(size_of(pointer->node->type->type), r8));
                     break;
                 case 6:
-                    output_file("    mov [rbp-%d], %s", pointer->node->offset, chose_register(size_of(pointer->node->type->type), r9));
+                    output_file("    mov [rbp-%lu], %s", pointer->node->var->offset, chose_register(size_of(pointer->node->type->type), r9));
                     break;
                 default:
                     error_exit_with_guard("too much arguments");

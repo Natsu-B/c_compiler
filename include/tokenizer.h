@@ -2,6 +2,7 @@
 #define TOKENIZER_C_COMPILER
 
 #include <stdbool.h>
+#include <stdlib.h>
 
 typedef enum
 {
@@ -36,7 +37,7 @@ struct Token
     union           // トークンの種類に応じたデータを保存
     {
         long val; // 整数の場合の値
-        int len;  // 識別子、関数、記号の場合 トークンの長さ
+        size_t len;  // 識別子、関数、記号の場合 トークンの長さ
     };
 };
 

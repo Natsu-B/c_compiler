@@ -101,6 +101,7 @@ assert 'int main() {int x; long z; if (sizeof(x) != 4) return 1; int* y; if (siz
 assert 'int main() {int x[2]; int y; long z; *(x+1) = 1; *x = 2; y = 5; return (y - *(x+1)) / *x;}'
 assert 'int main() {int x[2]; int y = 1; x[0] = y; x[1] = y + 1; return x[1] + x[0];}'
 assert 'int main() {int i = 0; {int i = 1; return i;}}'
+assert 'int main() {int i = 0; {int x = 1;} return i;}'
 assert 'int main() {int i = 0; {int i = 1; } return i;}'
 assert 'int i; int main() {int i = 5; return i;}'
 assert 'int i; int main() {int j = 5; return i;}'
@@ -111,6 +112,9 @@ assert 'int main() {char i[4]; i[3] = 10; i[2] = 0; int j = 2; return i[2] + i[3
 assert 'int main() {char i; char a = 100; char b = 3; char c = 4; i = a * b /c; return i;}'
 assert 'int main() {char *i = "abc"; return i[0];}'
 assert 'int main() {char*i = "abc"; return i[2];}'
+assert 'int i; int main() {int i = 1; {int i = 2; {int i = 3; return i;}}}'
+assert 'int i; int main() {int i = 1; {int i = 2; {int i = 3;} return i;}}'
+assert 'int i; int main() {int i = 1; {int i = 2; {int i = 3;}} return i;}'
 
 (
   cd test

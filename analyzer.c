@@ -4,11 +4,11 @@
 
 #include "include/analyzer.h"
 #include "include/parser.h"
+#include "include/offset.h"
 #include "include/generator.h"
 #include "include/error.h"
 #include "include/debug.h"
 #include <stdlib.h>
-#include <assert.h>
 
 bool is_equal_type(Type *lhs, Type *rhs)
 {
@@ -57,6 +57,11 @@ void add_type(Node *node)
         for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
             add_type(tmp->node);
 
+    if (node->kind == ND_VAR)
+    {
+        node->type = node->var->type;
+        return;
+    }
     if (node->kind == ND_MUL ||
         node->kind == ND_DIV ||
         node->kind == ND_FUNCCALL)
@@ -155,31 +160,36 @@ void add_type(Node *node)
     }
 }
 
-void analyze_type(Node *node, int *offset)
+void analyze_type(Node *node)
 {
     if (node->lhs)
-        analyze_type(node->lhs, offset);
+        analyze_type(node->lhs);
     if (node->rhs)
-        analyze_type(node->rhs, offset);
+        analyze_type(node->rhs);
     if (node->init)
-        analyze_type(node->init, offset);
+        analyze_type(node->init);
     if (node->condition)
-        analyze_type(node->condition, offset);
+        analyze_type(node->condition);
     if (node->true_code)
-        analyze_type(node->true_code, offset);
+        analyze_type(node->true_code);
     if (node->false_code) // node->init も同じ
-        analyze_type(node->false_code, offset);
+        analyze_type(node->false_code);
     if (node->update)
-        analyze_type(node->update, offset);
+        analyze_type(node->update);
     if (node->expr)
         for (NDBlock *tmp = node->expr; tmp; tmp = tmp->next)
-            analyze_type(tmp->node, offset);
+            analyze_type(tmp->node);
     if (node->stmt)
+    { // ND_BLOCKのとき
+        offset_enter_nest();
         for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
-            analyze_type(tmp->node, offset);
+            analyze_type(tmp->node);
+        offset_exit_nest();
+    }
 
-    if (node->kind == ND_ASSIGN)
+    switch (node->kind)
     {
+    case ND_ASSIGN:
         if (!is_equal_type(node->lhs->type, node->rhs->type))
         {
             TypeKind converted_type = !implicit_type_conversion(node->lhs->type, node->rhs->type);
@@ -189,18 +199,16 @@ void analyze_type(Node *node, int *offset)
         }
         else
             node->type = node->lhs->type;
-        return;
-    }
-    if (node->kind == ND_NUM)
-    {
+        break;
+
+    case ND_NUM:
         if (node->type->type == TYPE_PTR)
         {
             node->val = node->val * size_of(node->type->ptr_to->type);
         }
-        return;
-    }
-    if (node->kind == ND_VAR)
-    {
+        break;
+
+    case ND_VAR:
         if (node->var->is_local)
         {
             if (node->is_new)
@@ -211,22 +219,20 @@ void analyze_type(Node *node, int *offset)
                 case TYPE_LONG:
                 case TYPE_CHAR:
                 case TYPE_PTR:
-                    offset[node->var->counter] = (node->var->counter ? offset[node->var->counter - 1] : 0) + size_of(node->type->type);
+                    node->var->offset = calculate_offset(size_of(node->type->type));
                     break;
                 case TYPE_ARRAY:
-                    offset[node->var->counter] = (node->var->counter ? offset[node->var->counter - 1] : 0) + size_of(node->type->ptr_to->type) * node->type->size;
+                    node->var->offset = calculate_offset(size_of(node->type->ptr_to->type) * node->type->size);
                     break;
                 default:
                     error_exit("unreachable");
                     break;
                 }
             }
-            node->offset = offset[node->var->counter];
-            return;
         }
-    }
-    if (node->kind == ND_SIZEOF)
-    {
+        break;
+
+    case ND_SIZEOF:
         node->kind = ND_NUM;
         switch (node->lhs->type->type)
         {
@@ -245,7 +251,10 @@ void analyze_type(Node *node, int *offset)
             error_exit("unreachable");
             break;
         }
-        return;
+        break;
+
+    default:
+        break;
     }
 }
 
@@ -269,6 +278,7 @@ FuncBlock *analyzer(FuncBlock *funcblock)
         {
             if (node->var->is_local)
                 error_exit("failed to parse correctly");
+            add_type(node);
         }
         else
             error_exit("unreachable");
@@ -281,25 +291,21 @@ FuncBlock *analyzer(FuncBlock *funcblock)
         Node *node = pointer->node;
         if (node->kind == ND_FUNCDEF)
         {
-            int offset[node->offset];
-            int *offset_pointer = offset;
-            if (!node->offset)
-                offset_pointer = NULL;
+            init_nest();
             for (NDBlock *tmp = node->expr; tmp; tmp = tmp->next)
             {
-                analyze_type(tmp->node, offset_pointer);
+                analyze_type(tmp->node);
             }
             for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
             {
-                analyze_type(tmp->node, offset_pointer);
+                analyze_type(tmp->node);
             }
             // stacksizeは8byte単位で揃える
-            pointer->stacksize = node->offset ? (offset[node->offset - 1] / 8 + 1) * 8 : 0;
+            size_t max_stacksize = get_max_offset();
+            pointer->stacksize = max_stacksize % 8 ? (max_stacksize / 8 + 1) * 8 : max_stacksize;
         }
         else if (node->kind == ND_VAR)
-        {
-            analyze_type(node, NULL);
-        }
+            analyze_type(node);
         else
             error_exit("unreachable");
     }

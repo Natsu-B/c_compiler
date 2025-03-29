@@ -3,6 +3,7 @@
 // ------------------------------------------------------------------------------------
 
 #include "include/parser.h"
+#include "include/variables.h"
 #include "include/tokenizer.h"
 #include "include/error.h"
 #include "include/debug.h"
@@ -11,28 +12,6 @@
 #include <stdio.h>
 
 const char *nodekindlist[] = {NodeKindTable};
-
-NestedBlockVariables *top;
-Var *locals;
-int variables_counter;
-int string_literal_counter;
-
-Var *find_lvar_in_same_nestedblock(Token *token)
-{
-    for (Var *var = locals; var; var = var->next)
-        if (var->len == token->len && !memcmp(var->name, token->str, var->len))
-            return var;
-    return NULL;
-}
-
-Var *find_var_all(Token *token)
-{
-    for (NestedBlockVariables *pointer = top->next; pointer; pointer = pointer->next)
-        for (Var *var = pointer->var; var; var = var->next)
-            if (var->len == token->len && !memcmp(var->name, token->str, var->len))
-                return var;
-    return find_lvar_in_same_nestedblock(token);
-}
 
 GTLabel *head_label;
 // 現在パースしている関数名と名前
@@ -159,14 +138,12 @@ FuncBlock *parser()
     FuncBlock head;
     head.next = NULL;
     FuncBlock *pointer = &head;
-    top = calloc(1, sizeof(NestedBlockVariables));
+    init_variables();
     while (!at_eof())
     {
         FuncBlock *new = calloc(1, sizeof(FuncBlock));
         pointer->next = new;
         new->node = program();
-        new->node->offset = variables_counter;
-        variables_counter = 0;
         pointer = new;
     }
 #ifdef DEBUG
@@ -182,7 +159,7 @@ Node *program()
     Token *token_before = get_token();
     TypeKind type_kind = find_type();
     if (type_kind == TYPE_NULL)
-        error_at(get_old_token()->str, "型が指定されていません");
+        error_at(token_before->str, "型が指定されていません");
     int pointer_counter = 0;
     while (consume("*"))
     {
@@ -198,16 +175,12 @@ Node *program()
         node->kind = ND_FUNCDEF;
         node->func_name = token->str;
         node->func_len = token->len;
+        node->var_list = new_nest();
         program_name = token->str;
         program_name_len = token->len;
         NDBlock head;
         head.next = NULL;
         NDBlock *pointer = &head;
-        NestedBlockVariables *next = calloc(1, sizeof(NestedBlockVariables));
-        next->next = top;
-        top->var = locals;
-        top = next;
-        locals = NULL;
         if (!consume(")"))
         {
             NDBlock *next = calloc(1, sizeof(NDBlock));
@@ -236,9 +209,7 @@ Node *program()
             pointer = next;
         }
         node->stmt = head.next;
-        variables_counter += top->counter;
-        top = top->next;
-        locals = top->var;
+        exit_nest();
         return node;
     }
     // tokenにおいてtypeをconsumeしたのを戻す
@@ -260,12 +231,7 @@ Node *stmt()
         head.next = NULL;
         NDBlock *pointer = &head;
         node->kind = ND_BLOCK;
-        NestedBlockVariables *next = calloc(1, sizeof(NestedBlockVariables));
-        next->next = top;
-        next->counter = top->counter;
-        top->var = locals;
-        top = next;
-        locals = NULL;
+        node->var_list = new_nest();
         for (;;)
         {
             if (consume("}"))
@@ -275,10 +241,7 @@ Node *stmt()
             next->node = stmt();
             pointer = next;
         }
-        top->var = locals;
-        variables_counter += top->counter - top->next->counter;
-        top = top->next;
-        locals = top->var;
+        exit_nest();
         node->stmt = head.next;
         return node;
     }
@@ -528,7 +491,7 @@ Node *primary()
 
     // 変数の型
     TypeKind type_kind = find_type();
-    int pointer_counter = 0;
+    size_t pointer_counter = 0;
     if (type_kind != TYPE_NULL)
     {
         while (consume("*"))
@@ -545,62 +508,8 @@ Node *primary()
         Node *node = calloc(1, sizeof(Node));
         node->token = token;
         node->kind = ND_VAR;
-        Var *lvar = find_lvar_in_same_nestedblock(token);
-        Var *tmp = find_var_all(token);
-        if (lvar || (tmp && type_kind == TYPE_NULL))
-        { // 同じネストで同じ変数名がある、浅いネストに初期化式がある既知の式に代入するとき
-            if (!lvar)
-                lvar = tmp;
-            node->var = lvar;
-            node->type = lvar->type;
-            node->is_new = false;
-            while (pointer_counter--)
-            {
-                Node *new = calloc(1, sizeof(Node));
-                new->kind = ND_DEREF;
-                new->lhs = node;
-                new->token = token;
-                node = new;
-            }
-        }
-        else
-        {
-            if (type_kind == TYPE_NULL)
-                error_at(token->str, "変数の型が指定されていません");
-            lvar = calloc(1, sizeof(Var));
-            lvar->next = locals;
-            lvar->name = token->str;
-            lvar->len = token->len;
-            Type *type = alloc_type(type_kind);
-            while (pointer_counter--)
-            {
-                Type *new = alloc_type(TYPE_PTR);
-                new->ptr_to = type;
-                type = new;
-            }
-            node->var = lvar;
-            // グローバル変数かローカル変数かの区別
-            // グローバル変数だったらNestedBlockVariablesのnextがNULLになるはず
-            if (top->next)
-                lvar->is_local = true;
-            else
-                lvar->is_local = false;
-            if (!locals) // そのネストで初めての初期化式のとき
-            {            // counterはローカル変数とグローバル変数で異なるので、
-                // top->next->nextがNULLなら関数内の初めてのローカル変数と考える
-                if (!top->next || !top->next->next || !top->next->var)
-                    lvar->counter = 0;
-                else
-                    lvar->counter = top->next->var->counter + 1;
-            }
-            else
-                lvar->counter = locals->counter + 1;
-            top->counter++;
-            lvar->type = type;
-            node->type = type;
-            node->is_new = true;
-            locals = lvar;
-        }
+        node->is_new = type_kind != TYPE_NULL;
+        node->var = add_variables(token, type_kind, pointer_counter);
         return node;
     }
 
@@ -608,8 +517,9 @@ Node *primary()
     {
         Node *node = calloc(1, sizeof(Node));
         node->kind = ND_STRING;
-        node->token = get_old_token();
-        node->string_counter = string_literal_counter++;
+        Token *token = get_old_token();
+        node->token = token;
+        node->string_counter = add_string_literal(token);
         return node;
     }
 

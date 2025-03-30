@@ -519,6 +519,7 @@ Node *primary()
         node->kind = ND_STRING;
         Token *token = get_old_token();
         node->token = token;
+        node->type = alloc_type(TYPE_STR);
         return node;
     }
 

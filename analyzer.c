@@ -195,14 +195,13 @@ void analyze_type(Node *node)
 
     switch (node->kind)
     {
+    case ND_STRING:
+        // TODO ND_ARRAYのときは挙動が異なる
+        node->literal_name = add_string_literal(node->token);
+        break;
     case ND_ASSIGN:
-        if (node->lhs->type->type == TYPE_PTR && node->rhs->kind == ND_STRING)
-        { // 文字列リテラルをポインタに代入しようとするとき
-            node->rhs->literal_name = add_string_literal(node->rhs->token);
-            node->type = node->lhs->type;
-            node->rhs->type = alloc_type(TYPE_STR);
-        }
-        else if (!is_equal_type(node->lhs->type, node->rhs->type))
+        if (!is_equal_type(node->lhs->type, node->rhs->type) &&
+            node->rhs->kind != ND_STRING)
         {
             TypeKind converted_type = !implicit_type_conversion(node->lhs->type, node->rhs->type);
             if (converted_type == TYPE_NULL)

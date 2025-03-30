@@ -1,4 +1,29 @@
 #!/bin/bash
+assert_print() {
+  input="$1"
+
+  echo "$input" > out/tmp.c
+  gcc -o out/gcc out/tmp.c
+  ./out/gcc > out/gcc.txt
+  expected="$?"
+  ./main out/tmp.c out/out.s
+  gcc -o out/out out/out.s
+  ./out/out > out/out.txt
+  actual="$?"
+
+  if [ "$actual" = "$expected" ]; then
+    echo "$input => $actual"
+    cmp -s "out/out.txt" "out/gcc.txt"
+    if [$? -neq 0]; then
+      echo "ERROR: Compiler output does not match GCC output"
+      exit 1
+    fi
+  else
+    echo "$input => $expected expected, but got $actual"
+    exit 1
+  fi
+}
+
 assert() {
   input="$1"
 
@@ -116,6 +141,8 @@ assert 'int main() {char*i = "abc"; return i[2];}'
 assert 'int i; int main() {int i = 1; {int i = 2; {int i = 3; return i;}}}'
 assert 'int i; int main() {int i = 1; {int i = 2; {int i = 3;} return i;}}'
 assert 'int i; int main() {int i = 1; {int i = 2; {int i = 3;}} return i;}'
+assert_print 'int main() {char* hoge = "%s\n"; char* tmp = "Hello World!!!"; printf(hoge, tmp); return 0;}'
+assert_print 'int main() {char* tmp = "Hello World!!!"; printf("%s\n", tmp); return 0;}'
 
 (
   cd test

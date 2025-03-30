@@ -16,6 +16,17 @@
         error_exit(fmt, ##__VA_ARGS__);                                                    \
     } while (0)
 
+#if DEBUG
+#define output_debug(fmt, ...) output_file("# %s:%d:%s()" fmt, __FILE__, __LINE__, __func__, ##__VA_ARGS__);
+#define output_debug2(fmt, ...) output_file("# %s:%d:%s()" fmt, __FILE__, __LINE__, __func__, ##__VA_ARGS__);
+#elif defined(DEBUG)
+#define output_debug(fmt, ...) output_file("# " fmt, ##__VA_ARGS__);
+#define output_debug2(fmt, ...)
+#else
+#define output_debug(fmt, ...)
+#define output_debug2(fmt, ...)
+#endif
+
 FILE *fout;
 
 #define output_file(fmt, ...)                   \
@@ -366,6 +377,7 @@ void gen(Node *node);
 
 void gen_lval(Node *node)
 {
+    output_debug2("enter gen_lval");
     switch (node->kind)
     {
     case ND_STRING:
@@ -385,19 +397,22 @@ void gen_lval(Node *node)
     default:
         error_exit_with_guard("代入の左辺値が変数でありません");
     }
+    output_debug2("exit gen_lval");
 }
 
 int align_counter;
 
 void gen(Node *node)
 {
+    output_debug2("entor gen");
     if (!node)
         error_exit_with_guard("null pointer");
 
     switch (node->kind)
     {
     case ND_FUNCCALL:
-        output_file("# start calling %.*s", (int)node->func_len, node->func_name);
+        output_debug2("FUNC CALL");
+        output_debug("start calling %.*s", (int)node->func_len, node->func_name);
         {
             NDBlock *pointer = node->expr;
             int i = 0;
@@ -447,17 +462,19 @@ void gen(Node *node)
         output_file(".L_%d_aligned:", align_counter);
         output_file("    push rax");
         align_counter++;
-        output_file("# end calling %.*s", (int)node->func_len, node->func_name);
+        output_debug("end calling %.*s", (int)node->func_len, node->func_name);
         return;
 
     case ND_ARRAY:
     case ND_DISCARD_EXPR:
+        output_debug2("ND_ARRAY ND_DISCARD_EXPR");
         gen(node->lhs);
         if (node->kind == ND_DISCARD_EXPR)
             output_file("    add rsp, 8");
         return;
 
     case ND_BLOCK:
+        output_debug2("ND_BLOCK");
         for (NDBlock *pointer = node->stmt; pointer; pointer = pointer->next)
             gen(pointer->node);
         return;
@@ -465,7 +482,8 @@ void gen(Node *node)
     case ND_IF:
     case ND_ELIF:
     {
-        output_file("# start %s block", node->kind == ND_IF ? "if" : "elif");
+        output_debug2("ND_IF ND_ELIF");
+        output_debug("start %s block", node->kind == ND_IF ? "if" : "elif");
         gen(node->condition);
         output_file("    pop rax");
         output_file("    cmp rax, 0");
@@ -478,15 +496,16 @@ void gen(Node *node)
             gen(node->false_code);
         }
         output_file(".Lendif%s:", node->name->name);
-        output_file("# end %s block", node->kind == ND_IF ? "if" : "elif");
+        output_debug("end %s block", node->kind == ND_IF ? "if" : "elif");
     }
         return;
 
     case ND_WHILE:
     case ND_FOR:
     {
+        output_debug2("ND_WHILE ND_FOR");
         const char *loop_name = node->kind == ND_WHILE ? "while" : "for";
-        output_file("# start %s block", loop_name);
+        output_debug("start %s block", loop_name);
         if (node->kind == ND_FOR)
             gen(node->init);
         output_file(".Lbegin%s%s:", loop_name, node->name->name);
@@ -499,11 +518,12 @@ void gen(Node *node)
             gen(node->update);
         output_file("    jmp .Lbegin%s%s", loop_name, node->name->name);
         output_file(".Lend%s%s:", loop_name, node->name->name);
-        output_file("# end %s block", loop_name);
+        output_debug("end %s block", loop_name);
     }
         return;
 
     case ND_RETURN:
+        output_debug2("ND_RETURN");
         gen(node->rhs);
         output_file("    pop rax");
         output_file("    leave");
@@ -511,11 +531,13 @@ void gen(Node *node)
         return;
 
     case ND_NUM:
+        output_debug2("ND_NUM");
         output_file("    push %ld", node->val);
         return;
 
     case ND_STRING:
     case ND_VAR:
+        output_debug2("ND_STIRNG ND_VAR");
         gen_lval(node);
         if (node->type->type != TYPE_ARRAY && node->type->type != TYPE_STR)
         {
@@ -528,6 +550,7 @@ void gen(Node *node)
         return;
 
     case ND_ASSIGN:
+        output_debug2("ND_ASSIGN");
         gen_lval(node->lhs);
         gen(node->rhs);
         output_file("    pop rdi");
@@ -539,10 +562,12 @@ void gen(Node *node)
         return;
 
     case ND_ADDR:
+        output_debug2("ND_ADDR");
         gen_lval(node->lhs);
         return;
 
     case ND_DEREF:
+        output_debug2("ND_DEREF");
         gen(node->lhs);
         output_file("    pop rax");
         output_file("    %s rax, %s [rax]",
@@ -554,6 +579,7 @@ void gen(Node *node)
         break;
     }
 
+    output_debug2("arithmetic operands");
     gen(node->lhs);
     gen(node->rhs);
 

@@ -143,6 +143,9 @@ assert 'int i; int main() {int i = 1; {int i = 2; {int i = 3;} return i;}}'
 assert 'int i; int main() {int i = 1; {int i = 2; {int i = 3;}} return i;}'
 assert_print 'int main() {char* hoge = "%s\n"; char* tmp = "Hello World!!!"; printf(hoge, tmp); return 0;}'
 assert_print 'int main() {char* tmp = "Hello World!!!"; printf("%s\n", tmp); return 0;}'
+assert 'int main() {int hoge = 10; hoge /* = 0*/; return hoge; }'
+assert 'int main() {int hoge = 15; // hoge = 10;
+return hoge;}'
 
 (
   cd test

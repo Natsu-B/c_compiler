@@ -162,6 +162,23 @@ void tokenizer(char *input)
             continue;
         }
 
+        // コメントを読み飛ばす
+        if (!strncmp(input, "//", 2))
+        {
+            input++;
+            while (*++input != '\n')
+                ;
+            continue;
+        }
+        if (!strncmp(input, "/*", 2))
+        {
+            char *end = strstr(input + 2, "*/");
+            if (!end)
+                error_at(input, "コメントが閉じられていません");
+            input = end + 2;
+            continue;
+        }
+
         if (strchr("+-*/()=!<>;{},&[]", *input))
         {
             cur = new_token(TK_RESERVED, cur, input);

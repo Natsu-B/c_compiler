@@ -519,7 +519,6 @@ Node *primary()
         node->kind = ND_STRING;
         Token *token = get_old_token();
         node->token = token;
-        node->string_counter = add_string_literal(token);
         return node;
     }
 

@@ -3,6 +3,7 @@
 // ------------------------------------------------------------------------------------
 
 #include "include/generator.h"
+#include "include/variables.h"
 #include "include/error.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,6 +33,8 @@ size_t size_of(TypeKind type)
         return 4;
     case TYPE_CHAR:
         return 1;
+    case TYPE_STR:
+        return 8;
     case TYPE_LONG:
         return 8;
     case TYPE_PTR:
@@ -363,21 +366,25 @@ void gen(Node *node);
 
 void gen_lval(Node *node)
 {
-    if (node->kind == ND_VAR)
+    switch (node->kind)
     {
+    case ND_STRING:
+        output_file("    lea rax, [rip+OFFSET FLAT:%s]", node->literal_name);
+        output_file("    push rax");
+        break;
+    case ND_VAR:
         if (node->var->is_local)
             output_file("    lea rax, [rbp-%d]", (int)node->var->offset);
         else
             output_file("    lea rax,  [rip+%.*s]", (int)node->var->len, node->var->name);
         output_file("    push rax");
-        return;
-    }
-    if (node->kind == ND_DEREF)
-    {
+        break;
+    case ND_DEREF:
         gen(node->lhs);
-        return;
+        break;
+    default:
+        error_exit_with_guard("代入の左辺値が変数でありません");
     }
-    error_exit_with_guard("代入の左辺値が変数でありません");
 }
 
 int align_counter;
@@ -386,43 +393,46 @@ void gen(Node *node)
 {
     if (!node)
         error_exit_with_guard("null pointer");
-    if (node->kind == ND_FUNCCALL)
-    {
-        output_file("# start calling %.*s", (int)node->func_len, node->func_name);
-        NDBlock *pointer = node->expr;
-        int i = 0;
-        while (pointer)
-        {
-            gen(pointer->node);
-            output_file("    pop rax");
 
-            switch (++i)
+    switch (node->kind)
+    {
+    case ND_FUNCCALL:
+        output_file("# start calling %.*s", (int)node->func_len, node->func_name);
+        {
+            NDBlock *pointer = node->expr;
+            int i = 0;
+            while (pointer)
             {
-            case 1:
-                output_file("    mov rdi, rax");
-                break;
-            case 2:
-                output_file("    mov rsi, rax");
-                break;
-            case 3:
-                output_file("    mov rdx, rax");
-                break;
-            case 4:
-                output_file("    mov rcx, rax");
-                break;
-            case 5:
-                output_file("    mov r8, rax");
-                break;
-            case 6:
-                output_file("    mov r9, rax");
-                break;
-            default:
-                error_exit_with_guard("too much arguments");
-                break;
+                gen(pointer->node);
+                output_file("    pop rax");
+
+                switch (++i)
+                {
+                case 1:
+                    output_file("    mov rdi, rax");
+                    break;
+                case 2:
+                    output_file("    mov rsi, rax");
+                    break;
+                case 3:
+                    output_file("    mov rdx, rax");
+                    break;
+                case 4:
+                    output_file("    mov rcx, rax");
+                    break;
+                case 5:
+                    output_file("    mov r8, rax");
+                    break;
+                case 6:
+                    output_file("    mov r9, rax");
+                    break;
+                default:
+                    error_exit_with_guard("too much arguments");
+                    break;
+                }
+                pointer = pointer->next;
             }
-            pointer = pointer->next;
         }
-        // rspの16byte alignment 対応
         output_file("    mov rax, rsp");
         output_file("    and rax, 15");
         output_file("    jnz .L_%d_unaligned", align_counter);
@@ -437,113 +447,86 @@ void gen(Node *node)
         output_file(".L_%d_aligned:", align_counter);
         output_file("    push rax");
         align_counter++;
-
         output_file("# end calling %.*s", (int)node->func_len, node->func_name);
         return;
-    }
-    if (node->kind == ND_ARRAY)
-    {
+
+    case ND_ARRAY:
+    case ND_DISCARD_EXPR:
         gen(node->lhs);
+        if (node->kind == ND_DISCARD_EXPR)
+            output_file("    add rsp, 8");
         return;
-    }
-    if (node->kind == ND_DISCARD_EXPR)
-    {
-        gen(node->lhs);
-        output_file("    add rsp, 8");
-        return;
-    }
-    if (node->kind == ND_BLOCK)
-    {
+
+    case ND_BLOCK:
         for (NDBlock *pointer = node->stmt; pointer; pointer = pointer->next)
-        {
             gen(pointer->node);
+        return;
+
+    case ND_IF:
+    case ND_ELIF:
+    {
+        output_file("# start %s block", node->kind == ND_IF ? "if" : "elif");
+        gen(node->condition);
+        output_file("    pop rax");
+        output_file("    cmp rax, 0");
+        output_file("    je .L%s%s", node->kind == ND_IF ? "endif" : "elseif", node->name->name);
+        gen(node->true_code);
+        if (node->kind == ND_ELIF)
+        {
+            output_file("    jmp .Lendif%s", node->name->name);
+            output_file(".Lelseif%s:", node->name->name);
+            gen(node->false_code);
         }
-        return;
-    }
-    if (node->kind == ND_IF)
-    {
-        output_file("# start if block");
-        gen(node->condition);
-        output_file("    pop rax");
-
-        output_file("    cmp rax, 0");
-        output_file("    je .Lendif%s", node->name->name);
-        gen(node->true_code);
         output_file(".Lendif%s:", node->name->name);
-        output_file("# end if block");
-        return;
+        output_file("# end %s block", node->kind == ND_IF ? "if" : "elif");
     }
-    if (node->kind == ND_ELIF)
+        return;
+
+    case ND_WHILE:
+    case ND_FOR:
     {
-        output_file("# start elif block");
+        const char *loop_name = node->kind == ND_WHILE ? "while" : "for";
+        output_file("# start %s block", loop_name);
+        if (node->kind == ND_FOR)
+            gen(node->init);
+        output_file(".Lbegin%s%s:", loop_name, node->name->name);
         gen(node->condition);
         output_file("    pop rax");
-
         output_file("    cmp rax, 0");
-        output_file("    je .Lelseif%s", node->name->name);
+        output_file("    je .Lend%s%s", loop_name, node->name->name);
         gen(node->true_code);
-        output_file("    jmp .Lendif%s", node->name->name);
-        output_file(".Lelseif%s:", node->name->name);
-        gen(node->false_code);
-        output_file(".Lendif%s:", node->name->name);
-        output_file("# end elif block");
-        return;
+        if (node->kind == ND_FOR)
+            gen(node->update);
+        output_file("    jmp .Lbegin%s%s", loop_name, node->name->name);
+        output_file(".Lend%s%s:", loop_name, node->name->name);
+        output_file("# end %s block", loop_name);
     }
-    if (node->kind == ND_WHILE)
-    {
-        output_file("# start while block");
-        output_file(".Lbeginwhile%s:", node->name->name);
-        gen(node->condition);
-        output_file("    pop rax");
+        return;
 
-        output_file("    cmp rax, 0");
-        output_file("    je .Lendwhile%s", node->name->name);
-        gen(node->true_code);
-        output_file("    jmp .Lbeginwhile%s", node->name->name);
-        output_file(".Lendwhile%s:", node->name->name);
-        output_file("# end while block");
-        return;
-    }
-    if (node->kind == ND_FOR)
-    {
-        output_file("# start for block");
-        gen(node->init);
-        output_file(".Lbeginfor%s:", node->name->name);
-        gen(node->condition);
-        output_file("    pop rax");
-
-        output_file("    cmp rax, 0");
-        output_file("    je .Lendfor%s", node->name->name);
-        gen(node->true_code);
-        gen(node->update);
-        output_file("    jmp .Lbeginfor%s", node->name->name);
-        output_file(".Lendfor%s:", node->name->name);
-        output_file("# end for block");
-        return;
-    }
-    if (node->kind == ND_RETURN)
-    {
+    case ND_RETURN:
         gen(node->rhs);
         output_file("    pop rax");
         output_file("    leave");
         output_file("    ret");
         return;
-    }
-    switch (node->kind)
-    {
+
     case ND_NUM:
         output_file("    push %ld", node->val);
         return;
+
+    case ND_STRING:
     case ND_VAR:
         gen_lval(node);
-        output_file("    pop rax");
-        // workaround
-        if (node->type->type != TYPE_ARRAY)
+        if (node->type->type != TYPE_ARRAY && node->type->type != TYPE_STR)
+        {
+            output_file("    pop rax");
             output_file("    %s rax, %s [rax]",
                         mv_instruction_specifier(size_of(node->type->type), true),
                         access_size_specifier(size_of(node->type->type)));
-        output_file("    push rax");
+            output_file("    push rax");
+        }
         return;
+
     case ND_ASSIGN:
         gen_lval(node->lhs);
         gen(node->rhs);
@@ -554,9 +537,11 @@ void gen(Node *node)
                     chose_register(size_of(node->type->type), rdi));
         output_file("    push rdi");
         return;
+
     case ND_ADDR:
         gen_lval(node->lhs);
         return;
+
     case ND_DEREF:
         gen(node->lhs);
         output_file("    pop rax");
@@ -590,30 +575,19 @@ void gen(Node *node)
         output_file("    idiv rdi");
         break;
     case ND_EQ:
-        output_file("    cmp rax, rdi");
-        output_file("    sete al");
-        output_file("    movzb rax, al");
-        break;
     case ND_NEQ:
-        output_file("    cmp rax, rdi");
-        output_file("    setne al");
-        output_file("    movzb rax, al");
-        break;
     case ND_LT:
-        output_file("    cmp rax, rdi");
-        output_file("    setl al");
-        output_file("    movzb rax, al");
-        break;
     case ND_LTE:
         output_file("    cmp rax, rdi");
-        output_file("    setle al");
+        output_file("    set%s al", node->kind == ND_EQ ? "e" : node->kind == ND_NEQ ? "ne"
+                                                            : node->kind == ND_LT    ? "l"
+                                                                                     : "le");
         output_file("    movzb rax, al");
         break;
     default:
         error_exit_with_guard("unreachable");
         break;
     }
-
     output_file("    push rax");
 }
 
@@ -631,16 +605,29 @@ void generator(FuncBlock *parsed, char *output_filename)
     output_file(".intel_syntax noprefix");
     output_file(".data");
 
-    for (FuncBlock *pointer = parsed; pointer; pointer = pointer->next)
+    // グローバル変数を書き込む
+    Var *root = get_global_var();
+    for (Var *pointer = root; pointer; pointer = pointer->next)
     {
-        Node *node = pointer->node;
-        if (node->kind == ND_VAR)
+        output_file("%.*s:", (int)pointer->len, pointer->name);
+        switch (pointer->how2_init)
         {
-            output_file("%.*s:", (int)node->var->len, node->var->name);
-            output_file("    .zero %ld", size_of(node->type->type) * (node->type->type == TYPE_ARRAY ? node->type->size : 1));
+        case reserved:
+            unreachable();
+            break;
+        case init_zero:
+            output_file("    .zero %ld", size_of(pointer->type->type) * (pointer->type->type == TYPE_ARRAY ? pointer->type->size : 1));
+            break;
+        case init_string:
+            output_file("    .string %.*s", (int)pointer->token->len, pointer->token->str);
+            break;
+        default:
+            unreachable();
+            break;
         }
     }
 
+    // 関数を書き込む
     output_file(".text");
     for (FuncBlock *pointer = parsed; pointer; pointer = pointer->next)
     {

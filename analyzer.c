@@ -6,6 +6,7 @@
 #include "include/parser.h"
 #include "include/offset.h"
 #include "include/generator.h"
+#include "include/variables.h"
 #include "include/error.h"
 #include "include/debug.h"
 #include <stdlib.h>
@@ -16,7 +17,12 @@ bool is_equal_type(Type *lhs, Type *rhs)
     {
         if (lhs->type == TYPE_PTR ||
             lhs->type == TYPE_ARRAY)
-            return is_equal_type(lhs->ptr_to, rhs->ptr_to);
+        {
+            if (lhs->ptr_to && rhs->ptr_to)
+                return is_equal_type(lhs->ptr_to, rhs->ptr_to);
+            else
+                false;
+        }
         return true;
     }
     return false;
@@ -190,7 +196,13 @@ void analyze_type(Node *node)
     switch (node->kind)
     {
     case ND_ASSIGN:
-        if (!is_equal_type(node->lhs->type, node->rhs->type))
+        if (node->lhs->type->type == TYPE_PTR && node->rhs->kind == ND_STRING)
+        { // 文字列リテラルをポインタに代入しようとするとき
+            node->rhs->literal_name = add_string_literal(node->rhs->token);
+            node->type = node->lhs->type;
+            node->rhs->type = alloc_type(TYPE_STR);
+        }
+        else if (!is_equal_type(node->lhs->type, node->rhs->type))
         {
             TypeKind converted_type = !implicit_type_conversion(node->lhs->type, node->rhs->type);
             if (converted_type == TYPE_NULL)
@@ -260,6 +272,7 @@ void analyze_type(Node *node)
 
 FuncBlock *analyzer(FuncBlock *funcblock)
 {
+    // ND_ASSIGN等の変数や数字でないnodeに型をつける
     for (FuncBlock *pointer = funcblock; pointer; pointer = pointer->next)
     {
         Node *node = pointer->node;
@@ -286,6 +299,7 @@ FuncBlock *analyzer(FuncBlock *funcblock)
 #ifdef DEBUG
     print_parse_result(funcblock);
 #endif
+    // add_typeでつけた型に応じてオフセットの計算等をする
     for (FuncBlock *pointer = funcblock; pointer; pointer = pointer->next)
     {
         Node *node = pointer->node;
@@ -312,5 +326,13 @@ FuncBlock *analyzer(FuncBlock *funcblock)
 #ifdef DEBUG
     print_parse_result(funcblock);
 #endif
+    // グローバル変数の初期化方法を決める
+    // TODO ゼロクリアと文字列以外対応していない
+    Var *pointer = get_global_var();
+    for (; pointer; pointer = pointer->next)
+    {
+        if (pointer->how2_init == reserved)
+            pointer->how2_init = init_zero;
+    }
     return funcblock;
 }

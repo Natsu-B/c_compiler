@@ -36,7 +36,7 @@ struct GTLabel
 {
     GTLabel *next; // 次の変数
     char *name;    // 変数名 e.g. _0_main
-    size_t len;       // 変数名の長さ
+    size_t len;    // 変数名の長さ
 };
 
 typedef enum
@@ -84,8 +84,8 @@ struct Node
     // 簡略化するため一時的にunionを使わないことにする
     struct
     {
-        Node *lhs;     // 左辺 left-hand side
-        Node *rhs;     // 右辺 right-hand side
+        Node *lhs;        // 左辺 left-hand side
+        Node *rhs;        // 右辺 right-hand side
         size_t real_size; // 置き換えられるサイズ sizeof演算子のみで用いる
     };
 
@@ -109,7 +109,7 @@ struct Node
         NDBlock *expr;                  // expr ND_FUNCCALL ND_FUNCDEFで利用
         NDBlock *stmt;                  // stmt ND_BLOCK ND_FUNCDEFで利用
         char *func_name;                // ND_FUNCCALL ND_FUNCDEF で利用 関数名
-        size_t func_len;                   // ND_FUNCCALL ND_FUNCDEF のときのみ利用 関数名長さ
+        size_t func_len;                // ND_FUNCCALL ND_FUNCDEF のときのみ利用 関数名長さ
         NestedBlockVariables *var_list; // ND_FUNCDEF ND_BLOCK のとき利用 変数リスト
     };
     long val; // ND_NUMの場合 数値
@@ -119,8 +119,8 @@ struct Node
         Var *var;    // 変数の情報
     };
     struct
-    {                         // string型 ND_STRINGの場合
-        char *string_counter; // stirng literal にアクセスする名前
+    {                       // string型 ND_STRINGの場合
+        char *literal_name; // stirng literal にアクセスする名前
     };
 };
 
@@ -129,7 +129,7 @@ struct NestedBlockVariables
 {
     NestedBlockVariables *next; // 一つ前のネストを指す
     Var *var;                   // そのネスト内の変数
-    size_t counter;                // 変数が同じネストにいくつあるか
+    size_t counter;             // 変数が同じネストにいくつあるか
 };
 
 // 変数を管理するstruct
@@ -137,9 +137,9 @@ struct Var
 {
     Var *next;     // 次の変数
     char *name;    // 変数名
-    size_t len;       // 変数名 長さ
+    size_t len;    // 変数名 長さ
     Type *type;    // 型
-    int counter;   // 何番目の変数か
+    Token *token;  // 変数に対応するトークン
     bool is_local; // ローカル変数かグローバル変数か
     union
     {
@@ -165,9 +165,9 @@ struct NDBlock
 // 関数の中の式を管理するstruct
 struct FuncBlock
 {
-    FuncBlock *next; // 次の変数
-    Node *node;      // 関数内の式
-    size_t stacksize;   // スタックのサイズ byte単位
+    FuncBlock *next;  // 次の変数
+    Node *node;       // 関数内の式
+    size_t stacksize; // スタックのサイズ byte単位
 };
 
 // サポートしている変数の型
@@ -175,6 +175,7 @@ typedef enum
 {
     TYPE_INT,   // int型 signed 32bit
     TYPE_CHAR,  // char型 8bit
+    TYPE_STR,   // char文字列
     TYPE_LONG,  // long型 signed 64bit
     TYPE_PTR,   // 型へのポインタ
     TYPE_ARRAY, // 配列

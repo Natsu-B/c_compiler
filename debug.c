@@ -62,10 +62,10 @@ void _print_parse_result(Node *node, int nest)
             type_name = pointer->type;
             pointer = pointer->ptr_to;
         }
-        fprintf(stdout, "NodeKind: %s type: %.*s%d offset: %lu counter: %d is_new: %s is_local: %s\n",
+        fprintf(stdout, "NodeKind: %s type: %.*s%d offset: %lu is_new: %s is_local: %s\n",
                 nodekindlist[node->kind], reference_counter,
                 "*****************************************************************************************************************", type_name,
-                node->var->offset, node->var->counter, node->is_new ? "true" : "false",
+                node->var->offset, node->is_new ? "true" : "false",
                 node->var->is_local ? "true" : "false");
         break;
     }

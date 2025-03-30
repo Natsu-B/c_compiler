@@ -6,23 +6,25 @@
 #include "include/parser.h"
 #include "include/error.h"
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
-NestedBlockVariables *top;
-NestedBlockVariables *root;
-Var *locals;
-size_t var_counter;
+static NestedBlockVariables *top;
+static NestedBlockVariables *root;
+static Var *globals_head;
+static Var *variables_head;
+static size_t var_counter;
 
-Var *find_local_var_in_current_nested_block(Token *token)
+static Var *find_local_var_in_current_nested_block(Token *token)
 {
-    for (Var *var = locals; var; var = var->next)
+    for (Var *var = variables_head; var; var = var->next)
         if (var->len == token->len && !memcmp(var->name, token->str, var->len))
             return var;
     return NULL;
 }
 
 // 今まで出てきたローカル変数をすべて探索する ネストが深い方から探索していく
-Var *find_local_var_all(Token *token)
+static Var *find_local_var_all(Token *token)
 {
     if (top == root)
         return NULL;
@@ -36,13 +38,18 @@ Var *find_local_var_all(Token *token)
     return NULL;
 }
 
-// グローバル変数を探索する
-Var *find_global_var(Token *token)
+static Var *find_global_var_no_token(char *var_name, size_t var_len)
 {
     for (Var *var = root->var; var; var = var->next)
-        if (var->len == token->len && !memcmp(var->name, token->str, token->len))
+        if (var->len == var_len && !memcmp(var->name, var_name, var_len))
             return var;
     return NULL;
+}
+
+// グローバル変数を探索する
+static Var *find_global_var(Token *token)
+{
+    return find_global_var_no_token(token->str, token->len);
 }
 
 // 最初に1度のみ実行する関数
@@ -58,9 +65,9 @@ NestedBlockVariables *new_nest()
 {
     NestedBlockVariables *tmp = calloc(1, sizeof(NestedBlockVariables));
     tmp->next = top;
-    top->var = locals;
+    top->var = variables_head;
     top = tmp;
-    locals = top->var;
+    variables_head = top->var;
     var_counter = top->counter;
     return top;
 }
@@ -71,7 +78,7 @@ void exit_nest()
     if (!top->next)
         unreachable(); // parserでエラーになるはず
     top = top->next;
-    locals = top->var;
+    variables_head = top->var;
     var_counter = top->counter;
 }
 
@@ -87,12 +94,13 @@ Var *add_variables(Token *token, TypeKind kind, size_t pointer_counter)
         error_at(token->str, "同じ名前の変数がすでに存在します");
     if (!all && kind == TYPE_NULL)
         error_at(token->str, "この名前の変数は存在しません");
-    if (all && kind == TYPE_NULL)
-        return all; // 以前の値を返す
+    if (all && kind == TYPE_NULL) // 以前から変数が存在し、変数の新規宣言をしていない場合
+        return all;               // 以前の値を返す
 
     // 新規変数の場合
     Var *new = calloc(1, sizeof(Var));
-    new->next = locals;
+    new->token = token;
+    new->next = variables_head;
     new->name = token->str;
     new->len = token->len;
     Type *type = alloc_type(kind);
@@ -103,18 +111,73 @@ Var *add_variables(Token *token, TypeKind kind, size_t pointer_counter)
         type = ref;
     }
     new->type = type;
-    new->counter = var_counter++;
     if (root == top)
+    {
         new->is_local = false; // 変数はグローバル変数
+        globals_head = new;
+    }
     else
         new->is_local = true; // 変数はローカル変数
-    locals = new;
+    variables_head = new;
     return new;
 }
 
-Token* tmp;
+typedef struct literal_list literal_list;
+
+struct literal_list
+{
+    literal_list *next;
+    char *literal_name;
+    char *name;
+    size_t len;
+};
+
+static literal_list *literal_top;
+static size_t literal_counter;
+
+// ポインタへの文字列リテラルの代入の際利用
 char *add_string_literal(Token *token)
 {
-    tmp = token;
-    return NULL;
+    pr_debug2("string literal found");
+    // 同じ文字列がすでに存在した場合、それを使う
+    // 仕様として文字列の変更が認められていないため可能
+    for (literal_list *pointer = literal_top; pointer; pointer = pointer->next)
+        if (token->len == pointer->len &&
+            strncmp(token->str, pointer->name, pointer->len))
+            return pointer->literal_name;
+    literal_list *new = calloc(1, sizeof(literal_list));
+    if (literal_top)
+        literal_top->next = new;
+    literal_top = new;
+    literal_top->name = token->str;
+    literal_top->len = token->len;
+    // 文字列リテラルの名前を決める
+    // 9999個まで文字列リテラルが存在可能
+    char *literal_name = malloc(8);
+    int snprintf_return = snprintf(literal_name, 8, ".LC%lu", literal_counter++);
+    if (snprintf_return < 3 || snprintf_return > 7)
+        unreachable();
+    pr_debug2("literal_name: %s", literal_name);
+    literal_top->literal_name = literal_name;
+    // グローバル変数に追加
+    if (find_global_var_no_token(literal_name, snprintf_return))
+        unreachable();
+    Var *new_var = calloc(1, sizeof(Var));
+    if (globals_head)
+        globals_head->next = new_var;
+    else
+        root->var = new_var;
+    new_var->token = token;
+    new_var->name = literal_name;
+    new_var->len = snprintf_return;
+    new_var->type = alloc_type(TYPE_STR);
+    new_var->is_local = false;
+    new_var->how2_init = init_string;
+    globals_head = new_var;
+    return literal_name;
+}
+
+Var *get_global_var()
+{
+    return root->var;
 }

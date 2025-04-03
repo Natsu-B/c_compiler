@@ -14,7 +14,7 @@ int main(int argc, char **argv)
         error_exit("引数が正しくありません");
     }
     char *input = openfile(argv[1]);
-    error_init(input);
+    error_init(argv[2], input);
 
     // トークナイザ
     tokenizer(input);

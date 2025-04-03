@@ -33,7 +33,7 @@ extern void _debug2(char *file, int line, const char *func, char *fmt, ...);
 
 extern void _error(char *file, int line, const char *func, char *fmt, ...);
 
-extern void error_init(char *input);
+extern void error_init(char *name, char *input);
 
 extern void error_at(char *error_location, char *fmt, ...);
 

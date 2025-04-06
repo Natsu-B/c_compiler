@@ -88,7 +88,7 @@ void add_type(Node *node)
     {
         if (node->lhs->type->type != TYPE_PTR &&
             node->lhs->type->type != TYPE_ARRAY)
-            error_at(node->token->str, "invalid dereference");
+            error_at(node->token->str, node->token->len, "invalid dereference");
         node->type = node->lhs->type->ptr_to;
         return;
     }
@@ -111,7 +111,7 @@ void add_type(Node *node)
                 node->lhs->type->type == TYPE_ARRAY ||
                 node->rhs->type->type == TYPE_PTR ||
                 node->rhs->type->type == TYPE_ARRAY)
-                error_at(node->token->str, "invalid use of the '+' operator");
+                error_at(node->token->str, node->token->len, "invalid use of the '+' operator");
         node->lhs->type = type;
         node->rhs->type = type;
         node->type = type;
@@ -120,7 +120,7 @@ void add_type(Node *node)
     if (node->kind == ND_SUB)
     {
         if (node->rhs->type->type == TYPE_PTR)
-            error_at(node->token->str, "invalid use of the '-' operator");
+            error_at(node->token->str, node->token->len, "invalid use of the '-' operator");
         if (node->lhs->type->type == TYPE_PTR)
         {
             node->rhs->type = node->lhs->type;
@@ -205,7 +205,7 @@ void analyze_type(Node *node)
         {
             TypeKind converted_type = !implicit_type_conversion(node->lhs->type, node->rhs->type);
             if (converted_type == TYPE_NULL)
-                error_at(node->token->str, "cannot convert both sides of '=' types");
+                error_at(node->token->str, node->token->len, "cannot convert both sides of '=' types");
             node->type = alloc_type(converted_type);
         }
         else

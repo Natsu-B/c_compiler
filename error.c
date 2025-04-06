@@ -13,8 +13,8 @@
 #endif
 void _debug2(char *file, int line, const char *func, char *fmt, ...)
     __attribute__((format(printf, 4, 5)));
-void error_at(char *error_location, char *fmt, ...)
-    __attribute__((format(printf, 2, 3)));
+void error_at(char *error_location, size_t error_len, char *fmt, ...)
+    __attribute__((format(printf, 3, 4)));
 
 // #define DEBUG 時に動作を出力する pr_debugから呼び出される
 void _debug(char *file, int line, const char *func, char *fmt, ...)
@@ -58,7 +58,7 @@ void error_init(char *name, char *input)
 
 // 入力プログラムがおかしいとき、エラー箇所を可視化するプログラム
 [[noreturn]]
-void error_at(char *error_location, char *fmt, ...)
+void error_at(char *error_location, size_t error_len, char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -81,7 +81,7 @@ void error_at(char *error_location, char *fmt, ...)
     fprintf(stderr, "%s:%d\n", file_name, line_num);
     fprintf(stderr, "%.*s\n", (int)(end_line - start_line), start_line);
     fprintf(stderr, "%*s", (int)error_position, " ");
-    fprintf(stderr, "\e[31m^ \e[37m");
+    fprintf(stderr, "\e[31m%.*s \e[37m", (int)error_len, "^");
     vfprintf(stderr, fmt, ap);
     fprintf(stderr, "\n");
     exit(1);

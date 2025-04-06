@@ -91,9 +91,9 @@ Var *add_variables(Token *token, TypeKind kind, size_t pointer_counter)
     Var *globals = find_global_var(token);
     Var *all = all_locals ? all_locals : globals;
     if (same && kind != TYPE_NULL)
-        error_at(token->str, "同じ名前の変数がすでに存在します");
+        error_at(token->str, token->len, "同じ名前の変数がすでに存在します");
     if (!all && kind == TYPE_NULL)
-        error_at(token->str, "この名前の変数は存在しません");
+        error_at(token->str, token->len, "この名前の変数は存在しません");
     if (all && kind == TYPE_NULL) // 以前から変数が存在し、変数の新規宣言をしていない場合
         return all;               // 以前の値を返す
 

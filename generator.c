@@ -27,7 +27,7 @@
 #define output_debug2(fmt, ...)
 #endif
 
-FILE *fout;
+static FILE *fout;
 
 #define output_file(fmt, ...)                   \
     do                                          \

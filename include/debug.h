@@ -5,5 +5,6 @@
 
 void print_tokenize_result(Token* token);
 void print_parse_result(FuncBlock *node);
+void print_definition();
 
 #endif

@@ -1,6 +1,8 @@
 #ifndef ERROR_C_COMPILER
 #define ERROR_C_COMPILER
 
+#include <stddef.h>
+
 #define DEBUG 0
 
 // デバッグ用のprintf管理
@@ -35,6 +37,6 @@ extern void _error(char *file, int line, const char *func, char *fmt, ...);
 
 extern void error_init(char *name, char *input);
 
-extern void error_at(char *error_location, char *fmt, ...);
+extern void error_at(char *error_location, size_t error_len, char *fmt, ...);
 
 #endif // ERROR_C_COMPILER

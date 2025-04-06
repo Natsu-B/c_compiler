@@ -3,6 +3,7 @@
 #include "include/tokenizer.h"
 #include "include/parser.h"
 #include "include/analyzer.h"
+#include "include/define.h"
 #include <stdio.h>
 #include <assert.h>
 
@@ -193,5 +194,22 @@ void print_parse_result(FuncBlock *node)
     for (GTLabel *pointer = head_label; pointer; pointer = pointer->next)
     {
         fprintf(stdout, "%.*s\n", (int)pointer->len, pointer->name);
+    }
+}
+
+void print_definition()
+{
+    pr_debug("definition:");
+    fprintf(stdout, "object_like_macro:\n");
+    for (size_t i = 1; i <= vector_size(object_like_macro_list); i++)
+    {
+        object_like_macro_storage *tmp = vector_peek_at(object_like_macro_list, i);
+        fprintf(stdout, "%.*s: ", (int)tmp->identifier->len, tmp->identifier->str);
+        for (size_t j = 1; j <= vector_size(tmp->token_string); j++)
+        {
+            Token *token = vector_peek_at(tmp->token_string, j);
+            fprintf(stdout, "%.*s ", (int)token->len, token->str);
+        }
+        fprintf(stdout, "\n");
     }
 }

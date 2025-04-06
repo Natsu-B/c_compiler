@@ -159,7 +159,7 @@ Node *program()
     Token *token_before = get_token();
     TypeKind type_kind = find_type();
     if (type_kind == TYPE_NULL)
-        error_at(token_before->str, "型が指定されていません");
+        error_at(token_before->str, token_before->len, "型が指定されていません");
     int pointer_counter = 0;
     while (consume("*"))
     {

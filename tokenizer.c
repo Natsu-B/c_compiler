@@ -1,10 +1,16 @@
 // ------------------------------------------------------------------------------------
 // tokenizer
 // ------------------------------------------------------------------------------------
-
 #include "include/tokenizer.h"
+#include "include/vector.h"
 #include "include/error.h"
 #include "include/debug.h"
+
+#ifdef PREPROCESS
+#include "include/preprocessor.h"
+static Vector *nest_list; // nestごとにConditional Inclusion Listを分けて持つ
+#endif
+
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -66,7 +72,7 @@ Token *expect_tokenkind(TokenKind kind)
     if (!new)
     {
         char *tokenkindlist[TK_END] = {TokenKindTable};
-        error_at(token->str, "トークンが %s ではありませんでした", tokenkindlist[kind]);
+        error_at(token->str, token->len, "トークンが %s ではありませんでした", tokenkindlist[kind]);
     }
     return new;
 }
@@ -98,7 +104,7 @@ Token *expect(char *op)
 {
     Token *result = consume(op);
     if (!result)
-        error_at(token->str, "トークンが %.*s でありませんでした", token->len, op);
+        error_at(token->str, token->len, "トークンが %.*s でありませんでした", token->len, op);
     return result;
 }
 
@@ -114,7 +120,7 @@ Token *get_old_token()
 long expect_number()
 {
     if (token->kind != TK_NUM)
-        error_at(token->str, "トークンが整数でありませんでした");
+        error_at(token->str, token->len, "トークンが整数でありませんでした");
     long val = token->val;
     token = token->next;
     return val;
@@ -147,39 +153,122 @@ Token *new_token(TokenKind kind, Token *old, char *str)
 }
 
 // トークナイズする関数
-void tokenizer(char *input)
+Token *tokenizer(char *input)
 {
     pr_debug("start tokenizer...");
     Token head;
     head.next = NULL;
     Token *cur = &head;
-
+#ifdef PREPROCESS
+    nest_list = vector_new();
+#endif
     while (*input)
     {
+#ifdef PREPROCESS
+        // 改行 isspaceでは'\n'も処理されてしまうのでそれより前に置く
+        if (*input == '\n')
+        {
+            cur = new_token(TK_LINEBREAK, cur, input++);
+            cur->len = 1;
+            continue;
+        }
+
+        size_t space_counter = 0;
+        while (*input == ' ')
+        {
+            space_counter++;
+            input++;
+        }
+        if (space_counter)
+        {
+            cur = new_token(TK_IGNORABLE, cur, input - space_counter);
+            cur->len = space_counter;
+            continue;
+        }
+#else
         if (isspace(*input))
         {
             input++;
             continue;
         }
+#endif
 
         // コメントを読み飛ばす
         if (!strncmp(input, "//", 2))
         {
             input++;
+#ifdef PREPROCESS
+            size_t i = 1;
+            while (*++input != '\n')
+                i++;
+            cur = new_token(TK_IGNORABLE, cur, input - i);
+#else
             while (*++input != '\n')
                 ;
+#endif
             continue;
         }
         if (!strncmp(input, "/*", 2))
         {
             char *end = strstr(input + 2, "*/");
             if (!end)
-                error_at(input, "コメントが閉じられていません");
+                error_at(input, 1, "コメントが閉じられていません");
+#ifdef PREPROCESS
+            cur = new_token(TK_IGNORABLE, cur, input);
+            char *pointer = input;
+            while (pointer <= end)
+            {
+                if (*++pointer == '\n')
+                {
+                    cur->len = pointer - input;
+                    cur = new_token(TK_LINEBREAK, cur, pointer);
+                    cur->len = 1;
+                    cur = new_token(TK_IGNORABLE, cur, pointer);
+                    input = pointer;
+                }
+            }
+            cur->len = end + 2 - input;
+#endif
             input = end + 2;
             continue;
         }
 
-        if (strchr("+-*/()=!<>;{},&[]", *input))
+#ifdef PREPROCESS
+        if (*input == '#')
+        {
+            cur = new_token(TK_DIRECTIVE, cur, input);
+            size_t counter = 1;
+            while (is_alnum(*++input))
+                counter++;
+            cur->len = counter;
+            // Conditional_Inclusion (#if #endif 等)を高速化するためにまとめる
+            if ((counter == 3 && !strncmp(cur->str, "#if", 3)) ||
+                (counter == 6 && !strncmp(cur->str, "#ifdef", 6)) ||
+                (counter == 7 && !strncmp(cur->str, "#ifndef", 7)))
+            {
+                Vector *new = vector_new();
+                vector_push(Conditional_Inclusion_List, new);
+                vector_push(nest_list, new);
+                vector_push(vector_peek(nest_list), cur);
+                continue;
+            }
+            if ((counter == 5 && (!strncmp(cur->str, "#else", 5) || !strncmp(cur->str, "#elif", 5))) ||
+                (counter == 8 && !strncmp(cur->str, "#elifdef", 8)) ||
+                (counter == 9 && !strncmp(cur->str, "#elifndef", 9)))
+            {
+                vector_push(vector_peek(nest_list), cur);
+                continue;
+            }
+            if (counter == 6 && !strncmp(cur->str, "#endif", 6))
+            {
+                vector_push(vector_pop(nest_list), cur);
+                continue;
+            }
+            continue;
+        }
+#endif
+
+        if (strchr("+-*/()=!<>;{},&[].\\", *input))
         {
             cur = new_token(TK_RESERVED, cur, input);
             // "==", "<=", ">=", "!=" の場合
@@ -200,9 +289,17 @@ void tokenizer(char *input)
 
         if (isdigit(*input))
         {
+#ifdef PREPROCESS
+            int i = 1;
+            while (isdigit(*++input))
+                i++;
+            cur = new_token(TK_IDENT, cur, input - i);
+            cur->len = i;
+#else
             cur = new_token(TK_NUM, cur, input);
             cur->val = strtol(input, &input, 10);
             pr_debug2("find NUM token: %ld", cur->val);
+#endif
             continue;
         }
 
@@ -317,20 +414,18 @@ void tokenizer(char *input)
             continue;
         }
 
-        // 改行は飛ばす
-        if (*input == '\n')
-        {
-            input++;
-            continue;
-        }
-        error_at(input, "トークナイズに失敗しました");
+        error_at(input, 1, "トークナイズに失敗しました");
     }
 
     new_token(TK_EOF, cur, input);
 
     pr_debug("complite tokenize");
+#ifdef PREPROCESS
+    vector_free(nest_list);
+#endif
 #ifdef DEBUG
     print_tokenize_result(head.next);
 #endif
     token = head.next;
+    return token;
 }

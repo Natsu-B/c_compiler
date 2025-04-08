@@ -37,7 +37,7 @@ size_t vector_size(Vector *vec)
 void vector_push(Vector *vec, void *data)
 {
     if (vec->capacity < vec->len + 1)
-        vec->data = realloc(vec->data, sizeof(void *) * (vec->capacity + 8));
+        vec->data = realloc(vec->data, sizeof(void *) * (vec->capacity += 8));
     vec->data[vec->len++] = data;
 }
 

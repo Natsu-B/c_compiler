@@ -324,6 +324,7 @@ Token *tokenizer(char *input)
         }
         if (i)
         {
+#ifndef PREPROCESS
             // if 文か否かを判別する
             if (i == 2) // strlen("if") = 2
             {
@@ -408,12 +409,11 @@ Token *tokenizer(char *input)
                     continue;
                 }
             }
-
+#endif
             cur = new_token(TK_IDENT, cur, input - i);
             cur->len = i;
             continue;
         }
-
         error_at(input, 1, "トークナイズに失敗しました");
     }
 

@@ -212,4 +212,22 @@ void print_definition()
         }
         fprintf(stdout, "\n");
     }
+    fprintf(stdout, "fuction like macro:\n");
+    for (size_t i = 1; i <= vector_size(function_like_macro_list); i++)
+    {
+        function_like_macro_storage *tmp = vector_peek_at(function_like_macro_list, i);
+        fprintf(stdout, "%.*s(", (int)tmp->identifier->len, tmp->identifier->str);
+        for (size_t j = 1; j <= vector_size(tmp->arguments); j++)
+        {
+            Token *token = vector_peek_at(tmp->arguments, j);
+            fprintf(stdout, "%.*s,", (int)token->len, token->str);
+        }
+        fprintf(stdout, "):\n");
+        for (size_t j = 1; j <= vector_size(tmp->token_string); j++)
+        {
+            Token *token = vector_peek_at(tmp->token_string, j);
+            fprintf(stdout, "%.*s ", (int)token->len, token->str);
+        }
+        fprintf(stdout, "\n");
+    }
 }

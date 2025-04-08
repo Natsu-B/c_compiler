@@ -252,7 +252,8 @@ Token *tokenizer(char *input)
                 vector_push(vector_peek(nest_list), cur);
                 continue;
             }
-            if ((counter == 5 && (!strncmp(cur->str, "#else", 5) || !strncmp(cur->str, "#elif", 5))) ||
+            if ((counter == 5 && (!strncmp(cur->str, "#else", 5) ||
+                                  !strncmp(cur->str, "#elif", 5))) ||
                 (counter == 8 && !strncmp(cur->str, "#elifdef", 8)) ||
                 (counter == 9 && !strncmp(cur->str, "#elifndef", 9)))
             {

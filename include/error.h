@@ -26,6 +26,8 @@
 
 #define unreachable() \
     error_exit("unreachable")
+#define unimplemented() \
+    error_exit("unimplemented")
 
 #define error_exit(fmt, ...) \
     _error(__FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)

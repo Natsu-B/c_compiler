@@ -3,6 +3,7 @@
 // ------------------------------------------------------------------------------------
 
 #include "include/preprocessor.h"
+#include "include/conditional_inclusion.h"
 #include "include/tokenizer.h"
 #include "include/file.h"
 #include "include/define.h"
@@ -28,27 +29,33 @@ void directive(Token *token)
     case 3:
         if (!strncmp(token->str, "#if", 3))
         {
-            Vector *list = vector_shift(Conditional_Inclusion_List);
-            if (token != vector_shift(list))
+            Vector *conditional_list = vector_shift(Conditional_Inclusion_List);
+            if (token != vector_peek_at(conditional_list, 1))
                 unreachable();
+            conditional_inclusion(token_if, conditional_list);
         }
         break;
     case 5:
         if (!strncmp(token->str, "#line", 5))
         {
+            unimplemented();
             return;
         }
         break;
     case 6:
         if (!strncmp(token->str, "#ifdef", 6))
         {
-
+            Vector *conditional_list = vector_shift(Conditional_Inclusion_List);
+            if (token != vector_peek_at(conditional_list, 1))
+                unreachable();
+            conditional_inclusion(token_ifdef, conditional_list);
             return;
         }
         if (!strncmp(token->str, "#error", 6))
             error_at(token->str, token->len, "#error directive found");
         if (!strncmp(token->str, "#undef", 6))
         {
+            unimplemented();
             return;
         }
         break;
@@ -145,19 +152,29 @@ void directive(Token *token)
                 add_object_like_macro(token_list);
             return;
         }
+        if (!strncmp(token->str, "#ifndef", 7))
+        {
+            Vector *conditional_list = vector_shift(Conditional_Inclusion_List);
+            if (token != vector_peek_at(conditional_list, 1))
+                unreachable();
+            conditional_inclusion(token_ifndef, conditional_list);
+            return;
+        }
         if (!strncmp(token->str, "#pragma", 7))
         {
-            error_at(token->str, token->len, "not implemented");
+            unimplemented();
             return;
         }
         break;
     case 8:
         if (!strncmp(token->str, "#include", 8))
         {
+            unimplemented();
             return;
         }
         if (!strncmp(token->str, "#warning", 8))
         {
+            unimplemented();
             return;
         }
         break;

@@ -1,9 +1,11 @@
 #include "include/conditional_inclusion.h"
-#include "include/preprocessor.h"
-#include "include/define.h"
-#include "include/vector.h"
-#include "include/error.h"
+
 #include <string.h>
+
+#include "include/define.h"
+#include "include/error.h"
+#include "include/preprocessor.h"
+#include "include/vector.h"
 
 // 引数のheadトークンから nextトークンまでのトークンを消す
 // ただし、TK_LINEBREAKは残す
@@ -19,8 +21,12 @@ static void clean_while_next(Token *head, Token *next)
     }
 }
 
+static void _conditional_inclusion(if_directive type, Token *head,
+                                   Vector *conditional_list);
+
 // #if #ifdef #ifndefに対応する #else #elif #endif 等を処理する関数
-void next_conditional_inclusion(Token *token, bool is_true, Vector *conditional_list)
+void next_conditional_inclusion(Token *token, bool is_true,
+                                Vector *conditional_list, bool is_end)
 {
     switch (token->len)
     {
@@ -31,7 +37,7 @@ void next_conditional_inclusion(Token *token, bool is_true, Vector *conditional_
             Token *next = vector_shift(conditional_list);
             if (is_true)
                 clean_while_next(token, next);
-            next_conditional_inclusion(next, !is_true, conditional_list);
+            next_conditional_inclusion(next, !is_true, conditional_list, true);
         }
         else
         { // #elif
@@ -42,10 +48,23 @@ void next_conditional_inclusion(Token *token, bool is_true, Vector *conditional_
         token_void(token);
         return;
     case 8: // #elifdef
-        unimplemented();
-        break;
     case 9: // #elifndef
-        unimplemented();
+        if (is_end)
+            error_at(token->str, token->len, "Invalid #elifdef use");
+        if (!is_true)
+        {
+            if (token->len == 8) // #elifdef
+                _conditional_inclusion(token_ifdef, token, conditional_list);
+            else // #elifndef
+                _conditional_inclusion(token_ifndef, token, conditional_list);
+        }
+        else
+        {
+            Token *next = vector_shift(conditional_list);
+            clean_while_next(token, next);
+            next_conditional_inclusion(next, is_true, conditional_list, false);
+        }
+        token_void(token);
         break;
     default:
         unreachable();
@@ -53,7 +72,8 @@ void next_conditional_inclusion(Token *token, bool is_true, Vector *conditional_
     }
 }
 
-void conditional_inclusion(if_directive type, Vector *conditional_list)
+static void _conditional_inclusion(if_directive type, Token *head,
+                                   Vector *conditional_list)
 {
     switch (type)
     {
@@ -62,7 +82,6 @@ void conditional_inclusion(if_directive type, Vector *conditional_list)
         break;
     case token_ifdef:
     case token_ifndef:
-        Token *head = vector_shift(conditional_list);
         token_void(head);
         do
         {
@@ -83,9 +102,15 @@ void conditional_inclusion(if_directive type, Vector *conditional_list)
         Token *next = vector_shift(conditional_list);
         if (!is_true)
             clean_while_next(head, next);
-        next_conditional_inclusion(next, is_true, conditional_list);
+        next_conditional_inclusion(next, is_true, conditional_list, false);
         break;
     default:
         unreachable();
     }
+}
+
+void conditional_inclusion(if_directive type, Vector *conditional_list)
+{
+    Token *head = vector_shift(conditional_list);
+    _conditional_inclusion(type, head, conditional_list);
 }

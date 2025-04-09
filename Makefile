@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS=-std=c11 -g -static -Wall -Wextra -Werror
 
-SRCS=$(filter-out preprocessor.c, $(wildcard *.c))
+SRCS=$(filter-out preprocessor.c conditional_inclusion.c, $(wildcard *.c))
 
 PREPROCESS_SRCS=$(filter-out main.c, $(wildcard *.c))
 

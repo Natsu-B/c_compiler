@@ -9,15 +9,8 @@
 #include <string.h>
 #include <errno.h>
 
-// 引数のファイル名のファイルを読み取り、char配列として返す 内部でcallocを利用している
-char *openfile(char *filename)
+char *file_read(FILE *fin)
 {
-    FILE *fin = fopen(filename, "r");
-    if (!fin)
-    {
-        error_exit("ファイル名が正しくありません");
-    }
-    pr_debug("file open");
     // ファイルサイズ検証
     if (fseek(fin, 0, SEEK_END) == -1)
         error_exit("ファイルポインタをファイル末尾に移動するのに失敗しました: %s", strerror(errno));
@@ -36,4 +29,16 @@ char *openfile(char *filename)
     buf[filesize] = '\0';
     pr_debug2("file content:\n%s", buf);
     return buf;
+}
+
+// 引数のファイル名のファイルを読み取り、char配列として返す 内部でcallocを利用している
+char *openfile(char *filename)
+{
+    FILE *fin = fopen(filename, "r");
+    if (!fin)
+    {
+        error_exit("ファイル名が正しくありません");
+    }
+    pr_debug("file open");
+    return file_read(fin);
 }

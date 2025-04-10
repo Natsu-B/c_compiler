@@ -44,7 +44,7 @@ struct Token
     };
 };
 
-extern Token *tokenizer(char *input);
+extern Token *tokenizer(char *input, Token *next_token);
 
 extern bool at_eof();
 

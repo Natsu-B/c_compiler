@@ -14,6 +14,16 @@
 
 Vector *Conditional_Inclusion_List;
 
+char *File_Name;
+size_t File_Line;
+char *File_Start;
+
+typedef struct
+{
+    char* file_name;
+    size_t file_line;
+} file_list;
+
 void token_void(Token *token)
 {
     token->kind = TK_IGNORABLE;
@@ -21,8 +31,10 @@ void token_void(Token *token)
     token->len = 0;
 }
 
+Token* preprocess(char* input, char* file_name, Token* token);
+
 // #~ のプリプロセッサで処理するものたち
-void directive(Token *token)
+Token* directive(Token *token)
 {
     switch (token->len)
     {
@@ -33,13 +45,14 @@ void directive(Token *token)
             if (token != vector_peek_at(conditional_list, 1))
                 unreachable();
             conditional_inclusion(token_if, conditional_list);
+            return token->next;
         }
         break;
     case 5:
         if (!strncmp(token->str, "#line", 5))
         {
             unimplemented();
-            return;
+            return token->next;
         }
         break;
     case 6:
@@ -49,14 +62,14 @@ void directive(Token *token)
             if (token != vector_peek_at(conditional_list, 1))
                 unreachable();
             conditional_inclusion(token_ifdef, conditional_list);
-            return;
+            return token->next;
         }
         if (!strncmp(token->str, "#error", 6))
             error_at(token->str, token->len, "#error directive found");
         if (!strncmp(token->str, "#undef", 6))
         {
             unimplemented();
-            return;
+            return token->next;
         }
         break;
     case 7:
@@ -150,7 +163,7 @@ void directive(Token *token)
                 add_function_like_macro(token_list);
             else
                 add_object_like_macro(token_list);
-            return;
+            return token->next;
         }
         if (!strncmp(token->str, "#ifndef", 7))
         {
@@ -158,41 +171,89 @@ void directive(Token *token)
             if (token != vector_peek_at(conditional_list, 1))
                 unreachable();
             conditional_inclusion(token_ifndef, conditional_list);
-            return;
+            return token->next;
         }
         if (!strncmp(token->str, "#pragma", 7))
         {
             unimplemented();
-            return;
+            return token->next;
         }
         break;
     case 8:
         if (!strncmp(token->str, "#include", 8))
         {
-            unimplemented();
-            return;
+            token_void(token);
+            char *file_name = NULL;
+            size_t file_len = 0;
+            while (token->kind == TK_IGNORABLE)
+                token = token->next;
+            if (token->kind == TK_RESERVED &&
+                token->str[0] == '<')
+            { // #include < ident >
+                token_void(token);
+                token = token->next;
+                char* include_file_start = token->str;
+                Token* include_file_start_token = token;
+                while (token->kind != TK_RESERVED ||
+                       token->str[0] != '>')
+                {
+                    if (token->kind == TK_LINEBREAK)
+                        error_at(token->str, token->len, "Invalid #include path");
+                    file_len += token->len;
+                    token = token->next;
+                }
+                file_name = malloc(file_len + 1 /* '\0' */ + 13 /* /usr/include/ */);
+                memcpy(file_name, include_file_start, file_len);
+                while (token != include_file_start_token)
+                {
+                    token_void(include_file_start_token);
+                    include_file_start_token = include_file_start_token->next;
+                }
+            }
+            else if (token->kind == TK_STRING)
+            { // #include " ident "
+                file_len = token->len - 2;
+                file_name = malloc(file_len + 1 /* '\0' */ + 13/* /usr/include/ */);
+                memcpy(file_name, token->str + 1, token->len - 2);
+            }
+            file_name[file_len] = '\0';
+            token_void(token);
+            FILE* include_file_ptr = fopen(file_name, "r");
+            if (!include_file_ptr)
+            {
+                // /usr/include/ を作る
+                memmove(file_name + 13, file_name, file_len + 1);
+                memcpy(file_name, "/usr/include/", 13);
+                include_file_ptr = fopen(file_name, "r");
+            }
+            if (!include_file_ptr)
+                error_at(token->str - file_len - 2, file_len, "file not found");
+            Token* next = token->next;
+            preprocess(file_read(include_file_ptr), file_name, token);
+            return next;
         }
         if (!strncmp(token->str, "#warning", 8))
         {
             unimplemented();
-            return;
+            return token->next;
         }
         break;
     default:
-        error_at(token->str, token->len, "unknown directive");
         break;
     }
+    error_at(token->str, token->len, "unknown directive");
+    return NULL; // unreachable
 }
 
 void preprocessor()
 {
-    while (!at_eof())
+    Token *token = get_token();
+    while (token->kind != TK_EOF)
     {
-        Token *token = get_token();
         switch (token->kind)
         {
         case TK_DIRECTIVE: // '#'がトークン先頭に存在する場合
-            directive(token);
+            token = directive(token);
             break;
         case TK_IDENT: // 識別子がトークン先頭の場合
         {
@@ -323,9 +384,40 @@ void preprocessor()
             break;
         }
         // 次のトークンに送る
-        token = get_token();
-        set_token(token->next);
+        token = token->next;
     }
+}
+
+Token* preprocess(char* input, char* file_name, Token *token)
+{
+    pr_debug("start preprocessing %s", file_name);
+    file_list* file = malloc(sizeof(file_list));
+    file->file_name = file_name;
+    file->file_line = 0;
+    char *old_file_name = File_Name;
+    size_t old_file_line = File_Line;
+    char *old_file_start = File_Start;
+    Vector* old_conditional_inclusion_list = Conditional_Inclusion_List;
+    Conditional_Inclusion_List = vector_new();
+    Token* next_token = token ? token->next : NULL;
+    File_Name = file_name;
+    File_Line = 0;
+    File_Start = input;
+    error_init(File_Name, input);
+    Token *token_first = tokenizer(input, next_token);
+    if (token)
+        token->next = token_first;
+    else
+        token = token_first;
+    preprocessor();
+    vector_free(Conditional_Inclusion_List);
+    Conditional_Inclusion_List = old_conditional_inclusion_list;
+    File_Name = old_file_name;
+    File_Line = old_file_line;
+    File_Start = old_file_start;
+    error_init(File_Name, File_Start);
+    pr_debug("end preprocessing %s", file_name);
+    return token;
 }
 
 static FILE *fout;
@@ -334,7 +426,7 @@ static void writer(Token *token)
 {
     for (;;)
     {
-        if (token->kind == TK_EOF)
+        if (!token)
             break;
         fprintf(fout, "%.*s", (int)token->len, token->str);
         token = token->next;
@@ -351,10 +443,9 @@ int main(int argc, char **argv)
     error_init(argv[2], input);
     Conditional_Inclusion_List = vector_new();
     object_like_macro_list = vector_new();
-
-    Token *token = tokenizer(input);
     // set_default_definition();
-    preprocessor();
+
+    Token* token = preprocess(input, argv[1], NULL);
 #ifdef DEBUG
     print_definition();
 #endif

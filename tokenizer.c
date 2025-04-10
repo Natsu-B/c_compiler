@@ -153,7 +153,7 @@ Token *new_token(TokenKind kind, Token *old, char *str)
 }
 
 // トークナイズする関数
-Token *tokenizer(char *input)
+Token *tokenizer(char *input, Token* next_token)
 {
     pr_debug("start tokenizer...");
     Token head;
@@ -174,7 +174,7 @@ Token *tokenizer(char *input)
         }
 
         size_t space_counter = 0;
-        while (*input == ' ')
+        while (isspace(*input))
         {
             space_counter++;
             input++;
@@ -418,7 +418,8 @@ Token *tokenizer(char *input)
         error_at(input, 1, "トークナイズに失敗しました");
     }
 
-    new_token(TK_EOF, cur, input);
+    cur = new_token(TK_EOF, cur, input);
+    cur->next = next_token;
 
     pr_debug("complite tokenize");
 #ifdef PREPROCESS

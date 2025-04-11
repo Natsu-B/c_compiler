@@ -20,7 +20,7 @@ char *File_Start;
 
 typedef struct
 {
-    char* file_name;
+    char *file_name;
     size_t file_line;
 } file_list;
 
@@ -31,10 +31,10 @@ void token_void(Token *token)
     token->len = 0;
 }
 
-Token* preprocess(char* input, char* file_name, Token* token);
+Token *preprocess(char *input, char *file_name, Token *token);
 
 // #~ のプリプロセッサで処理するものたち
-Token* directive(Token *token)
+Token *directive(Token *token)
 {
     switch (token->len)
     {
@@ -192,8 +192,8 @@ Token* directive(Token *token)
             { // #include < ident >
                 token_void(token);
                 token = token->next;
-                char* include_file_start = token->str;
-                Token* include_file_start_token = token;
+                char *include_file_start = token->str;
+                Token *include_file_start_token = token;
                 while (token->kind != TK_RESERVED ||
                        token->str[0] != '>')
                 {
@@ -213,12 +213,11 @@ Token* directive(Token *token)
             else if (token->kind == TK_STRING)
             { // #include " ident "
                 file_len = token->len - 2;
-                file_name = malloc(file_len + 1 /* '\0' */ + 13/* /usr/include/ */);
+                file_name = malloc(file_len + 1 /* '\0' */ + 13 /* /usr/include/ */);
                 memcpy(file_name, token->str + 1, token->len - 2);
             }
             file_name[file_len] = '\0';
-            token_void(token);
-            FILE* include_file_ptr = fopen(file_name, "r");
+            FILE *include_file_ptr = fopen(file_name, "r");
             if (!include_file_ptr)
             {
                 // /usr/include/ を作る
@@ -228,7 +227,8 @@ Token* directive(Token *token)
             }
             if (!include_file_ptr)
                 error_at(token->str - file_len - 2, file_len, "file not found");
-            Token* next = token->next;
+            token_void(token);
+            Token *next = token->next;
             preprocess(file_read(include_file_ptr), file_name, token);
             return next;
         }
@@ -388,18 +388,18 @@ void preprocessor()
     }
 }
 
-Token* preprocess(char* input, char* file_name, Token *token)
+Token *preprocess(char *input, char *file_name, Token *token)
 {
     pr_debug("start preprocessing %s", file_name);
-    file_list* file = malloc(sizeof(file_list));
+    file_list *file = malloc(sizeof(file_list));
     file->file_name = file_name;
     file->file_line = 0;
     char *old_file_name = File_Name;
     size_t old_file_line = File_Line;
     char *old_file_start = File_Start;
-    Vector* old_conditional_inclusion_list = Conditional_Inclusion_List;
+    Vector *old_conditional_inclusion_list = Conditional_Inclusion_List;
     Conditional_Inclusion_List = vector_new();
-    Token* next_token = token ? token->next : NULL;
+    Token *next_token = token ? token->next : NULL;
     File_Name = file_name;
     File_Line = 0;
     File_Start = input;
@@ -410,6 +410,9 @@ Token* preprocess(char* input, char* file_name, Token *token)
     else
         token = token_first;
     preprocessor();
+#ifdef DEBUG
+    print_definition();
+#endif
     vector_free(Conditional_Inclusion_List);
     Conditional_Inclusion_List = old_conditional_inclusion_list;
     File_Name = old_file_name;
@@ -420,10 +423,14 @@ Token* preprocess(char* input, char* file_name, Token *token)
     return token;
 }
 
-static FILE *fout;
-
-static void writer(Token *token)
+[[noreturn]]
+void preprocessed_file_writer(Token *token, char *output_filename)
 {
+    FILE *fout = fopen(output_filename, "w");
+    if (fout == NULL)
+    {
+        error_exit("ファイルに書き込めませんでした");
+    }
     for (;;)
     {
         if (!token)
@@ -431,29 +438,12 @@ static void writer(Token *token)
         fprintf(fout, "%.*s", (int)token->len, token->str);
         token = token->next;
     }
+    exit(0);
 }
 
-int main(int argc, char **argv)
+void init_preprocessor()
 {
-    fprintf(stdout, "\e[32mpreprocessor\e[37m\n");
-    if (argc != 3)
-        error_exit("引数が正しくありません");
-    char *input = openfile(argv[1]);
-    // init
-    error_init(argv[2], input);
     Conditional_Inclusion_List = vector_new();
     object_like_macro_list = vector_new();
     // set_default_definition();
-
-    Token* token = preprocess(input, argv[1], NULL);
-#ifdef DEBUG
-    print_definition();
-#endif
-    fout = fopen(argv[2], "w");
-    if (fout == NULL)
-    {
-        error_exit("ファイルに書き込めませんでした");
-    }
-    writer(token);
-    return 0;
 }

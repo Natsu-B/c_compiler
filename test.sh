@@ -6,7 +6,7 @@ assert_print() {
   gcc -o out/gcc out/tmp.c
   ./out/gcc > out/gcc.txt
   expected="$?"
-  ./main out/tmp.c out/out.s
+  ./main -i out/tmp.c -o out/out.s
   gcc -o out/out out/out.s
   ./out/out > out/out.txt
   actual="$?"
@@ -31,7 +31,7 @@ assert() {
   gcc -o out/gcc out/tmp.c
   ./out/gcc
   expected="$?"
-  ./main out/tmp.c out/out.s
+  ./main -i out/tmp.c -o out/out.s
   gcc -o out/out out/out.s
   ./out/out
   actual="$?"
@@ -51,7 +51,7 @@ assert_with_outer_code() {
   linkcode=("$@")
 
   echo "$input" > out/tmp.c
-  ./main out/tmp.c out/out.s
+  ./main -i out/tmp.c -o out/out.s
   cc -c out/out.s -o out/out.o
   cc -o out/out out/out.o "${linkcode[@]}"
   ./out/out

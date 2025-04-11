@@ -5,12 +5,7 @@
 #include "include/vector.h"
 #include "include/error.h"
 #include "include/debug.h"
-
-#ifdef PREPROCESS
 #include "include/preprocessor.h"
-static Vector *nest_list; // nestごとにConditional Inclusion Listを分けて持つ
-#endif
-
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -21,6 +16,8 @@ Token *token;     // トークンの実体
 Token *token_old; // tokenの一つあとのトークン
 
 const char *tokenkindlist[TK_END] = {TokenKindTable};
+
+static Vector *nest_list; // nestごとにConditional Inclusion Listを分けて持つ
 
 // トークンの位置を引数の位置に変更する
 // かなり危険なため利用は注意を
@@ -153,18 +150,15 @@ Token *new_token(TokenKind kind, Token *old, char *str)
 }
 
 // トークナイズする関数
-Token *tokenizer(char *input, Token* next_token)
+Token *tokenizer(char *input, Token *next_token)
 {
     pr_debug("start tokenizer...");
     Token head;
     head.next = NULL;
     Token *cur = &head;
-#ifdef PREPROCESS
     nest_list = vector_new();
-#endif
     while (*input)
     {
-#ifdef PREPROCESS
         // 改行 isspaceでは'\n'も処理されてしまうのでそれより前に置く
         if (*input == '\n')
         {
@@ -185,27 +179,15 @@ Token *tokenizer(char *input, Token* next_token)
             cur->len = space_counter;
             continue;
         }
-#else
-        if (isspace(*input))
-        {
-            input++;
-            continue;
-        }
-#endif
 
         // コメントを読み飛ばす
         if (!strncmp(input, "//", 2))
         {
             input++;
-#ifdef PREPROCESS
             size_t i = 1;
             while (*++input != '\n')
                 i++;
             cur = new_token(TK_IGNORABLE, cur, input - i);
-#else
-            while (*++input != '\n')
-                ;
-#endif
             continue;
         }
         if (!strncmp(input, "/*", 2))
@@ -213,7 +195,6 @@ Token *tokenizer(char *input, Token* next_token)
             char *end = strstr(input + 2, "*/");
             if (!end)
                 error_at(input, 1, "コメントが閉じられていません");
-#ifdef PREPROCESS
             cur = new_token(TK_IGNORABLE, cur, input);
             char *pointer = input;
             while (pointer <= end)
@@ -228,12 +209,10 @@ Token *tokenizer(char *input, Token* next_token)
                 }
             }
             cur->len = end + 2 - input;
-#endif
             input = end + 2;
             continue;
         }
 
-#ifdef PREPROCESS
         if (*input == '#')
         {
             cur = new_token(TK_DIRECTIVE, cur, input);
@@ -267,7 +246,6 @@ Token *tokenizer(char *input, Token* next_token)
             }
             continue;
         }
-#endif
 
         if (strchr("+-*/()=!<>;{},&[].\\", *input))
         {
@@ -290,17 +268,11 @@ Token *tokenizer(char *input, Token* next_token)
 
         if (isdigit(*input))
         {
-#ifdef PREPROCESS
             int i = 1;
             while (isdigit(*++input))
                 i++;
             cur = new_token(TK_IDENT, cur, input - i);
             cur->len = i;
-#else
-            cur = new_token(TK_NUM, cur, input);
-            cur->val = strtol(input, &input, 10);
-            pr_debug2("find NUM token: %ld", cur->val);
-#endif
             continue;
         }
 
@@ -325,92 +297,6 @@ Token *tokenizer(char *input, Token* next_token)
         }
         if (i)
         {
-#ifndef PREPROCESS
-            // if 文か否かを判別する
-            if (i == 2) // strlen("if") = 2
-            {
-                if (!strncmp(input - i, "if", i))
-                {
-                    cur = new_token(TK_IF, cur, input - i);
-                    cur->len = i;
-                    continue;
-                }
-            }
-
-            // else 文か否かを判別する
-            if (i == 4) // strlen("else") = 4
-            {
-                if (!strncmp(input - i, "else", i))
-                {
-                    cur = new_token(TK_ELSE, cur, input - i);
-                    cur->len = i;
-                    continue;
-                }
-            }
-
-            // for 文か否かを判別する
-            if (i == 3) // strlen("for") = 3
-            {
-                if (!strncmp(input - i, "for", i))
-                {
-                    cur = new_token(TK_FOR, cur, input - i);
-                    cur->len = i;
-                    continue;
-                }
-
-                if (!strncmp(input - i, "int", i))
-                {
-                    cur = new_token(TK_INT, cur, input - i);
-                    cur->len = i;
-                    continue;
-                }
-            }
-
-            if (i == 4)
-            {
-                if (!strncmp(input - i, "char", i))
-                {
-                    cur = new_token(TK_CHAR, cur, input - i);
-                    cur->len = i;
-                    continue;
-                }
-                if (!strncmp(input - i, "long", i))
-                {
-                    cur = new_token(TK_LONG, cur, input - i);
-                    cur->len = i;
-                    continue;
-                }
-            }
-
-            // while文か否かを判別する
-            if (i == 5) // strlen("while") = 5
-            {
-                if (!strncmp(input - i, "while", i))
-                {
-                    cur = new_token(TK_WHILE, cur, input - i);
-                    cur->len = i;
-                    continue;
-                }
-            }
-
-            // return 文か否かを判別する
-            if (i == 6) // strlen("return") = 6
-            {
-                if (!strncmp(input - i, "return", i))
-                {
-                    cur = new_token(TK_RETURN, cur, input - i);
-                    cur->val = i;
-                    continue;
-                }
-
-                if (!strncmp(input - i, "sizeof", i))
-                {
-                    cur = new_token(TK_SIZEOF, cur, input - i);
-                    cur->val = i;
-                    continue;
-                }
-            }
-#endif
             cur = new_token(TK_IDENT, cur, input - i);
             cur->len = i;
             continue;
@@ -422,12 +308,137 @@ Token *tokenizer(char *input, Token* next_token)
     cur->next = next_token;
 
     pr_debug("complite tokenize");
-#ifdef PREPROCESS
     vector_free(nest_list);
-#endif
 #ifdef DEBUG
     print_tokenize_result(head.next);
 #endif
     token = head.next;
     return token;
+}
+
+// トークンを上書きする関数
+Token *change_token(TokenKind kind, Token *old, char *str)
+{
+    Token *token = old->next;
+    if (!token) // TODO オーバーライドの危険性あり 検証必要
+        old->next = token = calloc(1, sizeof(Token));
+    token->kind = kind;
+    token->str = str;
+    return token;
+}
+
+void re_tokenize(Token *token_head)
+{
+    pr_debug("start re_tokenize");
+    token = token_head;
+    Token *token = token_head;
+    Token head;
+    head.next = token_head;
+    Token *cur = &head;
+    while (token)
+    {
+        switch (token->kind)
+        {
+        case TK_IGNORABLE:
+        case TK_LINEBREAK:
+        case TK_EOF:
+            break;
+        case TK_IDENT:
+            // 数字
+            if (isdigit(token->str[0]))
+            {
+                cur = new_token(TK_NUM, cur, token->str);
+                char *tmp;
+                size_t token_size = token->len;
+                cur->val = strtol(token->str, &tmp, 10);
+                if (token->str + token_size > tmp)
+                    unreachable();
+                pr_debug2("find NUM token: %ld", cur->val);
+                break;
+            }
+            else if (token->len == 2)
+            {
+                if (!strncmp(token->str, "if", token->len))
+                {
+                    cur = change_token(TK_IF, cur, token->str);
+                    cur->len = token->len;
+                    break;
+                }
+            }
+            else if (token->len == 3)
+            {
+                if (!strncmp(token->str, "for", token->len))
+                {
+                    cur = change_token(TK_FOR, cur, token->str);
+                    cur->len = token->len;
+                    break;
+                }
+
+                if (!strncmp(token->str, "int", token->len))
+                {
+                    cur = change_token(TK_INT, cur, token->str);
+                    cur->len = token->len;
+                    break;
+                }
+            }
+            else if (token->len == 4)
+            {
+                if (!strncmp(token->str, "else", token->len))
+                {
+                    cur = change_token(TK_ELSE, cur, token->str);
+                    cur->len = token->len;
+                    break;
+                }
+                if (!strncmp(token->str, "char", token->len))
+                {
+                    cur = change_token(TK_CHAR, cur, token->str);
+                    cur->len = token->len;
+                    break;
+                }
+                if (!strncmp(token->str, "long", token->len))
+                {
+                    cur = change_token(TK_LONG, cur, token->str);
+                    cur->len = token->len;
+                    break;
+                }
+            }
+            else if (token->len == 5)
+            {
+                if (!strncmp(token->str, "while", token->len))
+                {
+                    cur = change_token(TK_WHILE, cur, token->str);
+                    cur->len = token->len;
+                    break;
+                }
+            }
+            else if (token->len == 6)
+            {
+                if (!strncmp(token->str, "return", token->len))
+                {
+                    cur = change_token(TK_RETURN, cur, token->str);
+                    cur->len = token->len;
+                    break;
+                }
+
+                if (!strncmp(token->str, "sizeof", token->len))
+                {
+                    cur = change_token(TK_SIZEOF, cur, token->str);
+                    cur->len = token->len;
+                    break;
+                }
+            }
+            // fall through
+        default:
+            cur = change_token(token->kind, cur, token->str);
+            cur->len = token->len;
+            break;
+        }
+
+        token = token->next;
+    }
+    change_token(TK_EOF, cur, NULL);
+#ifdef DEBUG
+    print_tokenize_result(token_head);
+#endif
+    pr_debug("end re tokenize");
 }

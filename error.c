@@ -8,7 +8,7 @@
 #include <error.h>
 #include <stdlib.h>
 
-#ifndef __GNUC__
+#ifndef __STDC__
 #define __attribute__(x) /*NOTHING*/
 #endif
 void _debug2(char *file, int line, const char *func, char *fmt, ...)
@@ -22,7 +22,9 @@ void _debug(char *file, int line, const char *func, char *fmt, ...)
     va_list ap;
     va_start(ap, fmt);
     fprintf(stdout, "\e[35m");
-    _debug2(file, line, func, fmt, ap);
+    fprintf(stdout, "%s:%d:%s(): ", file, line, func);
+    vfprintf(stdout, fmt, ap);
+    fprintf(stdout, "\n");
     fprintf(stdout, "\e[37m");
 }
 

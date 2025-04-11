@@ -45,7 +45,7 @@ struct Token
 };
 
 extern Token *tokenizer(char *input, Token *next_token);
-
+extern void re_tokenize(Token *token_head);
 extern bool at_eof();
 
 extern void set_token(Token *next);

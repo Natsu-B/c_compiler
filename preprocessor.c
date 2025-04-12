@@ -31,6 +31,30 @@ void token_void(Token *token)
     token->len = 0;
 }
 
+#ifdef __GNUC__
+#define _TO_STRING(x) #x
+#define TO_STRING(x) _TO_STRING(x)
+static char gcc_lib_path[] = "/usr/lib/gcc/x86_64-linux-gnu/" TO_STRING(__GNUC__) "/include/";
+static char local_include[] = "/usr/local/include/";
+static char linux_include[] = "/usr/include/x86_64-linux-gnu/";
+static char usr_include[] = "/usr/include/";
+static char *lib_path[] = {
+    gcc_lib_path,
+    local_include,
+    linux_include,
+    usr_include,
+};
+static size_t lib_path_size[] = {
+    sizeof(gcc_lib_path),
+    sizeof(local_include),
+    sizeof(linux_include),
+    sizeof(usr_include),
+};
+#define MAX_LIB_PATH_SIZE sizeof(gcc_lib_path)
+#else
+// TODO
+#endif
+
 Token *preprocess(char *input, char *file_name, Token *token);
 
 // #~ のプリプロセッサで処理するものたち
@@ -202,7 +226,7 @@ Token *directive(Token *token)
                     file_len += token->len;
                     token = token->next;
                 }
-                file_name = malloc(file_len + 1 /* '\0' */ + 13 /* /usr/include/ */);
+                file_name = malloc(file_len + 1 /* '\0' */ + MAX_LIB_PATH_SIZE);
                 memcpy(file_name, include_file_start, file_len);
                 while (token != include_file_start_token)
                 {
@@ -213,17 +237,22 @@ Token *directive(Token *token)
             else if (token->kind == TK_STRING)
             { // #include " ident "
                 file_len = token->len - 2;
-                file_name = malloc(file_len + 1 /* '\0' */ + 13 /* /usr/include/ */);
+                file_name = malloc(file_len + 1 /* '\0' */ + MAX_LIB_PATH_SIZE);
                 memcpy(file_name, token->str + 1, token->len - 2);
             }
             file_name[file_len] = '\0';
             FILE *include_file_ptr = fopen(file_name, "r");
             if (!include_file_ptr)
-            {
-                // /usr/include/ を作る
-                memmove(file_name + 13, file_name, file_len + 1);
-                memcpy(file_name, "/usr/include/", 13);
-                include_file_ptr = fopen(file_name, "r");
+            { // stdlib を読み込む
+                for (size_t i = 0; i < sizeof(lib_path) / sizeof(char *); i++)
+                {
+                    memmove(file_name + lib_path_size[i] - 1, file_name + (i ? lib_path_size[i - 1] - 1 : 0), file_len + 1);
+                    memcpy(file_name, lib_path[i], lib_path_size[i] - 1);
+                    pr_debug("file path: %s", file_name);
+                    include_file_ptr = fopen(file_name, "r");
+                    if (include_file_ptr)
+                        break;
+                }
             }
             if (!include_file_ptr)
                 error_at(token->str - file_len - 2, file_len, "file not found");

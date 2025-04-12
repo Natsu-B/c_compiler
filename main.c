@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <string.h>
 
+bool output_preprocess;
+
 // 引数の処理
 // -E:  プリプロセッサを実行し出力する
 // -o:  出力ファイルを指定する
@@ -21,7 +23,6 @@ int main(int argc, char **argv)
     char *input_file_name = NULL;
     char *output_file_name = NULL;
     char *input = NULL;
-    bool output_preprocess = NULL;
     // 引数の処理をする
     for (int i = 1; i < argc; i++)
     {

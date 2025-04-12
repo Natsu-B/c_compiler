@@ -101,7 +101,7 @@ Token *expect(char *op)
 {
     Token *result = consume(op);
     if (!result)
-        error_at(token->str, token->len, "トークンが %.*s でありませんでした", token->len, op);
+        error_at(token->str, token->len, "トークンが %c でありませんでした", op);
     return result;
 }
 
@@ -173,7 +173,7 @@ Token *tokenizer(char *input, Token *next_token)
             space_counter++;
             input++;
         }
-        if (space_counter)
+        if (space_counter && output_preprocess)
         {
             cur = new_token(TK_IGNORABLE, cur, input - space_counter);
             cur->len = space_counter;
@@ -247,7 +247,7 @@ Token *tokenizer(char *input, Token *next_token)
             continue;
         }
 
-        if (strchr("+-*/()=!<>;{},&[].\\", *input))
+        if (strchr("+-*/()=!<>;{},&[].\\'|", *input))
         {
             cur = new_token(TK_RESERVED, cur, input);
             // "==", "<=", ">=", "!=" の場合
@@ -327,6 +327,7 @@ Token *change_token(TokenKind kind, Token *old, char *str)
     return token;
 }
 
+// deprecated
 void re_tokenize(Token *token_head)
 {
     pr_debug("start re_tokenize");

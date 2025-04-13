@@ -17,14 +17,8 @@
 Vector *Conditional_Inclusion_List;
 
 char *File_Name;
-size_t File_Line;
+size_t File_Line = 1;
 char *File_Start;
-
-typedef struct
-{
-  char *file_name;
-  size_t file_line;
-} file_list;
 
 void token_void(Token *token)
 {
@@ -39,6 +33,17 @@ Token *token_next_not_ignorable(Token *token)
   {
     token = token->next;
   } while (token->kind == TK_IGNORABLE);
+  return token;
+}
+
+Token *token_next_not_ignorable_void(Token *token)
+{
+  token = token->next;
+  while (token->kind == TK_IGNORABLE)
+  {
+    token_void(token);
+    token = token->next;
+  }
   return token;
 }
 
@@ -110,14 +115,14 @@ Token *directive(Token *token)
       if (!strncmp(token->str, "#define", 7))
       {
         token_void(token);
-        Token *ptr = token_next_not_ignorable(token);
+        Token *ptr = token_next_not_ignorable_void(token);
 
         Vector *token_list = vector_new();
         Token *new = malloc(sizeof(Token));
         memcpy(new, ptr, sizeof(Token));
         vector_push(token_list, new);
         token_void(ptr);
-        ptr = token_next_not_ignorable(ptr);
+        ptr = token_next_not_ignorable_void(ptr);
 
         bool is_function_like = false;
         switch (ptr->kind)
@@ -135,7 +140,7 @@ Token *directive(Token *token)
               token_void(ptr);
               for (;;)
               {
-                ptr = token_next_not_ignorable(ptr);
+                ptr = token_next_not_ignorable_void(ptr);
                 if (ptr->kind == TK_IDENT)
                 {
                   Token *new = malloc(sizeof(Token));
@@ -155,7 +160,7 @@ Token *directive(Token *token)
                     if (ptr->str[0] == ')')
                     {
                       token_void(ptr);
-                      ptr = token_next_not_ignorable(ptr);
+                      ptr = token_next_not_ignorable_void(ptr);
                       break;
                     }
                     if (ptr->str[0] == ',')
@@ -184,7 +189,6 @@ Token *directive(Token *token)
 
           ptr = ptr->next;
         }
-        set_token(ptr);
         if (is_function_like)
           add_function_like_macro(token_list);
         else
@@ -210,7 +214,7 @@ Token *directive(Token *token)
         token_void(token);
         char *file_name = NULL;
         size_t file_len = 0;
-        token = token_next_not_ignorable(token);
+        token = token_next_not_ignorable_void(token);
         if (token->kind == TK_RESERVED && token->str[0] == '<')
         {  // #include < ident >
           token_void(token);
@@ -238,6 +242,8 @@ Token *directive(Token *token)
           file_name = malloc(file_len + 1 /* '\0' */ + MAX_LIB_PATH_SIZE);
           memcpy(file_name, token->str + 1, token->len - 2);
         }
+        else
+          error_at(token->str, token->len, "invalid #include directive");
         file_name[file_len] = '\0';
         FILE *include_file_ptr = fopen(file_name, "r");
         if (!include_file_ptr)
@@ -255,10 +261,15 @@ Token *directive(Token *token)
         }
         if (!include_file_ptr)
           error_at(token->str - file_len - 2, file_len, "file not found");
+        Token *old = token;
+        token_void(old);
+        token = token_next_not_ignorable_void(token);
+        if (token->kind != TK_LINEBREAK)
+          error_at(token->str, token->len, "invalid #include directive");
+        File_Line++;
         token_void(token);
-        Token *next = token->next;
-        preprocess(file_read(include_file_ptr), file_name, token);
-        return next;
+        preprocess(file_read(include_file_ptr), file_name, old);
+        return token;
       }
       if (!strncmp(token->str, "#warning", 8))
       {
@@ -283,12 +294,46 @@ void preprocessor()
       case TK_DIRECTIVE:  // '#'がトークン先頭に存在する場合
         token = directive(token);
         break;
+      case TK_LINEBREAK:
+        File_Line++;
+        break;
       case TK_IDENT:  // 識別子がトークン先頭の場合
       {
         // #defineで定義されているものを展開する
         Vector *hide_set = vector_new();
         for (;;)
         {
+          if (token->len == 8)
+          {
+            if (!strncmp(token->str, "__FILE__", 8))
+            {
+              size_t file_name_len = strlen(File_Name);
+              char *file_name = malloc(file_name_len + 2);
+              strncpy(file_name + 1, File_Name, file_name_len);
+              file_name[0] = file_name[file_name_len + 1] = '"';
+              token->kind = TK_STRING;
+              token->len = file_name_len + 2;
+              token->str = file_name;
+              continue;
+            }
+            if (!strncmp(token->str, "__LINE__", 8))
+            {
+              char *file_line_str = malloc(7 * sizeof(char));
+              int file_line_len = snprintf(file_line_str, 7, "%lu", File_Line);
+              if (file_line_len > 6 || file_line_len < 0)
+              {
+                int size = file_line_len;
+                file_line_str = realloc(file_line_str, file_line_len + 1);
+                file_line_len = snprintf(file_line_str, file_line_len + 1,
+                                         "%lu", File_Line);
+                if (file_line_len < 0 || file_line_len + 1 > size)
+                  error_exit("failed to preprocess __LINE__");
+              }
+              token->len = file_line_len;
+              token->str = file_line_str;
+              continue;
+            }
+          }
           Vector *token_string = NULL;
           Token *token_identifier;
           Vector *argument_list = NULL;
@@ -438,9 +483,6 @@ void preprocessor()
 Token *preprocess(char *input, char *file_name, Token *token)
 {
   pr_debug("start preprocessing %s", file_name);
-  file_list *file = malloc(sizeof(file_list));
-  file->file_name = file_name;
-  file->file_line = 0;
   char *old_file_name = File_Name;
   size_t old_file_line = File_Line;
   char *old_file_start = File_Start;
@@ -448,7 +490,7 @@ Token *preprocess(char *input, char *file_name, Token *token)
   Conditional_Inclusion_List = vector_new();
   Token *next_token = token ? token->next : NULL;
   File_Name = file_name;
-  File_Line = 0;
+  File_Line = 1;
   File_Start = input;
   error_init(File_Name, input);
   Token *token_first = tokenizer(input, next_token);

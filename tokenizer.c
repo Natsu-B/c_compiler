@@ -154,7 +154,7 @@ Token *tokenizer(char *input, Token *next_token)
     }
 
     size_t space_counter = 0;
-    while (isspace(*input))
+    while (isspace(*input) && *input != '\n')
     {
       space_counter++;
       input++;

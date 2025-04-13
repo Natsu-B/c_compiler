@@ -9,13 +9,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifndef __STDC__
+#ifndef __GNUC__
 #define __attribute__(x) /*NOTHING*/
 #endif
 void _debug2(char *file, int line, const char *func, char *fmt, ...)
     __attribute__((format(printf, 4, 5)));
-void error_at(char *error_location, size_t error_len, char *fmt, ...)
-    __attribute__((format(printf, 3, 4)));
+void _error_at(char *error_location, size_t error_len, char *file, int line,
+               const char *func, char *fmt, ...)
+    __attribute__((format(printf, 6, 7)));
 
 // #define DEBUG 時に動作を出力する pr_debugから呼び出される
 void _debug(char *file, int line, const char *func, char *fmt, ...)
@@ -61,7 +62,8 @@ void error_init(char *name, char *input)
 
 // 入力プログラムがおかしいとき、エラー箇所を可視化するプログラム
 [[noreturn]]
-void error_at(char *error_location, size_t error_len, char *fmt, ...)
+void _error_at(char *error_location, size_t error_len, char *file, int line,
+               const char *func, char *fmt, ...)
 {
   va_list ap;
   va_start(ap, fmt);
@@ -83,6 +85,6 @@ void error_at(char *error_location, size_t error_len, char *fmt, ...)
   fprintf(stderr, "%*s", (int)error_position, " ");
   fprintf(stderr, "\e[31m%.*s \e[37m", (int)error_len, "^");
   vfprintf(stderr, fmt, ap);
-  fprintf(stderr, "\n");
+  fprintf(stderr, "\n error at %s:%d:%s\n", file, line, func);
   exit(1);
 }

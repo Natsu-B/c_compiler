@@ -31,6 +31,15 @@ void token_void(Token *token)
     token->len = 0;
 }
 
+Token *token_next_not_ignorable(Token *token)
+{
+    do
+    {
+        token = token->next;
+    } while (token->kind == TK_IGNORABLE);
+    return token;
+}
+
 #ifdef __GNUC__
 #define _TO_STRING(x) #x
 #define TO_STRING(x) _TO_STRING(x)
@@ -100,18 +109,15 @@ Token *directive(Token *token)
         if (!strncmp(token->str, "#define", 7))
         {
             token_void(token);
-            Token *ptr = token->next;
-            while (ptr->kind == TK_IGNORABLE)
-                ptr = ptr->next;
+            Token *ptr = token_next_not_ignorable(token);
 
             Vector *token_list = vector_new();
             Token *new = malloc(sizeof(Token));
             memcpy(new, ptr, sizeof(Token));
             vector_push(token_list, new);
             token_void(ptr);
-            ptr = ptr->next;
-            while (ptr->kind == TK_IGNORABLE)
-                ptr = ptr->next;
+            ptr = token_next_not_ignorable(ptr);
+
             bool is_function_like = false;
             switch (ptr->kind)
             {
@@ -126,11 +132,9 @@ Token *directive(Token *token)
                     Vector *formal_parameter = vector_new();
                     vector_push(token_list, formal_parameter);
                     token_void(ptr);
-                    ptr = ptr->next;
                     for (;;)
                     {
-                        while (ptr->kind == TK_IGNORABLE)
-                            ptr = ptr->next;
+                        ptr = token_next_not_ignorable(ptr);
                         if (ptr->kind == TK_IDENT)
                         {
                             Token *new = malloc(sizeof(Token));
@@ -151,13 +155,12 @@ Token *directive(Token *token)
                                 if (ptr->str[0] == ')')
                                 {
                                     token_void(ptr);
-                                    ptr = ptr->next;
+                                    ptr = token_next_not_ignorable(ptr);
                                     break;
                                 }
                                 if (ptr->str[0] == ',')
                                 {
                                     token_void(ptr);
-                                    ptr = ptr->next;
                                     continue;
                                 }
                             }
@@ -209,8 +212,7 @@ Token *directive(Token *token)
             token_void(token);
             char *file_name = NULL;
             size_t file_len = 0;
-            while (token->kind == TK_IGNORABLE)
-                token = token->next;
+            token = token_next_not_ignorable(token);
             if (token->kind == TK_RESERVED &&
                 token->str[0] == '<')
             { // #include < ident >
@@ -337,21 +339,34 @@ void preprocessor()
                     Token *next = token->next;
                     next = next->next;
                     bool is_end = false; // IDENTの直後かどうか
+                    size_t nest_counter = 0;
                     for (;;)
-                    { // TODO '('のネストが無視される
+                    {
                         if (next->kind == TK_IGNORABLE)
                         {
                             token_void(next);
                             next = next->next;
                             continue;
                         }
-                        if (!is_end && next->kind == TK_IDENT)
+                        if (!is_end)
                         {
-                            Token *new = malloc(sizeof(Token));
-                            memcpy(new, next, sizeof(Token));
-                            token_void(next);
-                            vector_push(argument_real_list, new);
-                            next = next->next;
+                            Vector *list = vector_new();
+                            vector_push(argument_real_list, list);
+                            while (nest_counter || next->kind != TK_RESERVED ||
+                                   (next->str[0] != ',' && next->str[0] != ')'))
+                            {
+                                Token *new = malloc(sizeof(Token));
+                                memcpy(new, next, sizeof(Token));
+                                if (new->kind == TK_LINEBREAK)
+                                    error_at(new->str, new->len, "invalid define directive");
+                                if (new->kind == TK_RESERVED &&new->str[0] == '(')
+                                    nest_counter++;
+                                if (new->kind == TK_RESERVED &&new->str[0] == ')')
+                                    nest_counter--;
+                                vector_push(list, new);
+                                token_void(next);
+                                next = next->next;
+                            }
                             is_end = true;
                             continue;
                         }
@@ -385,7 +400,12 @@ void preprocessor()
                                 if (argument->len == replace_token->len &&
                                     !strncmp(argument->str, replace_token->str, argument->len))
                                 {
-                                    memcpy(tmp, vector_peek_at(argument_real_list, j), sizeof(Token));
+                                    token_void(tmp);
+                                    for (size_t k = 1; k <= vector_size(vector_peek_at(argument_real_list, j)); k++)
+                                    {
+                                        tmp = tmp->next = malloc(sizeof(Token));
+                                        memcpy(tmp, vector_peek_at(vector_peek_at(argument_real_list, j), k), sizeof(Token));
+                                    }
                                     is_argument = true;
                                 }
                             }

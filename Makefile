@@ -1,5 +1,7 @@
 CC=gcc
-CFLAGS=-std=c11 -g -static -Wall -Wextra -Werror
+CFLAGS=-std=c11 -ffunction-sections -fdata-sections -g -static -Wall -Wextra -Werror
+LDFLAGS=-Wl,--gc-sections,--print-gc-sections
+
 SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)
 

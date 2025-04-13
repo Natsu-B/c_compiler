@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "include/conditional_inclusion.h"
 #include "include/debug.h"
@@ -19,6 +20,7 @@ Vector *Conditional_Inclusion_List;
 char *File_Name;
 size_t File_Line = 1;
 char *File_Start;
+long long include_level = -1;
 
 void token_void(Token *token)
 {
@@ -333,6 +335,54 @@ void preprocessor()
               token->str = file_line_str;
               continue;
             }
+            int is_date = !strncmp(token->str, "__DATE__", 8);
+            int is_time = !strncmp(token->str, "__TIME__", 8);
+            if (is_date || is_time)
+            {
+              time_t current_time = time(NULL);
+              if (current_time == -1) error_exit("failed to get time");
+              // asctime
+              char *asctime_str = asctime(localtime(&current_time));
+              char *time_str;
+              if (is_date)
+              {
+                time_str = malloc(13 * sizeof(char));
+                memcpy(time_str + 1, asctime_str + 4, 7);
+                memcpy(time_str + 8, asctime_str + 20, 4);
+                token->len = 13;
+              }
+              if (is_time)
+              {
+                time_str = malloc(10 * sizeof(char));
+                memcpy(time_str + 1, asctime_str + 11, 8);
+                token->len = 10;
+              }
+              token->kind = TK_STRING;
+              time_str[0] = time_str[token->len - 1] = '"';
+              token->str = time_str;
+              continue;
+            }
+          }
+          if (token->len == 17)
+          {
+            if (!strncmp(token->str, "__INCLUDE_LEVEL__", 17))
+            {
+              char *file_line_str = malloc(7 * sizeof(char));
+              int file_line_len =
+                  snprintf(file_line_str, 7, "%lld", include_level);
+              if (file_line_len > 6 || file_line_len < 0)
+              {
+                int size = file_line_len;
+                file_line_str = realloc(file_line_str, file_line_len + 1);
+                file_line_len = snprintf(file_line_str, file_line_len + 1,
+                                         "%lu", File_Line);
+                if (file_line_len < 0 || file_line_len + 1 > size)
+                  error_exit("failed to preprocess __INCLUDE_LEVEL__");
+              }
+              token->len = file_line_len;
+              token->str = file_line_str;
+              continue;
+            }
           }
           Vector *token_string = NULL;
           Token *token_identifier;
@@ -498,10 +548,12 @@ Token *preprocess(char *input, char *file_name, Token *token)
     token->next = token_first;
   else
     token = token_first;
+  include_level++;
   preprocessor();
 #ifdef DEBUG
   print_definition();
 #endif
+  include_level--;
   vector_free(Conditional_Inclusion_List);
   Conditional_Inclusion_List = old_conditional_inclusion_list;
   File_Name = old_file_name;

@@ -1,8 +1,8 @@
 #ifndef VECTOR_C_COMPILER
 #define VECTOR_C_COMPILER
 
-#include <stdlib.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
 typedef struct Vector Vector;
 

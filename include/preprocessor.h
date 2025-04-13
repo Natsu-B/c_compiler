@@ -1,8 +1,8 @@
 #ifndef PREPROCESSOR_C_COMPILER
 #define PREPROCESSOR_C_COMPILER
 
-#include "vector.h"
 #include "tokenizer.h"
+#include "vector.h"
 
 extern bool output_preprocess;
 extern Vector *Conditional_Inclusion_List;

@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 
-extern char *openfile(char* filename);
-extern char *file_read(FILE* fin);
+extern char* openfile(char* filename);
+extern char* file_read(FILE* fin);
 
-#endif // FILE_C_COMPILER
+#endif  // FILE_C_COMPILER

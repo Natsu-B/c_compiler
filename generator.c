@@ -643,7 +643,7 @@ void generator(FuncBlock *parsed, char *output_filename)
     switch (pointer->how2_init)
     {
       case reserved:
-        unreachable();
+        unimplemented();
         break;
       case init_zero:
         output_file(

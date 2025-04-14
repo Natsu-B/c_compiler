@@ -146,6 +146,7 @@ assert_print 'int main() {char* tmp = "Hello World!!!"; printf("%s\n", tmp); ret
 assert 'int main() {int hoge = 10; hoge /* = 0*/; return hoge; }'
 assert 'int main() {int hoge = 15; // hoge = 10;
 return hoge;}'
+assert 'int x; int y; int main() {return x;}'
 
 (
   cd test

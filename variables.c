@@ -10,17 +10,19 @@
 
 #include "include/error.h"
 #include "include/parser.h"
+#include "include/vector.h"
 
-static NestedBlockVariables *top;
-static NestedBlockVariables *root;
-static Var *globals_head;
-static Var *variables_head;
+static NestedBlockVariables *top;   // 現在のネストの変数
+static NestedBlockVariables *root;  // グローバル変数
+static Vector *variables_list;      // variables_headの配列
+static Var *globals_head;           // グローバル変数の先頭を指す
+static Var *variables_head;         // 現在のネストの変数の先頭を指す
 static size_t var_counter;
 
 static Var *find_local_var_in_current_nested_block(Token *token)
 {
-  for (Var *var = variables_head; var; var = var->next)
-    if (var->len == token->len && !memcmp(var->name, token->str, var->len))
+  for (Var *var = top->var; var; var = var->next)
+    if (var->len == token->len && !strncmp(var->name, token->str, var->len))
       return var;
   return NULL;
 }
@@ -29,12 +31,10 @@ static Var *find_local_var_in_current_nested_block(Token *token)
 static Var *find_local_var_all(Token *token)
 {
   if (top == root) return NULL;
-  Var *tmp = find_local_var_in_current_nested_block(token);
-  if (tmp) return tmp;
-  for (NestedBlockVariables *pointer = top->next; pointer != root;
+  for (NestedBlockVariables *pointer = top; pointer != root;
        pointer = pointer->next)
     for (Var *var = pointer->var; var; var = var->next)
-      if (var->len == token->len && !memcmp(var->name, token->str, var->len))
+      if (var->len == token->len && !strncmp(var->name, token->str, var->len))
         return var;
   return NULL;
 }
@@ -42,7 +42,7 @@ static Var *find_local_var_all(Token *token)
 static Var *find_global_var_no_token(char *var_name, size_t var_len)
 {
   for (Var *var = root->var; var; var = var->next)
-    if (var->len == var_len && !memcmp(var->name, var_name, var_len))
+    if (var->len == var_len && !strncmp(var->name, var_name, var_len))
       return var;
   return NULL;
 }
@@ -59,6 +59,7 @@ void init_variables()
   NestedBlockVariables *tmp = calloc(1, sizeof(NestedBlockVariables));
   root = tmp;
   top = tmp;
+  variables_list = vector_new();
 }
 
 // ネストを1段深くするときに実行する関数
@@ -66,9 +67,9 @@ NestedBlockVariables *new_nest()
 {
   NestedBlockVariables *tmp = calloc(1, sizeof(NestedBlockVariables));
   tmp->next = top;
-  top->var = variables_head;
+  vector_push(variables_list, variables_head);
+  variables_head = NULL;
   top = tmp;
-  variables_head = top->var;
   var_counter = top->counter;
   return top;
 }
@@ -78,7 +79,7 @@ void exit_nest()
 {
   if (!top->next) unreachable();  // parserでエラーになるはず
   top = top->next;
-  variables_head = top->var;
+  variables_head = vector_pop(variables_list);
   var_counter = top->counter;
 }
 
@@ -102,7 +103,7 @@ Var *add_variables(Token *token, TypeKind kind, size_t pointer_counter)
   // 新規変数の場合
   Var *new = calloc(1, sizeof(Var));
   new->token = token;
-  new->next = variables_head;
+  if (variables_head) variables_head->next = new;
   new->name = token->str;
   new->len = token->len;
   Type *type = alloc_type(kind);
@@ -119,7 +120,10 @@ Var *add_variables(Token *token, TypeKind kind, size_t pointer_counter)
     globals_head = new;
   }
   else
+
     new->is_local = true;  // 変数はローカル変数
+  if (!top->var)           // topにまだ変数がない場合
+    top->var = new;
   variables_head = new;
   return new;
 }
@@ -145,7 +149,7 @@ char *add_string_literal(Token *token)
   // 仕様として文字列の変更が認められていないため可能
   for (literal_list *pointer = literal_top; pointer; pointer = pointer->next)
     if (token->len == pointer->len &&
-        strncmp(token->str, pointer->name, pointer->len))
+        !strncmp(token->str, pointer->name, pointer->len))
       return pointer->literal_name;
   literal_list *new = calloc(1, sizeof(literal_list));
   if (literal_top) literal_top->next = new;

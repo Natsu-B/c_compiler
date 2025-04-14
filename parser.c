@@ -93,7 +93,7 @@ TypeKind find_type()
 }
 
 /**
- * program    = function_definiton | declaration
+ * program    = function_definition | declaration
  * function_definition = type ( "*" )* ident "(" expr ("," expr )* ")"{stmt*}
  * stmt    = expr ";"
  *         | "{" stmt "}"

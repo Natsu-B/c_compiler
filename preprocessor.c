@@ -559,7 +559,7 @@ Token *preprocess(char *input, char *file_name, Token *token)
   File_Name = old_file_name;
   File_Line = old_file_line;
   File_Start = old_file_start;
-  error_init(File_Name, File_Start);
+  if (File_Name) error_init(File_Name, File_Start);
   pr_debug("end preprocessing %s", file_name);
   return token;
 }

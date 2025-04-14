@@ -67,7 +67,6 @@ size_t size_of(TypeKind type)
 // 移すサイズによってmv命令を変更する
 char *mv_instruction_specifier(int size, bool is_sighed)
 {
-  static char mv_instruction[7] = {};
   char *tmp;
   if (is_sighed)
   {
@@ -105,14 +104,12 @@ char *mv_instruction_specifier(int size, bool is_sighed)
         break;
     }
   }
-  memcpy(mv_instruction, tmp, 7);
-  return mv_instruction;
+  return tmp;
 }
 
 // アクセスサイズの指定子を作成する
 char *access_size_specifier(int size)
 {
-  static char size_specifier[10] = {};
   char *tmp;
   switch (size)
   {
@@ -132,8 +129,7 @@ char *access_size_specifier(int size)
       error_exit("unknown access size specifier");
       break;
   }
-  memcpy(size_specifier, tmp, 10);
-  return size_specifier;
+  return tmp;
 }
 
 typedef enum
@@ -173,7 +169,6 @@ char *chose_register(int size, register_type reg_type)
       error_exit_with_guard("unknown register size");
       break;
   }
-  static char register_name[5] = {};
   char *tmp;
   int type = reg_type * 4 + size;
   switch (type)
@@ -374,8 +369,7 @@ char *chose_register(int size, register_type reg_type)
       error_exit_with_guard("unknown register type");
       break;
   }
-  memcpy(register_name, tmp, 5);
-  return register_name;
+  return tmp;
 }
 
 void gen(Node *node);

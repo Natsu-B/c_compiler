@@ -29,7 +29,8 @@ bool vector_has_data(Vector *vec)
 
 size_t vector_size(Vector *vec)
 {
-  if (!vec) return 0;
+  if (!vec)
+    return 0;
   return vec->len;
 }
 
@@ -43,7 +44,8 @@ void vector_push(Vector *vec, void *data)
 // lenは1始まり
 void vector_insert(Vector *vec, size_t len, void *data)
 {
-  if (vec->len + 1 < len) error_exit("Invalid vector insertion");
+  if (vec->len + 1 < len)
+    error_exit("Invalid vector insertion");
   size_t len_max = (vec->len < len ? len : vec->len);
   if (vec->capacity < len_max)
     vec->data = realloc(vec->data, vec->capacity + 8);
@@ -52,13 +54,15 @@ void vector_insert(Vector *vec, size_t len, void *data)
 
 void *vector_pop(Vector *vec)
 {
-  if (vec->len == 0) error_exit("Vector size is 0");
+  if (vec->len == 0)
+    error_exit("Vector size is 0");
   return vec->data[--vec->len];
 }
 
 void *vector_shift(Vector *vec)
 {
-  if (vec->len == 0) error_exit("Vector size is 0");
+  if (vec->len == 0)
+    error_exit("Vector size is 0");
   void *data = vec->data[0];
   if (vec->len > 1)
     memmove(&vec->data[0], &vec->data[1], sizeof(void *) * (vec->len - 1));
@@ -68,7 +72,8 @@ void *vector_shift(Vector *vec)
 
 void *vector_peek(Vector *vec)
 {
-  if (vec->len == 0) error_exit("Vector size is 0");
+  if (vec->len == 0)
+    error_exit("Vector size is 0");
   return vec->data[vec->len - 1];
 }
 
@@ -85,6 +90,7 @@ void *vector_peek_at(Vector *vec, size_t location)
 
 void vector_free(Vector *vec)
 {
-  if (vec->data) free(vec->data);
+  if (vec->data)
+    free(vec->data);
   free(vec);
 }

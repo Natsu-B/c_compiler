@@ -30,7 +30,8 @@ static Var *find_local_var_in_current_nested_block(Token *token)
 // 今まで出てきたローカル変数をすべて探索する ネストが深い方から探索していく
 static Var *find_local_var_all(Token *token)
 {
-  if (top == root) return NULL;
+  if (top == root)
+    return NULL;
   for (NestedBlockVariables *pointer = top; pointer != root;
        pointer = pointer->next)
     for (Var *var = pointer->var; var; var = var->next)
@@ -77,7 +78,8 @@ NestedBlockVariables *new_nest()
 // ネストを戻すときに実行する関数
 void exit_nest()
 {
-  if (!top->next) unreachable();  // parserでエラーになるはず
+  if (!top->next)
+    unreachable();  // parserでエラーになるはず
   top = top->next;
   variables_head = vector_pop(variables_list);
   var_counter = top->counter;
@@ -103,7 +105,8 @@ Var *add_variables(Token *token, TypeKind kind, size_t pointer_counter)
   // 新規変数の場合
   Var *new = calloc(1, sizeof(Var));
   new->token = token;
-  if (variables_head) variables_head->next = new;
+  if (variables_head)
+    variables_head->next = new;
   new->name = token->str;
   new->len = token->len;
   Type *type = alloc_type(kind);
@@ -152,7 +155,8 @@ char *add_string_literal(Token *token)
         !strncmp(token->str, pointer->name, pointer->len))
       return pointer->literal_name;
   literal_list *new = calloc(1, sizeof(literal_list));
-  if (literal_top) literal_top->next = new;
+  if (literal_top)
+    literal_top->next = new;
   literal_top = new;
   literal_top->name = token->str;
   literal_top->len = token->len;
@@ -160,11 +164,13 @@ char *add_string_literal(Token *token)
   // 9999個まで文字列リテラルが存在可能
   char *literal_name = malloc(8);
   int snprintf_return = snprintf(literal_name, 8, ".LC%lu", literal_counter++);
-  if (snprintf_return < 3 || snprintf_return > 7) unreachable();
+  if (snprintf_return < 3 || snprintf_return > 7)
+    unreachable();
   pr_debug2("literal_name: %s", literal_name);
   literal_top->literal_name = literal_name;
   // グローバル変数に追加
-  if (find_global_var_no_token(literal_name, snprintf_return)) unreachable();
+  if (find_global_var_no_token(literal_name, snprintf_return))
+    unreachable();
   Var *new_var = calloc(1, sizeof(Var));
   if (globals_head)
     globals_head->next = new_var;
@@ -180,4 +186,7 @@ char *add_string_literal(Token *token)
   return literal_name;
 }
 
-Var *get_global_var() { return root->var; }
+Var *get_global_var()
+{
+  return root->var;
+}

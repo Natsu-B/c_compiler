@@ -45,8 +45,10 @@ int find_macro_name_without_hide_set(Token *identifier, Vector *hide_set,
     if (tmp->identifier->len == identifier->len &&
         !strncmp(tmp->identifier->str, identifier->str, tmp->identifier->len))
     {
-      if (token_string) *token_string = tmp->token_string;
-      if (token) *token = tmp->identifier;
+      if (token_string)
+        *token_string = tmp->token_string;
+      if (token)
+        *token = tmp->identifier;
       return 1;
     }
   }
@@ -58,9 +60,12 @@ int find_macro_name_without_hide_set(Token *identifier, Vector *hide_set,
     if (tmp->identifier->len == identifier->len &&
         !strncmp(tmp->identifier->str, identifier->str, tmp->identifier->len))
     {
-      if (token_string) *token_string = tmp->token_string;
-      if (argument_list) *argument_list = tmp->arguments;
-      if (token) *token = tmp->identifier;
+      if (token_string)
+        *token_string = tmp->token_string;
+      if (argument_list)
+        *argument_list = tmp->arguments;
+      if (token)
+        *token = tmp->identifier;
       return 2;
     }
   }
@@ -76,7 +81,8 @@ void add_object_like_macro(Vector *token_list)
   object_like_macro_storage *new = malloc(sizeof(object_like_macro_storage));
   new->identifier = identifier;
   new->token_string = token_list;
-  if (!object_like_macro_list) object_like_macro_list = vector_new();
+  if (!object_like_macro_list)
+    object_like_macro_list = vector_new();
   vector_push(object_like_macro_list, new);
 }
 
@@ -91,6 +97,7 @@ void add_function_like_macro(Vector *token_list)
   new->identifier = identifier;
   new->arguments = vector_shift(token_list);
   new->token_string = token_list;
-  if (!function_like_macro_list) function_like_macro_list = vector_new();
+  if (!function_like_macro_list)
+    function_like_macro_list = vector_new();
   vector_push(function_like_macro_list, new);
 }

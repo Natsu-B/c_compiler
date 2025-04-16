@@ -1,2 +1,6 @@
 BasedOnStyle: Google
 BreakBeforeBraces: Allman
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false

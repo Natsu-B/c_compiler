@@ -70,14 +70,17 @@ void _error_at(char *error_location, size_t error_len, char *file, int line,
   // error_locationの行を特定
   // 行開始
   char *start_line = error_location;
-  while (user_input < start_line && start_line[-1] != '\n') start_line--;
+  while (user_input < start_line && start_line[-1] != '\n')
+    start_line--;
   // 行終了
   char *end_line = error_location;
-  while (*end_line != '\n') end_line++;
+  while (*end_line != '\n')
+    end_line++;
   // 何行目か
   int line_num = 1;
   for (char *p = user_input; p < start_line; p++)
-    if (*p == '\n') line_num++;
+    if (*p == '\n')
+      line_num++;
   // エラー位置特定
   size_t error_position = error_location - start_line;
   fprintf(stderr, "%s:%d\n", file_name, line_num);

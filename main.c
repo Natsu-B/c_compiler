@@ -19,7 +19,8 @@ bool output_preprocess;
 int main(int argc, char **argv)
 {
   fprintf(stdout, "\e[32mc_compiler\e[37m\n");
-  if (argc < 3) error_exit("invalid arguments");
+  if (argc < 3)
+    error_exit("invalid arguments");
   char *input_file_name = NULL;
   char *output_file_name = NULL;
   char *input = NULL;
@@ -43,15 +44,18 @@ int main(int argc, char **argv)
         error_exit("invalid arguments");
     }
   }
-  if (input_file_name) input = openfile(input_file_name);
-  if (!input || !output_file_name) error_exit("invalid arguments");
+  if (input_file_name)
+    input = openfile(input_file_name);
+  if (!input || !output_file_name)
+    error_exit("invalid arguments");
   pr_debug("output_file_name: %s", output_file_name);
   pr_debug("input_file_name: %s", input_file_name);
 
   init_preprocessor();
   // プリプロセッサ(トークナイザ内包)
   Token *token = preprocess(input, input_file_name, NULL);
-  if (output_preprocess) preprocessed_file_writer(token, output_file_name);
+  if (output_preprocess)
+    preprocessed_file_writer(token, output_file_name);
   // トークナイザ
   re_tokenize(token);
   // パーサ

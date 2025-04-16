@@ -52,62 +52,55 @@ static size_t operator_precedence(conditional_inclusion_type type)
     case CPPTK_NOT:         // !
     case CPPTK_Bitwise:     // ~
       return 11;
-    default:
-      unreachable();
-      return __UINT32_MAX__;  // unreachable
+    default: unreachable(); return __UINT32_MAX__;  // unreachable
   }
 }
 
 conditional_inclusion_type reserved_token_to_type(Token *token)
 {
-  if (token->kind != TK_RESERVED) unreachable();
+  if (token->kind != TK_RESERVED)
+    unreachable();
   // TODO CPPTK_Conditional
   switch (token->len)
   {
     case 1:
       switch (token->str[0])
       {
-        case '<':
-          return CPPTK_LessThan;
-        case '>':
-          return CPPTK_GreaterThan;
-        case '+':
-          return CPPTK_UnaryPlus;
-        case '-':
-          return CPPTK_UnaryMinus;
-        case '*':
-          return CPPTK_Mul;
-        case '/':
-          return CPPTK_Div;
-        case '%':
-          return CPPTK_DivReminder;
-        case '!':
-          return CPPTK_NOT;
-        case '~':
-          return CPPTK_Bitwise;
-        case '&':
-          return CPPTK_AND;
-        case '|':
-          return CPPTK_Inclusive_OR;
-        case '^':
-          return CPPTK_Exclusive_OR;
-        default:
-          break;
+        case '<': return CPPTK_LessThan;
+        case '>': return CPPTK_GreaterThan;
+        case '+': return CPPTK_UnaryPlus;
+        case '-': return CPPTK_UnaryMinus;
+        case '*': return CPPTK_Mul;
+        case '/': return CPPTK_Div;
+        case '%': return CPPTK_DivReminder;
+        case '!': return CPPTK_NOT;
+        case '~': return CPPTK_Bitwise;
+        case '&': return CPPTK_AND;
+        case '|': return CPPTK_Inclusive_OR;
+        case '^': return CPPTK_Exclusive_OR;
+        default: break;
       }
       break;
 
     case 2:
-      if (memcmp(token->str, "&&", 2) == 0) return CPPTK_Logical_AND;
-      if (memcmp(token->str, "||", 2) == 0) return CPPTK_Logical_OR;
-      if (memcmp(token->str, "==", 2) == 0) return CPPTK_Equality;
-      if (memcmp(token->str, "!=", 2) == 0) return CPPTK_NEquality;
-      if (memcmp(token->str, "<=", 2) == 0) return CPPTK_LessThanEq;
-      if (memcmp(token->str, ">=", 2) == 0) return CPPTK_GreaterThanEq;
-      if (memcmp(token->str, "<<", 2) == 0) return CPPTK_LeftShift;
-      if (memcmp(token->str, ">>", 2) == 0) return CPPTK_RightShift;
+      if (memcmp(token->str, "&&", 2) == 0)
+        return CPPTK_Logical_AND;
+      if (memcmp(token->str, "||", 2) == 0)
+        return CPPTK_Logical_OR;
+      if (memcmp(token->str, "==", 2) == 0)
+        return CPPTK_Equality;
+      if (memcmp(token->str, "!=", 2) == 0)
+        return CPPTK_NEquality;
+      if (memcmp(token->str, "<=", 2) == 0)
+        return CPPTK_LessThanEq;
+      if (memcmp(token->str, ">=", 2) == 0)
+        return CPPTK_GreaterThanEq;
+      if (memcmp(token->str, "<<", 2) == 0)
+        return CPPTK_LeftShift;
+      if (memcmp(token->str, ">>", 2) == 0)
+        return CPPTK_RightShift;
       break;
-    default:
-      error_at(token->str, token->len, "invalid #if directive");
+    default: error_at(token->str, token->len, "invalid #if directive");
   }
   return CPPTK_Reserved;  // unreachable
 }
@@ -138,7 +131,8 @@ static void shunting_yard_algorithm(Token *token)
         {  // operator_stack から output_listへ移す
           conditional_inclusion_token *new =
               calloc(1, sizeof(conditional_inclusion_token));
-          if (old != vector_pop(operator_stack)) unreachable();
+          if (old != vector_pop(operator_stack))
+            unreachable();
           new->type = *old;
           vector_push(output_list, new);
         }
@@ -289,17 +283,17 @@ static bool reverse_polish_notation_stack_machine()
             *((long long *)(rhs->data)) =
                 *((long long *)(rhs->data)) % *((long long *)(lhs->data));
             break;
-          default:
-            unreachable();
-            break;
+          default: unreachable(); break;
         }
         vector_push(stack, rhs);
       }
         continue;
     }
   }
-  bool result = *((long long *)((conditional_inclusion_token *)vector_pop(stack))->data);
-  if (vector_has_data(stack)) error_exit("invalid #if directive");
+  bool result =
+      *((long long *)((conditional_inclusion_token *)vector_pop(stack))->data);
+  if (vector_has_data(stack))
+    error_exit("invalid #if directive");
   return result;
 }
 
@@ -345,8 +339,10 @@ static void clean_while_next(Token *head, Token *next)
 {
   while (head != next)
   {
-    if (head->kind == TK_EOF) error_exit("#ifディレクティブが閉じていません");
-    if (head->kind != TK_LINEBREAK) token_void(head);
+    if (head->kind == TK_EOF)
+      error_exit("#ifディレクティブが閉じていません");
+    if (head->kind != TK_LINEBREAK)
+      token_void(head);
     head = head->next;
   }
 }
@@ -364,12 +360,14 @@ void next_conditional_inclusion(Token *token, bool is_true,
       if (!strncmp(token->str, "#else", 5))
       {  // #else
         Token *next = vector_shift(conditional_list);
-        if (is_true) clean_while_next(token, next);
+        if (is_true)
+          clean_while_next(token, next);
         next_conditional_inclusion(next, !is_true, conditional_list, true);
       }
       else
       {  // #elif
-        if (is_end) error_at(token->str, token->len, "Invalid #elif use");
+        if (is_end)
+          error_at(token->str, token->len, "Invalid #elif use");
         if (!is_true)
           _conditional_inclusion(token_if, token, conditional_list);
         else
@@ -385,7 +383,8 @@ void next_conditional_inclusion(Token *token, bool is_true,
       return;
     case 8:  // #elifdef
     case 9:  // #elifndef
-      if (is_end) error_at(token->str, token->len, "Invalid #elifdef use");
+      if (is_end)
+        error_at(token->str, token->len, "Invalid #elifdef use");
       if (!is_true)
       {
         if (token->len == 8)  // #elifdef
@@ -401,9 +400,7 @@ void next_conditional_inclusion(Token *token, bool is_true,
       }
       token_void(token);
       break;
-    default:
-      unreachable();
-      break;
+    default: unreachable(); break;
   }
 }
 
@@ -418,7 +415,8 @@ static void _conditional_inclusion(if_directive type, Token *head,
       head = token_next_not_ignorable_void(head);
       bool is_true = condition_interpreter(head);
       Token *next = vector_shift(conditional_list);
-      if (!is_true) clean_while_next(head, next);
+      if (!is_true)
+        clean_while_next(head, next);
       next_conditional_inclusion(next, is_true, conditional_list, false);
     }
     break;
@@ -430,7 +428,8 @@ static void _conditional_inclusion(if_directive type, Token *head,
       bool is_true = false;
       if (find_macro_name_all(head))
       {
-        if (type == token_ifdef) is_true = true;
+        if (type == token_ifdef)
+          is_true = true;
       }
       else if (type == token_ifndef)
         is_true = true;
@@ -439,12 +438,12 @@ static void _conditional_inclusion(if_directive type, Token *head,
 
       // #else #endif 等の対応するディレクティブ
       Token *next = vector_shift(conditional_list);
-      if (!is_true) clean_while_next(head, next);
+      if (!is_true)
+        clean_while_next(head, next);
       next_conditional_inclusion(next, is_true, conditional_list, false);
     }
     break;
-    default:
-      unreachable();
+    default: unreachable();
   }
 }
 

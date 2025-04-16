@@ -85,7 +85,8 @@ Token *directive(Token *token)
       if (!strncmp(token->str, "#if", 3))
       {
         Vector *conditional_list = vector_shift(Conditional_Inclusion_List);
-        if (token != vector_peek_at(conditional_list, 1)) unreachable();
+        if (token != vector_peek_at(conditional_list, 1))
+          unreachable();
         conditional_inclusion(token_if, conditional_list);
         return token->next;
       }
@@ -101,7 +102,8 @@ Token *directive(Token *token)
       if (!strncmp(token->str, "#ifdef", 6))
       {
         Vector *conditional_list = vector_shift(Conditional_Inclusion_List);
-        if (token != vector_peek_at(conditional_list, 1)) unreachable();
+        if (token != vector_peek_at(conditional_list, 1))
+          unreachable();
         conditional_inclusion(token_ifdef, conditional_list);
         return token->next;
       }
@@ -130,8 +132,7 @@ Token *directive(Token *token)
         switch (ptr->kind)
         {
           case TK_LINEBREAK:
-          case TK_IDENT:
-            break;
+          case TK_IDENT: break;
           case TK_RESERVED:
             // function like macroのときの動作
             if (ptr->str[0] == '(')
@@ -156,7 +157,8 @@ Token *directive(Token *token)
                       error_at(new->str, new->len, "duplicate macro parameter");
                   }
                   vector_push(formal_parameter, new);
-                  while (ptr->kind == TK_IGNORABLE) ptr = ptr->next;
+                  while (ptr->kind == TK_IGNORABLE)
+                    ptr = ptr->next;
                   if (ptr->kind == TK_RESERVED)
                   {
                     if (ptr->str[0] == ')')
@@ -177,12 +179,12 @@ Token *directive(Token *token)
               break;
             }
           // fall through
-          default:
-            error_at(token->str, token->len, "invalid #define use");
+          default: error_at(token->str, token->len, "invalid #define use");
         }
         for (;;)
         {
-          if (ptr->kind == TK_LINEBREAK) break;
+          if (ptr->kind == TK_LINEBREAK)
+            break;
 
           Token *new = malloc(sizeof(Token));
           memcpy(new, ptr, sizeof(Token));
@@ -200,7 +202,8 @@ Token *directive(Token *token)
       if (!strncmp(token->str, "#ifndef", 7))
       {
         Vector *conditional_list = vector_shift(Conditional_Inclusion_List);
-        if (token != vector_peek_at(conditional_list, 1)) unreachable();
+        if (token != vector_peek_at(conditional_list, 1))
+          unreachable();
         conditional_inclusion(token_ifndef, conditional_list);
         return token->next;
       }
@@ -258,7 +261,8 @@ Token *directive(Token *token)
             memcpy(file_name, lib_path[i], lib_path_size[i] - 1);
             pr_debug("file path: %s", file_name);
             include_file_ptr = fopen(file_name, "r");
-            if (include_file_ptr) break;
+            if (include_file_ptr)
+              break;
           }
         }
         if (!include_file_ptr)
@@ -279,8 +283,7 @@ Token *directive(Token *token)
         return token->next;
       }
       break;
-    default:
-      break;
+    default: break;
   }
   error_at(token->str, token->len, "unknown directive");
   return NULL;  // unreachable
@@ -297,9 +300,7 @@ void preprocessor()
       case TK_DIRECTIVE:  // '#'がトークン先頭に存在する場合
         token = directive(token);
         break;
-      case TK_LINEBREAK:
-        File_Line++;
-        break;
+      case TK_LINEBREAK: File_Line++; break;
       case TK_IDENT:  // 識別子がトークン先頭の場合
       {
         // #defineで定義されているものを展開する
@@ -341,7 +342,8 @@ void preprocessor()
             if (is_date || is_time)
             {
               time_t current_time = time(NULL);
-              if (current_time == -1) error_exit("failed to get time");
+              if (current_time == -1)
+                error_exit("failed to get time");
               // asctime
               char *asctime_str = asctime(localtime(&current_time));
               char *time_str;
@@ -523,8 +525,7 @@ void preprocessor()
         vector_free(hide_set);
       }
       break;
-      default:
-        break;
+      default: break;
     }
     // 次のトークンに送る
     token = token->next;
@@ -560,7 +561,8 @@ Token *preprocess(char *input, char *file_name, Token *token)
   File_Name = old_file_name;
   File_Line = old_file_line;
   File_Start = old_file_start;
-  if (File_Name) error_init(File_Name, File_Start);
+  if (File_Name)
+    error_init(File_Name, File_Start);
   pr_debug("end preprocessing %s", file_name);
   return token;
 }
@@ -575,7 +577,8 @@ void preprocessed_file_writer(Token *token, char *output_filename)
   }
   for (;;)
   {
-    if (!token) break;
+    if (!token)
+      break;
     fprintf(fout, "%.*s", (int)token->len, token->str);
     token = token->next;
   }

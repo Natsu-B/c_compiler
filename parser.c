@@ -86,9 +86,12 @@ TypeKind find_type()
   Token *is_int = consume_tokenkind(TK_INT);
   Token *is_long = consume_tokenkind(TK_LONG);
   Token *is_char = consume_tokenkind(TK_CHAR);
-  if (is_long && !is_char) return TYPE_LONG;
-  if (is_int && !is_long && !is_char) return TYPE_INT;
-  if (is_char && !is_int && !is_long) return TYPE_CHAR;
+  if (is_long && !is_char)
+    return TYPE_LONG;
+  if (is_int && !is_long && !is_char)
+    return TYPE_INT;
+  if (is_char && !is_int && !is_long)
+    return TYPE_CHAR;
   return TYPE_NULL;
 }
 
@@ -233,7 +236,8 @@ Node *stmt()
     node->var_list = new_nest();
     for (;;)
     {
-      if (consume("}")) break;
+      if (consume("}"))
+        break;
       NDBlock *next = calloc(1, sizeof(NDBlock));
       pointer->next = next;
       next->node = stmt();
@@ -421,11 +425,14 @@ Node *unary()
   pr_debug2("unary");
   if (consume_tokenkind(TK_SIZEOF))
     return new_node(ND_SIZEOF, unary(), NULL, get_old_token());
-  if (consume("+")) return postfix();
+  if (consume("+"))
+    return postfix();
   if (consume("-"))
     return new_node(ND_SUB, new_node_num(0), postfix(), get_old_token());
-  if (consume("*")) return new_node(ND_DEREF, unary(), NULL, get_old_token());
-  if (consume("&")) return new_node(ND_ADDR, unary(), NULL, get_old_token());
+  if (consume("*"))
+    return new_node(ND_DEREF, unary(), NULL, get_old_token());
+  if (consume("&"))
+    return new_node(ND_ADDR, unary(), NULL, get_old_token());
   return postfix();
 }
 

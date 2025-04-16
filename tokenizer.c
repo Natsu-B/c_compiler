@@ -21,14 +21,21 @@ const char *tokenkindlist[TK_END] = {TokenKindTable};
 
 // トークンの位置を引数の位置に変更する
 // かなり危険なため利用は注意を
-void set_token(Token *next) { token = next; }
+void set_token(Token *next)
+{
+  token = next;
+}
 
-Token *get_token() { return token; }
+Token *get_token()
+{
+  return token;
+}
 
 // 次の次のトークン(1つ先のトークン)が引数のトークンだったらtrueを返す
 bool peek_next_TokenKind(TokenKind kind)
 {
-  if (token->next->kind != kind) return false;
+  if (token->next->kind != kind)
+    return false;
   return true;
 }
 
@@ -69,7 +76,8 @@ Token *expect_tokenkind(TokenKind kind)
 // 次のトークンが引数のトークンの種類だったら読み勧めてそのTokenを返す
 Token *consume_tokenkind(TokenKind kind)
 {
-  if (token->kind != kind) return NULL;
+  if (token->kind != kind)
+    return NULL;
   token_old = token;
   token = token->next;
   return token_old;
@@ -98,7 +106,8 @@ Token *expect(char *op)
 // 一つ前のトークンを取得する
 Token *get_old_token()
 {
-  if (token_old->next != token) unreachable();
+  if (token_old->next != token)
+    unreachable();
   return token_old;
 }
 
@@ -113,7 +122,10 @@ long expect_number()
 }
 
 // トークンが最後(TK_EOF)だったらtrueを、でなければfalseを返す関数
-bool at_eof() { return token->kind == TK_EOF; }
+bool at_eof()
+{
+  return token->kind == TK_EOF;
+}
 
 // 与えられた引数がトークンを構成するかどうか 英数字と '_'
 int is_alnum(char c)
@@ -169,14 +181,16 @@ Token *tokenizer(char *input, Token *next_token)
     {
       input++;
       size_t i = 1;
-      while (*++input != '\n') i++;
+      while (*++input != '\n')
+        i++;
       cur = new_token(TK_IGNORABLE, cur, input - i);
       continue;
     }
     if (!strncmp(input, "/*", 2))
     {
       char *end = strstr(input + 2, "*/");
-      if (!end) error_at(input, 1, "コメントが閉じられていません");
+      if (!end)
+        error_at(input, 1, "コメントが閉じられていません");
       cur = new_token(TK_IGNORABLE, cur, input);
       char *pointer = input;
       while (pointer <= end)
@@ -199,7 +213,8 @@ Token *tokenizer(char *input, Token *next_token)
     {
       cur = new_token(TK_DIRECTIVE, cur, input);
       size_t counter = 1;
-      while (is_alnum(*++input)) counter++;
+      while (is_alnum(*++input))
+        counter++;
       cur->len = counter;
       // Conditional_Inclusion (#if #endif 等)を高速化するためにまとめる
       if ((counter == 3 && !strncmp(cur->str, "#if", 3)) ||
@@ -250,7 +265,8 @@ Token *tokenizer(char *input, Token *next_token)
     if (isdigit(*input))
     {
       int i = 1;
-      while (isdigit(*++input)) i++;
+      while (isdigit(*++input))
+        i++;
       cur = new_token(TK_IDENT, cur, input - i);
       cur->len = i;
       continue;
@@ -260,7 +276,8 @@ Token *tokenizer(char *input, Token *next_token)
     if (*input == '"')
     {
       int i = 0;  // 文字列のサイズ("は除く)
-      while (*(++input) != '"') i++;
+      while (*(++input) != '"')
+        i++;
       input++;  // 終了まで送る
       cur = new_token(TK_STRING, cur, input - i - 2);
       cur->len = i + 2;
@@ -322,8 +339,7 @@ void re_tokenize(Token *token_head)
     {
       case TK_IGNORABLE:
       case TK_LINEBREAK:
-      case TK_EOF:
-        break;
+      case TK_EOF: break;
       case TK_IDENT:
         // 数字
         if (isdigit(token->str[0]))
@@ -332,7 +348,8 @@ void re_tokenize(Token *token_head)
           char *tmp;
           size_t token_size = token->len;
           cur->val = strtol(token->str, &tmp, 10);
-          if (token->str + token_size > tmp) unreachable();
+          if (token->str + token_size > tmp)
+            unreachable();
           pr_debug2("find NUM token: %ld", cur->val);
           break;
         }

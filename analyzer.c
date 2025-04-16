@@ -34,25 +34,35 @@ TypeKind implicit_type_conversion(Type *lhs, Type *rhs)
   if (lhs->type == TYPE_PTR || lhs->type == TYPE_ARRAY ||
       rhs->type == TYPE_PTR || rhs->type == TYPE_ARRAY)
     return TYPE_NULL;
-  if (lhs->type == TYPE_LONG || rhs->type == TYPE_LONG) return TYPE_LONG;
-  if (lhs->type == TYPE_INT || rhs->type == TYPE_INT) return TYPE_INT;
-  if (lhs->type == TYPE_CHAR || rhs->type == TYPE_CHAR) return TYPE_CHAR;
+  if (lhs->type == TYPE_LONG || rhs->type == TYPE_LONG)
+    return TYPE_LONG;
+  if (lhs->type == TYPE_INT || rhs->type == TYPE_INT)
+    return TYPE_INT;
+  if (lhs->type == TYPE_CHAR || rhs->type == TYPE_CHAR)
+    return TYPE_CHAR;
   return TYPE_NULL;
 }
 
 void add_type(Node *node)
 {
-  if (node->lhs) add_type(node->lhs);
-  if (node->rhs) add_type(node->rhs);
-  if (node->condition) add_type(node->condition);
-  if (node->true_code) add_type(node->true_code);
+  if (node->lhs)
+    add_type(node->lhs);
+  if (node->rhs)
+    add_type(node->rhs);
+  if (node->condition)
+    add_type(node->condition);
+  if (node->true_code)
+    add_type(node->true_code);
   if (node->false_code)  // node->init も同じ
     add_type(node->false_code);
-  if (node->update) add_type(node->update);
+  if (node->update)
+    add_type(node->update);
   if (node->expr)
-    for (NDBlock *tmp = node->expr; tmp; tmp = tmp->next) add_type(tmp->node);
+    for (NDBlock *tmp = node->expr; tmp; tmp = tmp->next)
+      add_type(tmp->node);
   if (node->stmt)
-    for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next) add_type(tmp->node);
+    for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
+      add_type(tmp->node);
 
   if (node->kind == ND_VAR)
   {
@@ -160,14 +170,20 @@ void add_type(Node *node)
 
 void analyze_type(Node *node)
 {
-  if (node->lhs) analyze_type(node->lhs);
-  if (node->rhs) analyze_type(node->rhs);
-  if (node->init) analyze_type(node->init);
-  if (node->condition) analyze_type(node->condition);
-  if (node->true_code) analyze_type(node->true_code);
+  if (node->lhs)
+    analyze_type(node->lhs);
+  if (node->rhs)
+    analyze_type(node->rhs);
+  if (node->init)
+    analyze_type(node->init);
+  if (node->condition)
+    analyze_type(node->condition);
+  if (node->true_code)
+    analyze_type(node->true_code);
   if (node->false_code)  // node->init も同じ
     analyze_type(node->false_code);
-  if (node->update) analyze_type(node->update);
+  if (node->update)
+    analyze_type(node->update);
   if (node->expr)
     for (NDBlock *tmp = node->expr; tmp; tmp = tmp->next)
       analyze_type(tmp->node);
@@ -224,9 +240,7 @@ void analyze_type(Node *node)
               node->var->offset = calculate_offset(
                   size_of(node->type->ptr_to->type) * node->type->size);
               break;
-            default:
-              error_exit("unreachable");
-              break;
+            default: error_exit("unreachable"); break;
           }
         }
       }
@@ -238,23 +252,16 @@ void analyze_type(Node *node)
       {
         case TYPE_PTR:
         case TYPE_INT:
-        case TYPE_LONG:
-          node->val = size_of(node->lhs->type->type);
-          break;
-        case TYPE_CHAR:
-          node->val = size_of(node->lhs->type->type);
-          break;
+        case TYPE_LONG: node->val = size_of(node->lhs->type->type); break;
+        case TYPE_CHAR: node->val = size_of(node->lhs->type->type); break;
         case TYPE_ARRAY:
           node->val = size_of(node->lhs->type->type) * node->lhs->val;
           break;
-        default:
-          error_exit("unreachable");
-          break;
+        default: error_exit("unreachable"); break;
       }
       break;
 
-    default:
-      break;
+    default: break;
   }
 }
 
@@ -277,7 +284,8 @@ FuncBlock *analyzer(FuncBlock *funcblock)
     }
     else if (node->kind == ND_VAR)
     {
-      if (node->var->is_local) error_exit("failed to parse correctly");
+      if (node->var->is_local)
+        error_exit("failed to parse correctly");
       add_type(node);
     }
     else
@@ -319,7 +327,8 @@ FuncBlock *analyzer(FuncBlock *funcblock)
   Var *pointer = get_global_var();
   for (; pointer; pointer = pointer->next)
   {
-    if (pointer->how2_init == reserved) pointer->how2_init = init_zero;
+    if (pointer->how2_init == reserved)
+      pointer->how2_init = init_zero;
   }
   return funcblock;
 }

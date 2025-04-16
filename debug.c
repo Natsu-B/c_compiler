@@ -35,7 +35,8 @@ void print_tokenize_result(Token *token)
   pr_debug("tokenize result:");
   for (;;)
   {
-    if (token->kind == TK_EOF) break;
+    if (token->kind == TK_EOF)
+      break;
     if (token->kind == TK_NUM)
       fprintf(stdout, "%ld\t: %s\n", token->val, tokenkindlist[token->kind]);
     else
@@ -47,7 +48,8 @@ void print_tokenize_result(Token *token)
 
 void make_space(int nest)
 {
-  for (int i = 0; i < nest; i++) fprintf(stdout, "|   ");
+  for (int i = 0; i < nest; i++)
+    fprintf(stdout, "|   ");
 }
 
 void _print_parse_result(Node *node, int nest)

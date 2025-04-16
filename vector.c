@@ -24,8 +24,7 @@ Vector *vector_new()
 
 bool vector_has_data(Vector *vec)
 {
-  if (vec->len) return true;
-  return false;
+  return vec->len;
 }
 
 size_t vector_size(Vector *vec)

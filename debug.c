@@ -4,12 +4,31 @@
 #include <stdio.h>
 
 #include "include/analyzer.h"
+#include "include/conditional_inclusion.h"
 #include "include/define.h"
 #include "include/error.h"
 #include "include/parser.h"
 #include "include/tokenizer.h"
 
 extern GTLabel *head_label;
+extern Vector *output_list;
+
+static char *CPPTKlist[] = {CPPTK_list};
+
+void print_polish_notation()
+{
+  pr_debug("polish notation:");
+  printf("vector size: %lu\n", vector_size(output_list));
+  for (size_t i = 1; i <= vector_size(output_list); i++)
+  {
+    conditional_inclusion_token *token = vector_peek_at(output_list, i);
+    printf("%s", CPPTKlist[token->type]);
+    if (token->type == CPPTK_Integer)
+      printf(": %lld", *(long long *)(token->data));
+    printf("\n");
+  }
+  pr_debug("end polish notation");
+}
 
 void print_tokenize_result(Token *token)
 {

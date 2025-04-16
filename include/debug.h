@@ -3,6 +3,7 @@
 #include "parser.h"
 #include "tokenizer.h"
 
+void print_polish_notation();
 void print_tokenize_result(Token* token);
 void print_parse_result(FuncBlock* node);
 void print_definition();

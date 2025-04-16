@@ -288,6 +288,7 @@ Token *directive(Token *token)
 
 void preprocessor()
 {
+  pr_debug2("start preprocessor");
   Token *token = get_token();
   while (token->kind != TK_EOF)
   {

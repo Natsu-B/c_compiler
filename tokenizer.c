@@ -19,8 +19,6 @@ Token *token_old;  // tokenの一つあとのトークン
 
 const char *tokenkindlist[TK_END] = {TokenKindTable};
 
-static Vector *nest_list;  // nestごとにConditional Inclusion Listを分けて持つ
-
 // トークンの位置を引数の位置に変更する
 // かなり危険なため利用は注意を
 void set_token(Token *next) { token = next; }
@@ -142,7 +140,7 @@ Token *tokenizer(char *input, Token *next_token)
   Token head;
   head.next = NULL;
   Token *cur = &head;
-  nest_list = vector_new();
+  Vector *nest_list = vector_new();
   while (*input)
   {
     // 改行 isspaceでは'\n'も処理されてしまうのでそれより前に置く
@@ -211,7 +209,7 @@ Token *tokenizer(char *input, Token *next_token)
         Vector *new = vector_new();
         vector_push(Conditional_Inclusion_List, new);
         vector_push(nest_list, new);
-        vector_push(vector_peek(nest_list), cur);
+        vector_push(new, cur);
         continue;
       }
       if ((counter == 5 && (!strncmp(cur->str, "#else", 5) ||
@@ -293,6 +291,7 @@ Token *tokenizer(char *input, Token *next_token)
 #ifdef DEBUG
   print_tokenize_result(head.next);
 #endif
+
   token = head.next;
   return token;
 }

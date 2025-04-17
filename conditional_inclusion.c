@@ -70,6 +70,7 @@ conditional_inclusion_type reserved_token_to_type(Token *token, bool is_unary)
       case '-': return CPPTK_UnaryMinus;
       case '!': return CPPTK_NOT;
       case '~': return CPPTK_Bitwise;
+      case '(': return CPPTK_Parentheses_Start;
       default: break;
     }
   }
@@ -90,6 +91,7 @@ conditional_inclusion_type reserved_token_to_type(Token *token, bool is_unary)
           case '&': return CPPTK_AND;
           case '|': return CPPTK_Inclusive_OR;
           case '^': return CPPTK_Exclusive_OR;
+          case ')': return CPPTK_Parentheses_End;
           default: break;
         }
         break;
@@ -127,6 +129,7 @@ static void shunting_yard_algorithm(Token *token)
   output_list = vector_new();
   Vector *operator_stack = vector_new();
   bool is_unary = true;
+  __uint8_t is_in_parentheses = 0;
   while (token->kind != TK_LINEBREAK)
   {
     if (token->kind == TK_RESERVED)
@@ -134,26 +137,53 @@ static void shunting_yard_algorithm(Token *token)
       conditional_inclusion_type *type =
           malloc(sizeof(conditional_inclusion_type));
       *type = reserved_token_to_type(token, is_unary);
-      if (vector_has_data(operator_stack))
+      if (*type == CPPTK_Parentheses_Start)
+        is_in_parentheses++;
+      if (is_in_parentheses)
       {
-        conditional_inclusion_type *old = vector_peek(operator_stack);
-        size_t old_precedence = operator_precedence(*old);
-        size_t type_precedence = operator_precedence(*type);
-        // TODO ( ) と ? :
-        if (old_precedence > type_precedence ||
-            (old_precedence == type_precedence &&
-             (old_precedence != 0 && old_precedence != 11)))
-        {  // operator_stack から output_listへ移す
-          conditional_inclusion_token *new =
-              calloc(1, sizeof(conditional_inclusion_token));
-          if (old != vector_pop(operator_stack))
-            unreachable();
-          new->type = *old;
-          vector_push(output_list, new);
+        if (*type == CPPTK_Parentheses_End)
+        {
+          conditional_inclusion_type *old = vector_pop(operator_stack);
+          while (*old != CPPTK_Parentheses_Start)
+          {
+            conditional_inclusion_token *new =
+                calloc(1, sizeof(conditional_inclusion_token));
+            new->type = *old;
+            vector_push(output_list, new);
+            old = vector_pop(operator_stack);
+            is_unary = false;
+          }
+          is_in_parentheses--;
+        }
+        else
+        {
+          is_unary = true;
+          vector_push(operator_stack, type);
         }
       }
-      vector_push(operator_stack, type);
-      is_unary = true;
+      else
+      {
+        if (vector_has_data(operator_stack))
+        {
+          conditional_inclusion_type *old = vector_peek(operator_stack);
+          size_t old_precedence = operator_precedence(*old);
+          size_t type_precedence = operator_precedence(*type);
+          // TODO ? :
+          if (old_precedence > type_precedence ||
+              (old_precedence == type_precedence &&
+               (old_precedence != 0 && old_precedence != 11)))
+          {  // operator_stack から output_listへ移す
+            conditional_inclusion_token *new =
+                calloc(1, sizeof(conditional_inclusion_token));
+            if (old != vector_pop(operator_stack))
+              unreachable();
+            new->type = *old;
+            vector_push(output_list, new);
+          }
+        }
+        is_unary = true;
+        vector_push(operator_stack, type);
+      }
     }
     else
     {
@@ -225,7 +255,7 @@ static bool reverse_polish_notation_stack_machine()
       case CPPTK_UnaryMinus:
       case CPPTK_NOT:
       case CPPTK_Bitwise:
-      { // 単項右結合
+      {  // 単項右結合
         conditional_inclusion_token *tmp = vector_pop(stack);
         switch (token->type)
         {
@@ -400,6 +430,7 @@ void next_conditional_inclusion(Token *token, bool is_true,
       if (!strncmp(token->str, "#else", 5))
       {  // #else
         Token *next = vector_shift(conditional_list);
+        token_void(token);
         if (is_true)
           clean_while_next(token, next);
         next_conditional_inclusion(next, !is_true, conditional_list, true);

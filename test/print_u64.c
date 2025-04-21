@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-int func(int a)
+int func1(int a)
 {
     printf("%d\n", a);
     return a;

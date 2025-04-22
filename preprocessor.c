@@ -49,6 +49,19 @@ Token *token_next_not_ignorable_void(Token *token)
   return token;
 }
 
+// File_Nameからディレクトリを得る
+size_t get_current_directory_path()
+{
+  char *file_name = File_Name;
+  char *last_path = NULL;
+  while (*++file_name != '\0')  // NULL terminatorまで
+    if (*file_name == '/')
+      last_path = file_name;
+  if (!last_path)
+    return 0;
+  return last_path + 1 - File_Name;
+}
+
 #ifdef __GNUC__
 #define _TO_STRING(x) #x
 #define TO_STRING(x) _TO_STRING(x)
@@ -81,6 +94,19 @@ Token *directive(Token *token)
 {
   switch (token->len)
   {
+    case 1:
+      if (token->str[0] == '#')
+      {
+        token_void(token);
+        token = token_next_not_ignorable_void(token);
+        char *directive_name = malloc(token->len + 1);
+        strncpy(directive_name + 1, token->str, token->len);
+        directive_name[0] = '#';
+        token->str = directive_name;
+        token->len++;
+        return directive(token);
+      }
+      break;
     case 3:
       if (!strncmp(token->str, "#if", 3))
       {
@@ -217,8 +243,9 @@ Token *directive(Token *token)
       if (!strncmp(token->str, "#include", 8))
       {
         token_void(token);
-        char *file_name = NULL;
+        char *file_name = NULL;  // #include "ident"のident
         size_t file_len = 0;
+        size_t directory_path_size = get_current_directory_path();
         token = token_next_not_ignorable_void(token);
         if (token->kind == TK_RESERVED && token->str[0] == '<')
         {  // #include < ident >
@@ -250,7 +277,19 @@ Token *directive(Token *token)
         else
           error_at(token->str, token->len, "invalid #include directive");
         file_name[file_len] = '\0';
-        FILE *include_file_ptr = fopen(file_name, "r");
+        FILE *include_file_ptr = NULL;
+        if (directory_path_size)
+        {
+          char *file_name_with_dir = malloc(file_len + 1 + directory_path_size);
+          memcpy(file_name_with_dir, File_Name, directory_path_size);
+          memcpy(file_name_with_dir + directory_path_size, file_name,
+                 file_len + 1);
+          include_file_ptr = fopen(file_name_with_dir, "r");
+          if (include_file_ptr)
+            file_name = file_name_with_dir;
+        }
+        else
+          include_file_ptr = fopen(file_name, "r");
         if (!include_file_ptr)
         {  // stdlib を読み込む
           for (size_t i = 0; i < sizeof(lib_path) / sizeof(char *); i++)
@@ -312,7 +351,8 @@ void preprocessor()
             if (!strncmp(token->str, "__FILE__", 8))
             {
               size_t file_name_len = strlen(File_Name);
-              char *file_name = malloc(file_name_len + 2);
+              char *file_name =
+                  malloc(file_name_len + 2);  // NULL terminatorは必要ない
               strncpy(file_name + 1, File_Name, file_name_len);
               file_name[0] = file_name[file_name_len + 1] = '"';
               token->kind = TK_STRING;

@@ -129,7 +129,6 @@ static void shunting_yard_algorithm(Token *token)
   output_list = vector_new();
   Vector *operator_stack = vector_new();
   bool is_unary = true;
-  __uint8_t is_in_parentheses = 0;
   while (token->kind != TK_LINEBREAK)
   {
     if (token->kind == TK_RESERVED)
@@ -137,28 +136,19 @@ static void shunting_yard_algorithm(Token *token)
       conditional_inclusion_type *type =
           malloc(sizeof(conditional_inclusion_type));
       *type = reserved_token_to_type(token, is_unary);
-      if (*type == CPPTK_Parentheses_Start)
-        is_in_parentheses++;
-      if (is_in_parentheses)
+      if (*type == CPPTK_Parentheses_End)
       {
-        if (*type == CPPTK_Parentheses_End)
+        conditional_inclusion_type *old = NULL;
+        for (;;)
         {
-          conditional_inclusion_type *old = vector_pop(operator_stack);
-          while (*old != CPPTK_Parentheses_Start)
-          {
-            conditional_inclusion_token *new =
-                calloc(1, sizeof(conditional_inclusion_token));
-            new->type = *old;
-            vector_push(output_list, new);
-            old = vector_pop(operator_stack);
-            is_unary = false;
-          }
-          is_in_parentheses--;
-        }
-        else
-        {
-          is_unary = true;
-          vector_push(operator_stack, type);
+          old = vector_pop(operator_stack);
+          if (*old == CPPTK_Parentheses_Start)
+            break;
+          conditional_inclusion_token *new =
+              calloc(1, sizeof(conditional_inclusion_token));
+          new->type = *old;
+          vector_push(output_list, new);
+          is_unary = false;
         }
       }
       else
@@ -166,19 +156,23 @@ static void shunting_yard_algorithm(Token *token)
         if (vector_has_data(operator_stack))
         {
           conditional_inclusion_type *old = vector_peek(operator_stack);
-          size_t old_precedence = operator_precedence(*old);
-          size_t type_precedence = operator_precedence(*type);
-          // TODO ? :
-          if (old_precedence > type_precedence ||
-              (old_precedence == type_precedence &&
-               (old_precedence != 0 && old_precedence != 11)))
-          {  // operator_stack から output_listへ移す
-            conditional_inclusion_token *new =
-                calloc(1, sizeof(conditional_inclusion_token));
-            if (old != vector_pop(operator_stack))
-              unreachable();
-            new->type = *old;
-            vector_push(output_list, new);
+          if (*type != CPPTK_Parentheses_Start &&
+              *old != CPPTK_Parentheses_Start)
+          {
+            size_t old_precedence = operator_precedence(*old);
+            size_t type_precedence = operator_precedence(*type);
+            // TODO ? :
+            if (old_precedence > type_precedence ||
+                (old_precedence == type_precedence &&
+                 (old_precedence != 0 && old_precedence != 11)))
+            {  // operator_stack から output_listへ移す
+              conditional_inclusion_token *new =
+                  calloc(1, sizeof(conditional_inclusion_token));
+              if (old != vector_pop(operator_stack))
+                unreachable();
+              new->type = *old;
+              vector_push(output_list, new);
+            }
           }
         }
         is_unary = true;

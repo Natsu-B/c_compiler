@@ -243,13 +243,23 @@ Token *tokenizer(char *input, Token *next_token)
       continue;
     }
 
-    if (strchr("+-*/()=!<>;{},&[].\\'|", *input))
+    if (strchr("+-*/()=!<>;{},&[].\\'|%", *input))
     {
       cur = new_token(TK_RESERVED, cur, input);
       // "==", "<=", ">=", "!=" の場合
       if (*(input + 1) == '=')
       {
         pr_debug2("find RESERVED token: %.2s", input);
+        cur->len = 2;
+        input += 2;
+      }
+      else if (*(input + 1) == '&' && *(input) == '&')
+      {
+        cur->len = 2;
+        input += 2;
+      }
+      else if (*(input + 1) == '|' && *(input) == '|')
+      {
         cur->len = 2;
         input += 2;
       }

@@ -215,6 +215,18 @@ static void shunting_yard_algorithm(Token *token)
             error_at(token->str, token->len, "Invalid defined() use");
         }
       }
+      else if (ident_replacement(token))
+      {
+        is_unary = false;
+        continue;  // tokenを次に進めない
+      }
+      else if (token->kind == TK_IDENT)
+      {
+        new->type = CPPTK_Integer;
+        long long *num = malloc(sizeof(long long));
+        *num = 0;
+        new->data = num;
+      }
       else
         // TODO char
         error_at(token->str, token->len, "invalid token");
@@ -445,6 +457,7 @@ void next_conditional_inclusion(Token *token, bool is_true,
       break;
     case 6:  // #endif
       token_void(token);
+      token_next_not_ignorable_void(token);
       return;
     case 8:  // #elifdef
     case 9:  // #elifndef

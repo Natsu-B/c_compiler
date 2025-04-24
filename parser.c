@@ -253,6 +253,7 @@ Node *stmt()
   {
     Node *node = calloc(1, sizeof(Node));
     node->name = generate_label_name();
+    node->nest_var = new_nest();
     expect("(", TK_RESERVED);
     node->condition = expr();
     expect(")", TK_RESERVED);
@@ -266,6 +267,7 @@ Node *stmt()
     {
       node->kind = ND_IF;
     }
+    exit_nest();
     return node;
   }
 
@@ -275,10 +277,12 @@ Node *stmt()
     Node *node = calloc(1, sizeof(Node));
     node->kind = ND_WHILE;
     node->name = generate_label_name();
+    node->nest_var = new_nest();
     expect("(", TK_RESERVED);
     node->condition = expr();
     expect(")", TK_RESERVED);
     node->true_code = stmt();
+    exit_nest();
     return node;
   }
 
@@ -288,6 +292,7 @@ Node *stmt()
     Node *node = calloc(1, sizeof(Node));
     node->kind = ND_FOR;
     node->name = generate_label_name();
+    node->nest_var = new_nest();
     expect("(", TK_RESERVED);
     if (!consume(";", TK_RESERVED))
     {
@@ -311,6 +316,7 @@ Node *stmt()
       expect(")", TK_RESERVED);
     }
     node->true_code = stmt();
+    exit_nest();
     return node;
   }
 

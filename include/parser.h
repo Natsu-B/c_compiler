@@ -96,10 +96,11 @@ struct Node
   };
 
   struct
-  {                   // if for while の場合
-    GTLabel *name;    // ラベルの名前
-    Node *condition;  // 判定条件
-    Node *true_code;  // trueの際に実行されるコード
+  {                             // if for while の場合
+    GTLabel *name;              // ラベルの名前
+    Node *condition;            // 判定条件
+    Node *true_code;            // trueの際に実行されるコード
+    NestedBlockVariables *nest_var;  // 一行のときも使う
     union
     {
       Node *false_code;  // if else文 falseの際に実行されるコード

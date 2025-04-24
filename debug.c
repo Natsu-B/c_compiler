@@ -37,11 +37,8 @@ void print_tokenize_result(Token *token)
   {
     if (token->kind == TK_EOF)
       break;
-    if (token->kind == TK_NUM)
-      fprintf(stdout, "%ld\t: %s\n", token->val, tokenkindlist[token->kind]);
-    else
-      fprintf(stdout, "%.*s\t: %s\n", (int)token->len, token->str,
-              tokenkindlist[token->kind]);
+    fprintf(stdout, "%.*s\t: %s\n", (int)token->len, token->str,
+            tokenkindlist[token->kind]);
     token = token->next;
   }
 }

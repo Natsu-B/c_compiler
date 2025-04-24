@@ -56,8 +56,7 @@ int main(int argc, char **argv)
   Token *token = preprocess(input, input_file_name, NULL);
   if (output_preprocess)
     preprocessed_file_writer(token, output_file_name);
-  // トークナイザ
-  re_tokenize(token);
+  fix_token_head();  // トークンの先頭をIGNORABLE、 LINEBREAKではなくす
   // パーサ
   FuncBlock *parse_result = parser();
   // アナライザ(意味解析)

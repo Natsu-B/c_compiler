@@ -19,6 +19,24 @@ Token *token_old;  // tokenの一つあとのトークン
 
 const char *tokenkindlist[TK_END] = {TokenKindTable};
 
+void fix_token_head()
+{
+  while (token->kind == TK_IGNORABLE || token->kind == TK_LINEBREAK)
+    token = token->next;
+}
+
+// TK_IGNORABLE と TK_LINEBREAKを無視してトークンを進める
+Token *token_next()
+{
+  do
+  {
+    if (token->kind != TK_IGNORABLE && token->kind != TK_LINEBREAK)
+      token_old = token;
+    token = token->next;
+  } while (token->kind == TK_IGNORABLE || token->kind == TK_LINEBREAK);
+  return token_old;
+}
+
 // トークンの位置を引数の位置に変更する
 // かなり危険なため利用は注意を
 void set_token(Token *next)
@@ -31,73 +49,29 @@ Token *get_token()
   return token;
 }
 
-// 次の次のトークン(1つ先のトークン)が引数のトークンだったらtrueを返す
-bool peek_next_TokenKind(TokenKind kind)
-{
-  if (token->next->kind != kind)
-    return false;
-  return true;
-}
-
-bool peek_next(char *op)
-{
-  if (token->next->kind == TK_RESERVED && token->next->len == strlen(op) &&
-      !strncmp(token->next->str, op, token->next->len))
-    return true;
-  return false;
-}
-
 // 次のトークンが引数のkindのトークンで、その次のトークンがTK_RESERVEDで
 // 引数のreservedと等しければ消費する その他の場合NULLを返す
 Token *consume_token_if_next_matches(TokenKind kind, char reserved)
 {
   if (token->kind == kind && *(token->next->str) == reserved)
-  {
-    Token *token_old = token;
-    token = token_old->next;
-    return token_old;
-  }
+    return token_next();
   return NULL;
 }
 
-// 次のトークンが引数のトークンの種類であれば読み進め、そうでなければerror_atを呼び出す
-Token *expect_tokenkind(TokenKind kind)
-{
-  Token *new = consume_tokenkind(kind);
-  if (!new)
-  {
-    char *tokenkindlist[TK_END] = {TokenKindTable};
-    error_at(token->str, token->len, "トークンが %s ではありませんでした",
-             tokenkindlist[kind]);
-  }
-  return new;
-}
-
-// 次のトークンが引数のトークンの種類だったら読み勧めてそのTokenを返す
-Token *consume_tokenkind(TokenKind kind)
-{
-  if (token->kind != kind)
-    return NULL;
-  token_old = token;
-  token = token->next;
-  return token_old;
-}
-
 // 次のトークンが引数の記号だったら読み進めtokenをその他のときはNULLを返す関数
-Token *consume(char *op)
+// ただし、TK_IGNORABLEを除く
+Token *consume(char *op, TokenKind kind)
 {
-  if (token->kind != TK_RESERVED || strlen(op) != token->len ||
+  if (token->kind != kind || strlen(op) != token->len ||
       memcmp(op, token->str, token->len))
     return NULL;
-  token_old = token;
-  token = token->next;
-  return token_old;
+  return token_next();
 }
 
 // 次のトークンが引数の記号だったら読み進め、そうでなければerror_atを呼び出す
-Token *expect(char *op)
+Token *expect(char *op, TokenKind kind)
 {
-  Token *result = consume(op);
+  Token *result = consume(op, kind);
   if (!result)
     error_at(token->str, token->len, "トークンが %c でありませんでした", op);
   return result;
@@ -106,19 +80,51 @@ Token *expect(char *op)
 // 一つ前のトークンを取得する
 Token *get_old_token()
 {
-  if (token_old->next != token)
-    unreachable();
   return token_old;
+}
+
+Token *consume_ident()
+{
+  long tmp;
+  if (token->kind != TK_IDENT || is_number(&tmp))
+    return NULL;
+  return token_next();
+}
+
+Token *expect_ident()
+{
+  Token *expect = consume_ident();
+  if (!expect)
+    error_at(token->str, token->len, "トークンがidentではありません");
+  return expect;
+}
+
+Token *consume_string()
+{
+  if (token->kind != TK_STRING)
+    return NULL;
+  return token_next();
+}
+
+bool is_number(long *result)
+{
+  if (token->kind != TK_IDENT || !isdigit(token->str[0]))
+    return false;
+  char *ptr;
+  *result = strtol(token->str, &ptr, 10);
+  if (ptr - token->str != (int)token->len)
+    return false;
+  return true;
 }
 
 // 次のトークンが整数だった場合読み進め、それ以外だったらエラーを返す関数
 long expect_number()
 {
-  if (token->kind != TK_NUM)
-    error_at(token->str, token->len, "トークンが整数でありませんでした");
-  long val = token->val;
-  token = token->next;
-  return val;
+  long result;
+  if (!is_number(&result))
+    error_at(token->str, token->len, "トークンが整数ではありません");
+  token_next();
+  return result;
 }
 
 // トークンが最後(TK_EOF)だったらtrueを、でなければfalseを返す関数
@@ -332,120 +338,4 @@ Token *change_token(TokenKind kind, Token *old, char *str)
   token->kind = kind;
   token->str = str;
   return token;
-}
-
-// deprecated
-void re_tokenize(Token *token_head)
-{
-  pr_debug("start re_tokenize");
-  token = token_head;
-  Token *token = token_head;
-  Token head;
-  head.next = token_head;
-  Token *cur = &head;
-  while (token)
-  {
-    switch (token->kind)
-    {
-      case TK_IGNORABLE:
-      case TK_LINEBREAK:
-      case TK_EOF: break;
-      case TK_IDENT:
-        // 数字
-        if (isdigit(token->str[0]))
-        {
-          cur = new_token(TK_NUM, cur, token->str);
-          char *tmp;
-          size_t token_size = token->len;
-          cur->val = strtol(token->str, &tmp, 10);
-          if (token->str + token_size > tmp)
-            unreachable();
-          pr_debug2("find NUM token: %ld", cur->val);
-          break;
-        }
-        else if (token->len == 2)
-        {
-          if (!strncmp(token->str, "if", token->len))
-          {
-            cur = change_token(TK_IF, cur, token->str);
-            cur->len = token->len;
-            break;
-          }
-        }
-        else if (token->len == 3)
-        {
-          if (!strncmp(token->str, "for", token->len))
-          {
-            cur = change_token(TK_FOR, cur, token->str);
-            cur->len = token->len;
-            break;
-          }
-
-          if (!strncmp(token->str, "int", token->len))
-          {
-            cur = change_token(TK_INT, cur, token->str);
-            cur->len = token->len;
-            break;
-          }
-        }
-        else if (token->len == 4)
-        {
-          if (!strncmp(token->str, "else", token->len))
-          {
-            cur = change_token(TK_ELSE, cur, token->str);
-            cur->len = token->len;
-            break;
-          }
-          if (!strncmp(token->str, "char", token->len))
-          {
-            cur = change_token(TK_CHAR, cur, token->str);
-            cur->len = token->len;
-            break;
-          }
-          if (!strncmp(token->str, "long", token->len))
-          {
-            cur = change_token(TK_LONG, cur, token->str);
-            cur->len = token->len;
-            break;
-          }
-        }
-        else if (token->len == 5)
-        {
-          if (!strncmp(token->str, "while", token->len))
-          {
-            cur = change_token(TK_WHILE, cur, token->str);
-            cur->len = token->len;
-            break;
-          }
-        }
-        else if (token->len == 6)
-        {
-          if (!strncmp(token->str, "return", token->len))
-          {
-            cur = change_token(TK_RETURN, cur, token->str);
-            cur->len = token->len;
-            break;
-          }
-
-          if (!strncmp(token->str, "sizeof", token->len))
-          {
-            cur = change_token(TK_SIZEOF, cur, token->str);
-            cur->len = token->len;
-            break;
-          }
-        }
-        // fall through
-      default:
-        cur = change_token(token->kind, cur, token->str);
-        cur->len = token->len;
-        break;
-    }
-
-    token = token->next;
-  }
-  change_token(TK_EOF, cur, NULL);
-#ifdef DEBUG
-  print_tokenize_result(token_head);
-#endif
-  pr_debug("end re tokenize");
 }

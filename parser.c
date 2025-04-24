@@ -83,9 +83,9 @@ Type *alloc_type(TypeKind kind)
 
 TypeKind find_type()
 {
-  Token *is_int = consume_tokenkind(TK_INT);
-  Token *is_long = consume_tokenkind(TK_LONG);
-  Token *is_char = consume_tokenkind(TK_CHAR);
+  Token *is_int = consume("int", TK_IDENT);
+  Token *is_long = consume("long", TK_IDENT);
+  Token *is_char = consume("char", TK_IDENT);
   if (is_long && !is_char)
     return TYPE_LONG;
   if (is_int && !is_long && !is_char)
@@ -163,7 +163,7 @@ Node *program()
   if (type_kind == TYPE_NULL)
     error_at(token_before->str, token_before->len, "型が指定されていません");
   int pointer_counter = 0;
-  while (consume("*"))
+  while (consume("*", TK_RESERVED))
   {
     pointer_counter++;
   }
@@ -172,7 +172,7 @@ Node *program()
   Token *token = consume_token_if_next_matches(TK_IDENT, '(');
   if (token)
   {
-    expect("(");
+    expect("(", TK_RESERVED);
     Node *node = calloc(1, sizeof(Node));
     node->kind = ND_FUNCDEF;
     node->func_name = token->str;
@@ -183,15 +183,15 @@ Node *program()
     NDBlock head;
     head.next = NULL;
     NDBlock *pointer = &head;
-    if (!consume(")"))
+    if (!consume(")", TK_RESERVED))
     {
       NDBlock *next = calloc(1, sizeof(NDBlock));
       pointer->next = next;
       next->node = expr();
       pointer = next;
-      while (!consume(")"))
+      while (!consume(")", TK_RESERVED))
       {
-        expect(",");
+        expect(",", TK_RESERVED);
         NDBlock *next = calloc(1, sizeof(NDBlock));
         pointer->next = next;
         next->node = expr();
@@ -202,8 +202,8 @@ Node *program()
     node->expr = head.next;
     head.next = NULL;
     pointer = &head;
-    expect("{");
-    while (!consume("}"))
+    expect("{", TK_RESERVED);
+    while (!consume("}", TK_RESERVED))
     {
       NDBlock *next = calloc(1, sizeof(NDBlock));
       pointer->next = next;
@@ -218,7 +218,7 @@ Node *program()
   set_token(token_before);
   // グローバル変数宣言
   Node *node = expr();
-  expect(";");
+  expect(";", TK_RESERVED);
   return node;
 }
 
@@ -226,7 +226,7 @@ Node *stmt()
 {
   pr_debug2("stmt");
   // ブロックの判定
-  if (consume("{"))
+  if (consume("{", TK_RESERVED))
   {
     Node *node = calloc(1, sizeof(Node));
     NDBlock head;
@@ -236,7 +236,7 @@ Node *stmt()
     node->var_list = new_nest();
     for (;;)
     {
-      if (consume("}"))
+      if (consume("}", TK_RESERVED))
         break;
       NDBlock *next = calloc(1, sizeof(NDBlock));
       pointer->next = next;
@@ -249,15 +249,15 @@ Node *stmt()
   }
 
   // if文の判定とelseがついてるかどうか
-  if (consume_tokenkind(TK_IF))
+  if (consume("if", TK_IDENT))
   {
     Node *node = calloc(1, sizeof(Node));
     node->name = generate_label_name();
-    expect("(");
+    expect("(", TK_RESERVED);
     node->condition = expr();
-    expect(")");
+    expect(")", TK_RESERVED);
     node->true_code = stmt();
-    if (consume_tokenkind(TK_ELSE))
+    if (consume("else", TK_IDENT))
     {
       node->kind = ND_ELIF;
       node->false_code = stmt();
@@ -270,52 +270,52 @@ Node *stmt()
   }
 
   // while文の判定
-  if (consume_tokenkind(TK_WHILE))
+  if (consume("while", TK_IDENT))
   {
     Node *node = calloc(1, sizeof(Node));
     node->kind = ND_WHILE;
     node->name = generate_label_name();
-    expect("(");
+    expect("(", TK_RESERVED);
     node->condition = expr();
-    expect(")");
+    expect(")", TK_RESERVED);
     node->true_code = stmt();
     return node;
   }
 
   // for文の判定
-  if (consume_tokenkind(TK_FOR))
+  if (consume("for", TK_IDENT))
   {
     Node *node = calloc(1, sizeof(Node));
     node->kind = ND_FOR;
     node->name = generate_label_name();
-    expect("(");
-    if (!consume(";"))
+    expect("(", TK_RESERVED);
+    if (!consume(";", TK_RESERVED))
     {
       Node *new = calloc(1, sizeof(Node));
       node->init = new;
       new->kind = ND_DISCARD_EXPR;
       new->lhs = expr();
-      expect(";");
+      expect(";", TK_RESERVED);
     }
-    if (!consume(";"))
+    if (!consume(";", TK_RESERVED))
     {
       node->condition = expr();
-      expect(";");
+      expect(";", TK_RESERVED);
     }
-    if (!consume(")"))
+    if (!consume(")", TK_RESERVED))
     {
       Node *new = calloc(1, sizeof(Node));
       node->update = new;
       new->kind = ND_DISCARD_EXPR;
       new->lhs = expr();
-      expect(")");
+      expect(")", TK_RESERVED);
     }
     node->true_code = stmt();
     return node;
   }
 
   Node *node;
-  if (consume_tokenkind(TK_RETURN))
+  if (consume("return", TK_IDENT))
   {
     node = calloc(1, sizeof(Node));
     node->kind = ND_RETURN;
@@ -327,7 +327,7 @@ Node *stmt()
     node->kind = ND_DISCARD_EXPR;
     node->lhs = expr();
   }
-  expect(";");
+  expect(";", TK_RESERVED);
   return node;
 }
 
@@ -342,7 +342,7 @@ Node *assign()
   pr_debug2("assign");
   Node *node = equality();
 
-  if (consume("="))
+  if (consume("=", TK_RESERVED))
   {
     node = new_node(ND_ASSIGN, node, assign(), get_old_token());
   }
@@ -356,9 +356,9 @@ Node *equality()
 
   for (;;)
   {
-    if (consume("=="))
+    if (consume("==", TK_RESERVED))
       node = new_node(ND_EQ, node, relational(), get_old_token());
-    else if (consume("!="))
+    else if (consume("!=", TK_RESERVED))
       node = new_node(ND_NEQ, node, relational(), get_old_token());
     else
       return node;
@@ -371,13 +371,13 @@ Node *relational()
   Node *node = add();
   for (;;)
   {
-    if (consume("<="))
+    if (consume("<=", TK_RESERVED))
       node = new_node(ND_LTE, node, add(), get_old_token());
-    else if (consume("<"))
+    else if (consume("<", TK_RESERVED))
       node = new_node(ND_LT, node, add(), get_old_token());
-    else if (consume(">="))
+    else if (consume(">=", TK_RESERVED))
       node = new_node(ND_LTE, add(), node, get_old_token());
-    else if (consume(">"))
+    else if (consume(">", TK_RESERVED))
       node = new_node(ND_LT, add(), node, get_old_token());
     else
       return node;
@@ -391,11 +391,11 @@ Node *add()
 
   for (;;)
   {
-    if (consume("+"))
+    if (consume("+", TK_RESERVED))
     {
       node = new_node(ND_ADD, node, mul(), get_old_token());
     }
-    else if (consume("-"))
+    else if (consume("-", TK_RESERVED))
     {
       node = new_node(ND_SUB, node, mul(), get_old_token());
     }
@@ -411,9 +411,9 @@ Node *mul()
 
   for (;;)
   {
-    if (consume("*"))
+    if (consume("*", TK_RESERVED))
       node = new_node(ND_MUL, node, unary(), get_old_token());
-    else if (consume("/"))
+    else if (consume("/", TK_RESERVED))
       node = new_node(ND_DIV, node, unary(), get_old_token());
     else
       return node;
@@ -423,15 +423,15 @@ Node *mul()
 Node *unary()
 {
   pr_debug2("unary");
-  if (consume_tokenkind(TK_SIZEOF))
+  if (consume("sizeof", TK_IDENT))
     return new_node(ND_SIZEOF, unary(), NULL, get_old_token());
-  if (consume("+"))
+  if (consume("+", TK_RESERVED))
     return postfix();
-  if (consume("-"))
+  if (consume("-", TK_RESERVED))
     return new_node(ND_SUB, new_node_num(0), postfix(), get_old_token());
-  if (consume("*"))
+  if (consume("*", TK_RESERVED))
     return new_node(ND_DEREF, unary(), NULL, get_old_token());
-  if (consume("&"))
+  if (consume("&", TK_RESERVED))
     return new_node(ND_ADDR, unary(), NULL, get_old_token());
   return postfix();
 }
@@ -442,11 +442,11 @@ Node *postfix()
   Node *node = primary();
   for (;;)
   {
-    if (consume("["))
+    if (consume("[", TK_RESERVED))
     {
       Token *old_token = get_old_token();
       node = new_node(ND_ARRAY, node, new_node_num(expect_number()), old_token);
-      expect("]");
+      expect("]", TK_RESERVED);
     }
     return node;
   }
@@ -455,10 +455,10 @@ Node *postfix()
 Node *primary()
 {
   pr_debug2("primary");
-  if (consume("("))
+  if (consume("(", TK_RESERVED))
   {
     Node *node = expr();
-    expect(")");
+    expect(")", TK_RESERVED);
     return node;
   }
 
@@ -466,7 +466,7 @@ Node *primary()
   // 関数
   if (token)
   {
-    expect("(");
+    expect("(", TK_RESERVED);
     Node *node = calloc(1, sizeof(Node));
     node->token = token;
     NDBlock head;
@@ -475,15 +475,15 @@ Node *primary()
     node->kind = ND_FUNCCALL;
     node->func_name = token->str;
     node->func_len = token->len;
-    while (!consume(")"))
+    while (!consume(")", TK_RESERVED))
     {
       NDBlock *next = calloc(1, sizeof(NDBlock));
       pointer->next = next;
       next->node = expr();
       pointer = next;
-      if (!consume(","))
+      if (!consume(",", TK_RESERVED))
       {
-        expect(")");
+        expect(")", TK_RESERVED);
         break;
       }
     }
@@ -496,14 +496,14 @@ Node *primary()
   size_t pointer_counter = 0;
   if (type_kind != TYPE_NULL)
   {
-    while (consume("*"))
+    while (consume("*", TK_RESERVED))
     {
       pointer_counter++;
     }
-    token = expect_tokenkind(TK_IDENT);
+    token = expect_ident();
   }
   else
-    token = consume_tokenkind(TK_IDENT);
+    token = consume_ident();
   // 変数
   if (token)
   {
@@ -515,7 +515,7 @@ Node *primary()
     return node;
   }
 
-  if (consume_tokenkind(TK_STRING))
+  if (consume_string())
   {
     Node *node = calloc(1, sizeof(Node));
     node->kind = ND_STRING;

@@ -11,6 +11,7 @@
 #include "include/debug.h"
 #include "include/error.h"
 #include "include/tokenizer.h"
+#include "include/type.h"
 #include "include/variables.h"
 
 const char *nodekindlist[] = {NodeKindTable};
@@ -73,14 +74,6 @@ Node *new_node_num(int val)
   return node;
 }
 
-// Typeを作成する関数
-Type *alloc_type(TypeKind kind)
-{
-  Type *new = calloc(1, sizeof(Type));
-  new->type = kind;
-  return new;
-}
-
 TypeKind find_type()
 {
   Token *is_int = consume("int", TK_IDENT);
@@ -93,6 +86,18 @@ TypeKind find_type()
   if (is_char && !is_int && !is_long)
     return TYPE_CHAR;
   return TYPE_NULL;
+}
+
+NestedBlockVariables *new_nest()
+{
+  new_nest_type();
+  return new_nest_variables();
+}
+
+void exit_nest()
+{
+  exit_nest_type();
+  exit_nest_variables();
 }
 
 /**
@@ -141,6 +146,7 @@ FuncBlock *parser()
   head.next = NULL;
   FuncBlock *pointer = &head;
   init_variables();
+  init_types();
   while (!at_eof())
   {
     FuncBlock *new = calloc(1, sizeof(FuncBlock));
@@ -448,9 +454,9 @@ Node *postfix()
   Node *node = primary();
   for (;;)
   {
+    Token *old_token = get_old_token();
     if (consume("[", TK_RESERVED))
     {
-      Token *old_token = get_old_token();
       node = new_node(ND_ARRAY, node, new_node_num(expect_number()), old_token);
       expect("]", TK_RESERVED);
     }

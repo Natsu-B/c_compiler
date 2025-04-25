@@ -11,6 +11,7 @@
 #include "include/generator.h"
 #include "include/offset.h"
 #include "include/parser.h"
+#include "include/type.h"
 #include "include/variables.h"
 
 bool is_equal_type(Type *lhs, Type *rhs)
@@ -29,17 +30,25 @@ bool is_equal_type(Type *lhs, Type *rhs)
   return false;
 }
 
-TypeKind implicit_type_conversion(Type *lhs, Type *rhs)
+TypeKind implicit_type_conversion_assign(Type *lhs, Type *rhs)
 {
-  if (lhs->type == TYPE_PTR || lhs->type == TYPE_ARRAY ||
-      rhs->type == TYPE_PTR || rhs->type == TYPE_ARRAY)
-    return TYPE_NULL;
-  if (lhs->type == TYPE_LONG || rhs->type == TYPE_LONG)
-    return TYPE_LONG;
-  if (lhs->type == TYPE_INT || rhs->type == TYPE_INT)
-    return TYPE_INT;
-  if (lhs->type == TYPE_CHAR || rhs->type == TYPE_CHAR)
-    return TYPE_CHAR;
+  if (rhs->type == TYPE_PTR || rhs->type == TYPE_ARRAY)
+  {
+    if (lhs->type == TYPE_PTR || lhs->type == TYPE_ARRAY)
+      return TYPE_PTR;
+  }
+  else
+  {
+    switch (lhs->type)
+    {
+      case TYPE_STR:
+      case TYPE_STRUCT:
+      case TYPE_PTR:
+      case TYPE_ARRAY:
+      case TYPE_NULL: break;
+      default: return lhs->type;
+    }
+  }
   return TYPE_NULL;
 }
 
@@ -206,7 +215,7 @@ void analyze_type(Node *node)
           node->rhs->kind != ND_STRING)
       {
         TypeKind converted_type =
-            !implicit_type_conversion(node->lhs->type, node->rhs->type);
+            implicit_type_conversion_assign(node->lhs->type, node->rhs->type);
         if (converted_type == TYPE_NULL)
           error_at(node->token->str, node->token->len,
                    "cannot convert both sides of '=' types");
@@ -219,7 +228,7 @@ void analyze_type(Node *node)
     case ND_NUM:
       if (node->type->type == TYPE_PTR)
       {
-        node->val = node->val * size_of(node->type->ptr_to->type);
+        node->val = node->val * size_of(node->type->ptr_to);
       }
       break;
 
@@ -234,11 +243,11 @@ void analyze_type(Node *node)
             case TYPE_LONG:
             case TYPE_CHAR:
             case TYPE_PTR:
-              node->var->offset = calculate_offset(size_of(node->type->type));
+              node->var->offset = calculate_offset(size_of(node->type));
               break;
             case TYPE_ARRAY:
-              node->var->offset = calculate_offset(
-                  size_of(node->type->ptr_to->type) * node->type->size);
+              node->var->offset = calculate_offset(size_of(node->type->ptr_to) *
+                                                   node->type->size);
               break;
             default: error_exit("unreachable"); break;
           }
@@ -252,10 +261,10 @@ void analyze_type(Node *node)
       {
         case TYPE_PTR:
         case TYPE_INT:
-        case TYPE_LONG: node->val = size_of(node->lhs->type->type); break;
-        case TYPE_CHAR: node->val = size_of(node->lhs->type->type); break;
+        case TYPE_LONG: node->val = size_of(node->lhs->type); break;
+        case TYPE_CHAR: node->val = size_of(node->lhs->type); break;
         case TYPE_ARRAY:
-          node->val = size_of(node->lhs->type->type) * node->lhs->val;
+          node->val = size_of(node->lhs->type) * node->lhs->val;
           break;
         default: error_exit("unreachable"); break;
       }
@@ -267,6 +276,7 @@ void analyze_type(Node *node)
 
 FuncBlock *analyzer(FuncBlock *funcblock)
 {
+  pr_debug("start analyze");
   // ND_ASSIGN等の変数や数字でないnodeに型をつける
   for (FuncBlock *pointer = funcblock; pointer; pointer = pointer->next)
   {

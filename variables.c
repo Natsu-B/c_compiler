@@ -1,5 +1,5 @@
 // ------------------------------------------------------------------------------------
-// global variable manager
+// variable manager
 // ------------------------------------------------------------------------------------
 
 #include "include/variables.h"
@@ -64,7 +64,7 @@ void init_variables()
 }
 
 // ネストを1段深くするときに実行する関数
-NestedBlockVariables *new_nest()
+NestedBlockVariables *new_nest_variables()
 {
   NestedBlockVariables *tmp = calloc(1, sizeof(NestedBlockVariables));
   tmp->next = top;
@@ -76,7 +76,7 @@ NestedBlockVariables *new_nest()
 }
 
 // ネストを戻すときに実行する関数
-void exit_nest()
+void exit_nest_variables()
 {
   if (!top->next)
     unreachable();  // parserでエラーになるはず

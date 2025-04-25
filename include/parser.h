@@ -4,13 +4,13 @@
 #include <stddef.h>
 
 #include "tokenizer.h"
+#include "type.h"
 
 typedef struct Node Node;
 typedef struct Var Var;
 typedef struct GTLabel GTLabel;
 typedef struct NDBlock NDBlock;
 typedef struct FuncBlock FuncBlock;
-typedef struct Type Type;
 typedef struct NestedBlockVariables NestedBlockVariables;
 
 /**
@@ -96,10 +96,10 @@ struct Node
   };
 
   struct
-  {                             // if for while の場合
-    GTLabel *name;              // ラベルの名前
-    Node *condition;            // 判定条件
-    Node *true_code;            // trueの際に実行されるコード
+  {                                  // if for while の場合
+    GTLabel *name;                   // ラベルの名前
+    Node *condition;                 // 判定条件
+    Node *true_code;                 // trueの際に実行されるコード
     NestedBlockVariables *nest_var;  // 一行のときも使う
     union
     {
@@ -178,28 +178,7 @@ struct FuncBlock
   size_t stacksize;  // スタックのサイズ byte単位
 };
 
-// サポートしている変数の型
-typedef enum
-{
-  TYPE_INT,    // int型 signed 32bit
-  TYPE_CHAR,   // char型 8bit
-  TYPE_STR,    // char文字列
-  TYPE_LONG,   // long型 signed 64bit
-  TYPE_PTR,    // 型へのポインタ
-  TYPE_ARRAY,  // 配列
-  TYPE_NULL,   // 失敗時等に返す 実際の型ではない
-} TypeKind;
-
-// 変数の型を管理するstruct
-struct Type
-{
-  TypeKind type;
-  Type *ptr_to;  // TYPE_PTR, TYPE_ARRAYのとき利用
-  size_t size;   // TYPE_ARRAYのとき利用
-};
-
 Node *new_node(NodeKind kind, Node *lhs, Node *rhs, Token *token);
-Type *alloc_type(TypeKind kind);
 FuncBlock *parser();
 
 #endif  // PARSER_C_COMPILER

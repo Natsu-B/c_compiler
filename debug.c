@@ -9,6 +9,7 @@
 #include "include/error.h"
 #include "include/parser.h"
 #include "include/tokenizer.h"
+#include "include/type.h"
 
 extern GTLabel *head_label;
 extern Vector *output_list;

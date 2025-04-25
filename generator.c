@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "include/error.h"
+#include "include/type.h"
 #include "include/variables.h"
 
 #define error_exit_with_guard(fmt, ...)                                     \
@@ -39,23 +40,6 @@ static FILE *fout;
   {                                         \
     fprintf(fout, fmt "\n", ##__VA_ARGS__); \
   } while (0)
-
-// TYPE_INT TYPE_ARRAY 等を受け取ってその大きさを返す関数
-size_t size_of(TypeKind type)
-{
-  switch (type)
-  {
-    case TYPE_INT: return 4;
-    case TYPE_CHAR: return 1;
-    case TYPE_STR: return 8;
-    case TYPE_LONG: return 8;
-    case TYPE_PTR: return 8;
-    case TYPE_ARRAY: return 8;
-    default: break;
-  }
-  unreachable();
-  return 0;  // unreachable
-}
 
 // 移すサイズによってmv命令を変更する
 char *mv_instruction_specifier(int size, bool is_sighed)
@@ -359,8 +343,8 @@ void gen(Node *node)
       {
         output_file("    pop rax");
         output_file("    %s rax, %s [rax]",
-                    mv_instruction_specifier(size_of(node->type->type), true),
-                    access_size_specifier(size_of(node->type->type)));
+                    mv_instruction_specifier(size_of(node->type), true),
+                    access_size_specifier(size_of(node->type)));
         output_file("    push rax");
       }
       return;
@@ -372,8 +356,8 @@ void gen(Node *node)
       output_file("    pop rdi");
       output_file("    pop rax");
       output_file("    mov %s [rax], %s",
-                  access_size_specifier(size_of(node->type->type)),
-                  chose_register(size_of(node->type->type), rdi));
+                  access_size_specifier(size_of(node->type)),
+                  chose_register(size_of(node->type), rdi));
       output_file("    push rdi");
       return;
 
@@ -387,8 +371,8 @@ void gen(Node *node)
       gen(node->lhs);
       output_file("    pop rax");
       output_file("    %s rax, %s [rax]",
-                  mv_instruction_specifier(size_of(node->type->type), true),
-                  access_size_specifier(size_of(node->type->type)));
+                  mv_instruction_specifier(size_of(node->type), true),
+                  access_size_specifier(size_of(node->type)));
       output_file("    push rax");
       return;
     default: break;
@@ -450,7 +434,7 @@ void generator(FuncBlock *parsed, char *output_filename)
       case init_zero:
         output_file(
             "    .zero %ld",
-            size_of(pointer->type->type) *
+            size_of(pointer->type) *
                 (pointer->type->type == TYPE_ARRAY ? pointer->type->size : 1));
         break;
       case init_string:
@@ -481,32 +465,28 @@ void generator(FuncBlock *parsed, char *output_filename)
         switch (++j)
         {
           case 1:
-            output_file(
-                "    mov [rbp-%lu], %s", pointer->node->var->offset,
-                chose_register(size_of(pointer->node->type->type), rdi));
+            output_file("    mov [rbp-%lu], %s", pointer->node->var->offset,
+                        chose_register(size_of(pointer->node->type), rdi));
             break;
           case 2:
-            output_file(
-                "    mov [rbp-%lu], %s", pointer->node->var->offset,
-                chose_register(size_of(pointer->node->type->type), rsi));
+            output_file("    mov [rbp-%lu], %s", pointer->node->var->offset,
+                        chose_register(size_of(pointer->node->type), rsi));
             break;
           case 3:
-            output_file(
-                "    mov [rbp-%lu], %s", pointer->node->var->offset,
-                chose_register(size_of(pointer->node->type->type), rdx));
+            output_file("    mov [rbp-%lu], %s", pointer->node->var->offset,
+                        chose_register(size_of(pointer->node->type), rdx));
             break;
           case 4:
-            output_file(
-                "    mov [rbp-%lu], %s", pointer->node->var->offset,
-                chose_register(size_of(pointer->node->type->type), rcx));
+            output_file("    mov [rbp-%lu], %s", pointer->node->var->offset,
+                        chose_register(size_of(pointer->node->type), rcx));
             break;
           case 5:
             output_file("    mov [rbp-%lu], %s", pointer->node->var->offset,
-                        chose_register(size_of(pointer->node->type->type), r8));
+                        chose_register(size_of(pointer->node->type), r8));
             break;
           case 6:
             output_file("    mov [rbp-%lu], %s", pointer->node->var->offset,
-                        chose_register(size_of(pointer->node->type->type), r9));
+                        chose_register(size_of(pointer->node->type), r9));
             break;
           default: error_exit_with_guard("too much arguments"); break;
         }

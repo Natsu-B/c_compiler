@@ -239,17 +239,14 @@ void analyze_type(Node *node)
         {
           switch (node->type->type)
           {
-            case TYPE_INT:
-            case TYPE_LONG:
-            case TYPE_CHAR:
-            case TYPE_PTR:
-              node->var->offset = calculate_offset(size_of(node->type));
-              break;
+            case TYPE_STRUCT: unimplemented(); break;
             case TYPE_ARRAY:
               node->var->offset = calculate_offset(size_of(node->type->ptr_to) *
                                                    node->type->size);
               break;
-            default: error_exit("unreachable"); break;
+            default:
+              node->var->offset = calculate_offset(size_of(node->type));
+              break;
           }
         }
       }
@@ -257,17 +254,10 @@ void analyze_type(Node *node)
 
     case ND_SIZEOF:
       node->kind = ND_NUM;
-      switch (node->lhs->type->type)
-      {
-        case TYPE_PTR:
-        case TYPE_INT:
-        case TYPE_LONG: node->val = size_of(node->lhs->type); break;
-        case TYPE_CHAR: node->val = size_of(node->lhs->type); break;
-        case TYPE_ARRAY:
-          node->val = size_of(node->lhs->type) * node->lhs->val;
-          break;
-        default: error_exit("unreachable"); break;
-      }
+      if (node->lhs->type->type == TYPE_ARRAY)
+        node->val = size_of(node->lhs->type) * node->lhs->val;
+      else
+        node->val = size_of(node->lhs->type);
       break;
 
     default: break;

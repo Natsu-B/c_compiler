@@ -328,14 +328,3 @@ Token *tokenizer(char *input, Token *next_token)
   token = head.next;
   return token;
 }
-
-// トークンを上書きする関数
-Token *change_token(TokenKind kind, Token *old, char *str)
-{
-  Token *token = old->next;
-  if (!token)  // TODO オーバーライドの危険性あり 検証必要
-    old->next = token = calloc(1, sizeof(Token));
-  token->kind = kind;
-  token->str = str;
-  return token;
-}

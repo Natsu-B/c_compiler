@@ -74,20 +74,6 @@ Node *new_node_num(int val)
   return node;
 }
 
-TypeKind find_type()
-{
-  Token *is_int = consume("int", TK_IDENT);
-  Token *is_long = consume("long", TK_IDENT);
-  Token *is_char = consume("char", TK_IDENT);
-  if (is_long && !is_char)
-    return TYPE_LONG;
-  if (is_int && !is_long && !is_char)
-    return TYPE_INT;
-  if (is_char && !is_int && !is_long)
-    return TYPE_CHAR;
-  return TYPE_NULL;
-}
-
 NestedBlockVariables *new_nest()
 {
   new_nest_type();
@@ -165,14 +151,9 @@ Node *program()
 {
   pr_debug2("program");
   Token *token_before = get_token();
-  TypeKind type_kind = find_type();
-  if (type_kind == TYPE_NULL)
+  Type *type = is_type();
+  if (!type)
     error_at(token_before->str, token_before->len, "型が指定されていません");
-  int pointer_counter = 0;
-  while (consume("*", TK_RESERVED))
-  {
-    pointer_counter++;
-  }
 
   // 関数宣言かどうか
   Token *token = consume_token_if_next_matches(TK_IDENT, '(');
@@ -184,6 +165,7 @@ Node *program()
     node->func_name = token->str;
     node->func_len = token->len;
     node->var_list = new_nest();
+    node->type = type;
     program_name = token->str;
     program_name_len = token->len;
     NDBlock head;
@@ -504,16 +486,9 @@ Node *primary()
   }
 
   // 変数の型
-  TypeKind type_kind = find_type();
-  size_t pointer_counter = 0;
-  if (type_kind != TYPE_NULL)
-  {
-    while (consume("*", TK_RESERVED))
-    {
-      pointer_counter++;
-    }
+  Type *type = is_type();
+  if (type)
     token = expect_ident();
-  }
   else
     token = consume_ident();
   // 変数
@@ -522,8 +497,8 @@ Node *primary()
     Node *node = calloc(1, sizeof(Node));
     node->token = token;
     node->kind = ND_VAR;
-    node->is_new = type_kind != TYPE_NULL;
-    node->var = add_variables(token, type_kind, pointer_counter);
+    node->is_new = type;
+    node->var = add_variables(token, type);
     return node;
   }
 

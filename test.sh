@@ -122,7 +122,7 @@ assert 'int main() {int x = 3; int *y = &x; *y = 0; return x;}'
 assert 'int main() {int x = 0; int *y = &x; int **z = &y;*y = 2; **z = 3; return x;}'
 assert_with_outer_code 3 'int main() {int *p; alloc(&p, 1, 3); int *q = p+1; return *q;}' './test/alloc2.o'
 assert_with_outer_code 1 'int main() {int *p; alloc(&p, 1, 3); int *q = p + 1; q = q-1; return *q;}' './test/alloc2.o'
-assert 'int main() {int x; long z; if (sizeof(x) != 4) return 1; int* y; if (sizeof(y) != 8) return 1; if (sizeof(*y) != 4) return 1; if (sizeof(x + 1) != 4) return 1; if (sizeof(z) != 8) return 1; if (sizeof(sizeof(1)) != 8)return 1;  return 0;}'
+assert 'int main() {int x; long z; if (sizeof(x) != 4) return 1; int* y; if (sizeof(y) != 8) return 1; if (sizeof(*y) != 4) return 1; if (sizeof(x + 1) != 4) return 1; if (sizeof(z) != 4) return 1; if (sizeof(sizeof(1)) != 8)return 1;  return 0;}'
 assert 'int main() {int x[2]; int y; long z; *(x+1) = 1; *x = 2; y = 5; return (y - *(x+1)) / *x;}'
 assert 'int main() {int x[2]; int y = 1; x[0] = y; x[1] = y + 1; return x[1] + x[0];}'
 assert 'int main() {int i = 0; {int i = 1; return i;}}'
@@ -147,6 +147,14 @@ assert 'int main() {int hoge = 10; hoge /* = 0*/; return hoge; }'
 assert 'int main() {int hoge = 15; // hoge = 10;
 return hoge;}'
 assert 'int x; int y; int main() {return x;}'
+assert '#ifdef __STDC__
+#include <stdbool.h>
+#endif
+short h; int main() { short i; bool j; if (sizeof(h) != 2) return 0; if (sizeof(i) != 2) return 1; /*if (sizeof(j) != 1) return 2;*/ return 10; }'
+assert '#ifdef __STDC__
+#include <stdbool.h>
+#endif
+bool f; int main() {if (f) return 1; f = 1; if (f) f; else return 2; f = f + 1; if (f) f; else return 4; return 3;}'
 
 (
   cd test

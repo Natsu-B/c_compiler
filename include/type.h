@@ -37,7 +37,7 @@ struct Type
 };
 
 Type *alloc_type(TypeKind kind);
-Type *is_type();
+Type *declaration_specifiers();
 size_t size_of(Type *type);
 size_t align_of(Type *type);
 void init_types();

@@ -1,0 +1,173 @@
+(* my c compiler ebnf list *)
+(* opt = [] repeat = {} *)
+(* HEAD *)
+translation-unit
+        = { external-declaration };
+
+external-declaration
+        = function_definition
+        | declaration;
+
+function_definition = declaration-specifiers, declarator, compound-statement;
+
+(* STATEMENTS *)
+statement
+        = compound-statement
+        | expression-statement
+        | expression-statement
+        | iteration-statement
+        | jump-statement;
+
+compound-statement
+        = "{", { block-item }, "}";
+
+block-item
+        = declaration
+        | statement;
+
+expression-statement
+        = [ expression ], ";";
+
+selection-statement
+        = "if", "(", expression, ")", statement
+        | "if", "(", expression, ")", statement, "else", statement;
+
+iteration-statement
+        = "while", "(", expression, ")", statement
+        | "for", "(", [ expression ], ";", [ expression ], ";", [ expression ], ")", statement
+        | "for", "(", declaration, [ expression ], ";", [ expression ], ")", statement;
+
+jump-statement
+        = "return", [ expression ], ";";
+
+(* DECLARATIONS *)
+declaration
+        = declaration-specifiers, [ init-declarator ], ";";
+
+declaration-specifiers
+        = storage-class-specifier, [ declaration-specifiers ]
+        | type-specifier, [ declaration-specifiers ];
+
+init-declarator
+        = declarator
+        | declarator, "=", initializer;
+
+storage-class-specifier
+        = "typedef"
+        | "auto";
+
+type-specifier
+        = "char"
+        | "short"
+        | "int"
+        | "long"
+        | "signed"
+        | "unsigned"
+        | "bool"
+        | typedef-name;
+
+declarator
+        = [ pointer ], direct-declarator;
+
+direct-declarator
+        = identifier, [ "[", constant, "]" ];
+
+pointer
+        = { "*" };
+
+parameter-type-list
+        = parameter-declaration, { ",", parameter-declaration }, [ "," ];
+
+parameter-declaration
+        = declaration-specifiers, ( declarator
+        | [ abstract-declarator ] );
+
+type-name
+        = specifier-qualifier-list, [ abstract-declarator ];
+
+abstract-declarator
+        = [ pointer ], direct-abstract-declarator;
+
+direct-abstract-declarator
+        = [ direct-abstract-declarator ], ( "[", [ constant ], "]" );
+
+typedef-name
+        = identifier;
+
+initializer
+        = assignment-expression;
+
+(* EXPRESSIONS *)
+expression
+        = assignment-expression;
+
+assignment-expression
+        = conditional-expression
+        | conditional-expression, assignment-operator, assignment-expression;
+
+assignment-operator
+        = "=";
+
+conditional-expression
+        = logical-OR-expression;
+
+logical-OR-expression
+        = logical-AND-expression;
+
+logical-AND-expression
+        = inclusive-OR-expression;
+
+inclusive-OR-expression
+        = exclusive-OR-expression;
+
+exclusive-OR-expression
+        = AND-expression;
+
+AND-expression
+        = equality-expression;
+
+equality-expression
+        = relational-expression, { ( "=="
+        | "!=" ), relational-expression };
+
+relational-expression
+        = shift-expression, { ( "<"
+        | ">"
+        | "<="
+        | ">=" ), shift-expression };
+
+shift-expression
+        = additive-expression;
+
+additive-expression
+        = multiplicative-expression, { ( "+"
+        | "-" ), multiplicative-expression };
+
+multiplicative-expression
+        = cast-expression, { ( "*"
+        | "/" ), cast-expression };
+
+cast-expression
+        = unary-expression;
+
+unary-expression
+        = postfix-expression
+        | unary-operator, cast-expression
+        | "sizeof", unary-expression;
+
+unary-operator
+        = "&"
+        | "*"
+        | "+"
+        | "-";
+
+postfix-expression
+        = primary-expression
+        | postfix-expression, ( "[", expression, "]"
+        | "(", { assignment-expression }, ")" );
+
+primary-expression
+        = identifier
+        | constant
+        | string-literal
+        | "(", expression, ")";

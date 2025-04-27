@@ -86,44 +86,26 @@ void exit_nest()
   exit_nest_variables();
 }
 
-/**
- * program    = function_definition | declaration
- * function_definition = type ( "*" )* ident "(" expr ("," expr )* ")"{stmt*}
- * stmt    = expr ";"
- *         | "{" stmt "}"
- *         | "if" "(" expr ")" stmt ("else" stmt)?
- *         | "while" "(" expr ")" stmt
- *         | "for" "(" expr? ";" expr? ";" expr? ")" stmt
- *         | "return" expr ";"
- * expr       = assign
- * assign     = equality ("=" assign)?
- * equality   = relational ("==" relational | "!=" relational)*
- * relational = add ("<" add | "<=" add | ">" add | ">=" add)*
- * add        = mul ("+" mul | "-" mul)*
- * mul        = unary ("*" unary | "/" unary)*
- * unary      = "sizeof" unary
- *         | ("+" | "-")? postfix
- *         | "*" unary
- *         | "&" unary
- * postfix    = primary ( "[" expr "]" )*
- * primary    = num
- *         | ( type ( "*" )* )? ident
- *         | ident "(" expr ("," expr )* ")"
- *         | "(" expr ")"
- *         | """ stirng-literal """
- */
-
-Node *program();
-Node *stmt();
-Node *expr();
-Node *assign();
-Node *equality();
-Node *relational();
-Node *add();
-Node *mul();
-Node *unary();
-Node *postfix();
-Node *primary();
+Node *external_declaration();
+Node *function_declaration();
+Node *declaration(Type *type);
+Node *init_declarator(Type *type);
+Node *declarator(Type *type);
+Node *initializer();
+Node *block_item();
+Node *statement();
+Node *expression();
+Node *assignment_expression();
+Node *conditional_expression();
+Node *equality_expression();
+Node *relational_expression();
+Node *shift_expression();
+Node *additive_expression();
+Node *multiplicative_expression();
+Node *cast_expression();
+Node *unary_expression();
+Node *postfix_expression();
+Node *primary_expression();
 
 FuncBlock *parser()
 {
@@ -137,7 +119,7 @@ FuncBlock *parser()
   {
     FuncBlock *new = calloc(1, sizeof(FuncBlock));
     pointer->next = new;
-    new->node = program();
+    new->node = external_declaration();
     pointer = new;
   }
 #ifdef DEBUG
@@ -147,15 +129,15 @@ FuncBlock *parser()
   return head.next;
 }
 
-Node *program()
+Node *external_declaration()
 {
   pr_debug2("program");
   Token *token_before = get_token();
-  Type *type = is_type();
+  Type *type = declaration_specifiers();
   if (!type)
     error_at(token_before->str, token_before->len, "型が指定されていません");
 
-  // 関数宣言かどうか
+  // 関数宣言かどうか function-definition
   Token *token = consume_token_if_next_matches(TK_IDENT, '(');
   if (token)
   {
@@ -171,20 +153,17 @@ Node *program()
     NDBlock head;
     head.next = NULL;
     NDBlock *pointer = &head;
-    if (!consume(")", TK_RESERVED))
+    bool is_comma = true;
+    while (!consume(")", TK_RESERVED))
     {
+      if (!is_comma)
+        error_at(get_token()->str, get_token()->len, "invalid parameter");
+      is_comma = false;
       NDBlock *next = calloc(1, sizeof(NDBlock));
       pointer->next = next;
-      next->node = expr();
+      next->node = declarator(declaration_specifiers());
       pointer = next;
-      while (!consume(")", TK_RESERVED))
-      {
-        expect(",", TK_RESERVED);
-        NDBlock *next = calloc(1, sizeof(NDBlock));
-        pointer->next = next;
-        next->node = expr();
-        pointer = next;
-      }
+      is_comma = consume(",", TK_RESERVED);
     }
 
     node->expr = head.next;
@@ -195,25 +174,66 @@ Node *program()
     {
       NDBlock *next = calloc(1, sizeof(NDBlock));
       pointer->next = next;
-      next->node = stmt();
+      next->node = block_item();
       pointer = next;
     }
     node->stmt = head.next;
     exit_nest();
     return node;
   }
-  // tokenにおいてtypeをconsumeしたのを戻す
-  set_token(token_before);
   // グローバル変数宣言
-  Node *node = expr();
+  Node *node = declaration(type);
+  return node;
+}
+
+Node *declaration(Type *type)
+{
+  Node *node = init_declarator(type);
   expect(";", TK_RESERVED);
   return node;
 }
 
-Node *stmt()
+Node *init_declarator(Type *type)
 {
-  pr_debug2("stmt");
-  // ブロックの判定
+  Node *node = declarator(type);
+  if (consume("=", TK_RESERVED))
+    node = new_node(ND_ASSIGN, node, initializer(), get_old_token());
+  return node;
+}
+
+Node *declarator(Type *type)
+{
+  Token *token = consume_ident();
+  Node *node = calloc(1, sizeof(Node));
+  node->token = token;
+  node->kind = ND_VAR;
+  node->is_new = true;
+  node->var = add_variables(token, type);
+  if (consume("[", TK_RESERVED))
+  {
+    node = new_node(ND_ARRAY, node, new_node_num(expect_number()), token);
+    expect("]", TK_RESERVED);
+  }
+  return node;
+}
+
+Node *initializer()
+{
+  return assignment_expression();
+}
+
+Node *block_item()
+{
+  Type *type = declaration_specifiers();
+  if (type)
+    return declaration(type);
+  return statement();
+}
+
+Node *statement()
+{
+  pr_debug2("statement");
+  // ブロックの判定 compound-statement
   if (consume("{", TK_RESERVED))
   {
     Node *node = calloc(1, sizeof(Node));
@@ -228,7 +248,7 @@ Node *stmt()
         break;
       NDBlock *next = calloc(1, sizeof(NDBlock));
       pointer->next = next;
-      next->node = stmt();
+      next->node = block_item();
       pointer = next;
     }
     exit_nest();
@@ -236,6 +256,7 @@ Node *stmt()
     return node;
   }
 
+  // selection-statement
   // if文の判定とelseがついてるかどうか
   if (consume("if", TK_IDENT))
   {
@@ -243,13 +264,13 @@ Node *stmt()
     node->name = generate_label_name();
     node->nest_var = new_nest();
     expect("(", TK_RESERVED);
-    node->condition = expr();
+    node->condition = expression();
     expect(")", TK_RESERVED);
-    node->true_code = stmt();
+    node->true_code = statement();
     if (consume("else", TK_IDENT))
     {
       node->kind = ND_ELIF;
-      node->false_code = stmt();
+      node->false_code = statement();
     }
     else
     {
@@ -259,6 +280,7 @@ Node *stmt()
     return node;
   }
 
+  // iteration-statement
   // while文の判定
   if (consume("while", TK_IDENT))
   {
@@ -267,13 +289,12 @@ Node *stmt()
     node->name = generate_label_name();
     node->nest_var = new_nest();
     expect("(", TK_RESERVED);
-    node->condition = expr();
+    node->condition = expression();
     expect(")", TK_RESERVED);
-    node->true_code = stmt();
+    node->true_code = statement();
     exit_nest();
     return node;
   }
-
   // for文の判定
   if (consume("for", TK_IDENT))
   {
@@ -282,17 +303,21 @@ Node *stmt()
     node->name = generate_label_name();
     node->nest_var = new_nest();
     expect("(", TK_RESERVED);
-    if (!consume(";", TK_RESERVED))
+    // declarationかどうか
+    Type *type = declaration_specifiers();
+    if (type)
+      node->init = declaration(type);
+    else if (!consume(";", TK_RESERVED))
     {
       Node *new = calloc(1, sizeof(Node));
       node->init = new;
       new->kind = ND_DISCARD_EXPR;
-      new->lhs = expr();
+      new->lhs = expression();
       expect(";", TK_RESERVED);
     }
     if (!consume(";", TK_RESERVED))
     {
-      node->condition = expr();
+      node->condition = expression();
       expect(";", TK_RESERVED);
     }
     if (!consume(")", TK_RESERVED))
@@ -300,140 +325,156 @@ Node *stmt()
       Node *new = calloc(1, sizeof(Node));
       node->update = new;
       new->kind = ND_DISCARD_EXPR;
-      new->lhs = expr();
+      new->lhs = expression();
       expect(")", TK_RESERVED);
     }
-    node->true_code = stmt();
+    node->true_code = statement();
     exit_nest();
     return node;
   }
 
   Node *node;
   if (consume("return", TK_IDENT))
-  {
-    node = calloc(1, sizeof(Node));
-    node->kind = ND_RETURN;
-    node->rhs = expr();
-  }
+    node = new_node(ND_RETURN, expression(), NULL, get_old_token());
   else
-  {
-    node = calloc(1, sizeof(Node));
-    node->kind = ND_DISCARD_EXPR;
-    node->lhs = expr();
-  }
+    node = new_node(ND_DISCARD_EXPR, expression(), NULL, get_token());
   expect(";", TK_RESERVED);
   return node;
 }
 
-Node *expr()
+Node *expression()
 {
-  pr_debug2("expr");
-  return assign();
+  pr_debug2("expression");
+  return assignment_expression();
 }
 
-Node *assign()
+Node *assignment_expression()
 {
-  pr_debug2("assign");
-  Node *node = equality();
+  pr_debug2("assignment-expression");
+  Node *node = conditional_expression();
 
   if (consume("=", TK_RESERVED))
   {
-    node = new_node(ND_ASSIGN, node, assign(), get_old_token());
+    node = new_node(ND_ASSIGN, node, assignment_expression(), get_old_token());
   }
   return node;
 }
 
-Node *equality()
+Node *conditional_expression()
+{
+  // logical-OR-expression
+  // logical-AND-expression
+  // inclusive-OR-expression
+  // exclusive-OR-expression
+  // AND-expression
+  // equality-expression
+  return equality_expression();
+}
+
+Node *equality_expression()
 {
   pr_debug2("equality");
-  Node *node = relational();
+  Node *node = relational_expression();
 
   for (;;)
   {
     if (consume("==", TK_RESERVED))
-      node = new_node(ND_EQ, node, relational(), get_old_token());
+      node = new_node(ND_EQ, node, relational_expression(), get_old_token());
     else if (consume("!=", TK_RESERVED))
-      node = new_node(ND_NEQ, node, relational(), get_old_token());
+      node = new_node(ND_NEQ, node, relational_expression(), get_old_token());
     else
       return node;
   }
 }
 
-Node *relational()
+Node *relational_expression()
 {
   pr_debug2("relational");
-  Node *node = add();
+  Node *node = shift_expression();
   for (;;)
   {
     if (consume("<=", TK_RESERVED))
-      node = new_node(ND_LTE, node, add(), get_old_token());
+      node = new_node(ND_LTE, node, shift_expression(), get_old_token());
     else if (consume("<", TK_RESERVED))
-      node = new_node(ND_LT, node, add(), get_old_token());
+      node = new_node(ND_LT, node, shift_expression(), get_old_token());
     else if (consume(">=", TK_RESERVED))
-      node = new_node(ND_LTE, add(), node, get_old_token());
+      node = new_node(ND_LTE, shift_expression(), node, get_old_token());
     else if (consume(">", TK_RESERVED))
-      node = new_node(ND_LT, add(), node, get_old_token());
+      node = new_node(ND_LT, shift_expression(), node, get_old_token());
     else
       return node;
   }
 }
 
-Node *add()
+Node *shift_expression()
+{
+  return additive_expression();
+}
+
+Node *additive_expression()
 {
   pr_debug2("add");
-  Node *node = mul();
+  Node *node = multiplicative_expression();
 
   for (;;)
   {
     if (consume("+", TK_RESERVED))
     {
-      node = new_node(ND_ADD, node, mul(), get_old_token());
+      node =
+          new_node(ND_ADD, node, multiplicative_expression(), get_old_token());
     }
     else if (consume("-", TK_RESERVED))
     {
-      node = new_node(ND_SUB, node, mul(), get_old_token());
+      node =
+          new_node(ND_SUB, node, multiplicative_expression(), get_old_token());
     }
     else
       return node;
   }
 }
 
-Node *mul()
+Node *multiplicative_expression()
 {
   pr_debug2("mul");
-  Node *node = unary();
+  Node *node = cast_expression();
 
   for (;;)
   {
     if (consume("*", TK_RESERVED))
-      node = new_node(ND_MUL, node, unary(), get_old_token());
+      node = new_node(ND_MUL, node, cast_expression(), get_old_token());
     else if (consume("/", TK_RESERVED))
-      node = new_node(ND_DIV, node, unary(), get_old_token());
+      node = new_node(ND_DIV, node, cast_expression(), get_old_token());
     else
       return node;
   }
 }
 
-Node *unary()
+Node *cast_expression()
+{
+  return unary_expression();
+}
+
+Node *unary_expression()
 {
   pr_debug2("unary");
   if (consume("sizeof", TK_IDENT))
-    return new_node(ND_SIZEOF, unary(), NULL, get_old_token());
+    return new_node(ND_SIZEOF, cast_expression(), NULL, get_old_token());
   if (consume("+", TK_RESERVED))
-    return postfix();
+    return cast_expression();
   if (consume("-", TK_RESERVED))
-    return new_node(ND_SUB, new_node_num(0), postfix(), get_old_token());
+    return new_node(ND_SUB, new_node_num(0), cast_expression(),
+                    get_old_token());
   if (consume("*", TK_RESERVED))
-    return new_node(ND_DEREF, unary(), NULL, get_old_token());
+    return new_node(ND_DEREF, cast_expression(), NULL, get_old_token());
   if (consume("&", TK_RESERVED))
-    return new_node(ND_ADDR, unary(), NULL, get_old_token());
-  return postfix();
+    return new_node(ND_ADDR, cast_expression(), NULL, get_old_token());
+  return postfix_expression();
 }
 
-Node *postfix()
+Node *postfix_expression()
 {
   pr_debug2("postfix");
-  Node *node = primary();
+  Node *node = primary_expression();
   for (;;)
   {
     Token *old_token = get_old_token();
@@ -446,12 +487,12 @@ Node *postfix()
   }
 }
 
-Node *primary()
+Node *primary_expression()
 {
   pr_debug2("primary");
   if (consume("(", TK_RESERVED))
   {
-    Node *node = expr();
+    Node *node = expression();
     expect(")", TK_RESERVED);
     return node;
   }
@@ -473,7 +514,7 @@ Node *primary()
     {
       NDBlock *next = calloc(1, sizeof(NDBlock));
       pointer->next = next;
-      next->node = expr();
+      next->node = expression();
       pointer = next;
       if (!consume(",", TK_RESERVED))
       {
@@ -485,20 +526,15 @@ Node *primary()
     return node;
   }
 
-  // 変数の型
-  Type *type = is_type();
-  if (type)
-    token = expect_ident();
-  else
-    token = consume_ident();
   // 変数
+  token = consume_ident();
   if (token)
   {
     Node *node = calloc(1, sizeof(Node));
     node->token = token;
     node->kind = ND_VAR;
-    node->is_new = type;
-    node->var = add_variables(token, type);
+    node->is_new = false;
+    node->var = add_variables(token, NULL);
     return node;
   }
 

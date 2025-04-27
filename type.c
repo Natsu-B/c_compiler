@@ -12,7 +12,7 @@
 static Vector* TypedefList;
 static Vector* StructList;
 
-Type* is_type()
+Type* declaration_specifiers()
 {
   size_t long_count = 0;
   size_t signed_count = 0;
@@ -54,7 +54,9 @@ Type* is_type()
 
   if (!(long_count | signed_count | unsigned_count | int_count | bool_count |
         short_count | char_count | void_count))
-  {  // TODO
+  {
+    // typedefにあるか調べる
+    
     return NULL;
   }
 

@@ -324,7 +324,7 @@ void gen(Node *node)
 
     case ND_RETURN:
       output_debug2("ND_RETURN");
-      gen(node->rhs);
+      gen(node->lhs);
       output_file("    pop rax");
       output_file("    leave");
       output_file("    ret");

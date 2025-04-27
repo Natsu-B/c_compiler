@@ -86,21 +86,19 @@ void exit_nest_variables()
 }
 
 // 変数の追加
-Var *add_variables(Token *token, TypeKind kind, size_t pointer_counter)
+Var *add_variables(Token *token, Type *type)
 {
   // 変数名が同じものが以前あったかどうかを調査
   Var *same = find_local_var_in_current_nested_block(token);
   Var *all_locals = find_local_var_all(token);
   Var *globals = find_global_var(token);
   Var *all = all_locals ? all_locals : globals;
-  if (same && kind != TYPE_NULL)
+  if (same && type)
     error_at(token->str, token->len, "同じ名前の変数がすでに存在します");
-  if (!all && kind == TYPE_NULL)
+  if (!all && !type)
     error_at(token->str, token->len, "この名前の変数は存在しません");
-  if (all &&
-      kind ==
-          TYPE_NULL)  // 以前から変数が存在し、変数の新規宣言をしていない場合
-    return all;       // 以前の値を返す
+  if (all && !type)  // 以前から変数が存在し、変数の新規宣言をしていない場合
+    return all;      // 以前の値を返す
 
   // 新規変数の場合
   Var *new = calloc(1, sizeof(Var));
@@ -109,13 +107,6 @@ Var *add_variables(Token *token, TypeKind kind, size_t pointer_counter)
     variables_head->next = new;
   new->name = token->str;
   new->len = token->len;
-  Type *type = alloc_type(kind);
-  while (pointer_counter--)
-  {
-    Type *ref = alloc_type(TYPE_PTR);
-    ref->ptr_to = type;
-    type = ref;
-  }
   new->type = type;
   if (root == top)
   {
@@ -123,7 +114,6 @@ Var *add_variables(Token *token, TypeKind kind, size_t pointer_counter)
     globals_head = new;
   }
   else
-
     new->is_local = true;  // 変数はローカル変数
   if (!top->var)           // topにまだ変数がない場合
     top->var = new;

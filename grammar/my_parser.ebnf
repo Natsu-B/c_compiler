@@ -63,11 +63,26 @@ type-specifier
         | "signed"
         | "unsigned"
         | "bool"
+        | "_Bool"
+        | struct-or-union-specifier
         | typedef-name;
 
+struct-or-union-specifier
+        = struct-or-union, [ identifier ], "{", { struct-declaration }, "}"
+        | struct-or-union, identifier;
+
+struct-or-union
+        = "struct"
+        | "union";
+
+struct-declaration
+        = specifier-qualifier-list, struct-declarator, ";";
+
 specifier-qualifier-list
-        = type-specifier, [ specifier-qualifier-list ]
-        | type-qualifier, [ specifier-qualifier-list ];
+        = { type-specifier }, {pointer};
+
+struct-declarator
+        = declarator;
 
 declarator
         = direct-declarator;

@@ -147,18 +147,17 @@ assert 'int main() {int hoge = 10; hoge /* = 0*/; return hoge; }'
 assert 'int main() {int hoge = 15; // hoge = 10;
 return hoge;}'
 assert 'int x; int y; int main() {return x;}'
-assert '#ifdef __STDC__
-#include <stdbool.h>
-#endif
+assert '#include <stdbool.h>
 short h; int main() { short i; bool j; if (sizeof(h) != 2) return 0; if (sizeof(i) != 2) return 1; /*if (sizeof(j) != 1) return 2;*/ return 10; }'
-assert '#ifdef __STDC__
-#include <stdbool.h>
-#endif
+assert '#include <stdbool.h>
 bool f; int main() {if (f) return 1; f = 1; if (f) f; else return 2; f = f + 1; if (f) f; else return 4; return 3;}'
 assert 'typedef int hoge; int main() {hoge a = 1; return a;}'
 assert 'int main() { typedef long long fuga; fuga x; return sizeof(x); }'
 assert 'typedef int *hoge; int main() {hoge x; *x = 1; return *x;}'
 assert 'typedef int hoge[2]; int main() {hoge x; x[1] = 10; x[0] = 2; return x[1];}'
+assert 'struct HOGE { int x; int y; }; int main() {struct HOGE x; return sizeof(x);}'
+assert '#include <stdbool.h>
+struct HOGE { int x; int y; }; struct FUGA { bool x; bool y; }; typedef struct FUGA HOGE; int main() {HOGE x; return sizeof(x);}'
 
 (
   cd test

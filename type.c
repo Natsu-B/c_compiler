@@ -14,12 +14,30 @@
 
 static Vector* TypedefList;
 static Vector* StructList;
+static size_t struct_id;
 
 typedef struct
 {
   Token* name;
   Type* type;
 } typedef_list;
+
+typedef struct
+{
+  Token* name;
+  Type* type;
+  size_t offset;  // structの先頭から何byte離れているか
+} struct_data_list;
+
+typedef struct
+{
+  bool is_union;            // unionかstructか
+  Token* name;              // structの名前 なかったらNULL
+  Vector* data_list;        // structの中身 前方宣言のみならNULL
+  Type* type;               // structのtype
+  size_t struct_size;       // structのサイズ
+  size_t struct_alignment;  // structのアライメント
+} struct_list;
 
 Type* declaration_specifiers()
 {
@@ -31,6 +49,8 @@ Type* declaration_specifiers()
   size_t char_count = 0;
   size_t short_count = 0;
   size_t void_count = 0;
+  size_t struct_count = 0;
+  size_t union_count = 0;
   Token* old = get_token();
   bool is_typedef = false;
   if (consume("typedef", TK_IDENT))
@@ -46,7 +66,7 @@ Type* declaration_specifiers()
       unsigned_count++;
     else if (consume("int", TK_IDENT))
       int_count++;
-    else if (consume("bool", TK_IDENT))
+    else if (consume("bool", TK_IDENT) || consume("_Bool", TK_IDENT))
       bool_count++;
     else if (consume("char", TK_IDENT))
       char_count++;
@@ -54,25 +74,114 @@ Type* declaration_specifiers()
       short_count++;
     else if (consume("void", TK_IDENT))
       void_count++;
+    else if (consume("struct", TK_IDENT))
+      struct_count++;
+    else if (consume("union", TK_IDENT))
+      union_count++;
     else
       break;
   }
   if (long_count > 2 ||
       (long_count & (bool_count + char_count + short_count + void_count)) ||
       signed_count + unsigned_count > 1 ||
-      int_count + bool_count + char_count + short_count + void_count > 1 ||
+      int_count + bool_count + char_count + short_count + void_count +
+              struct_count + union_count >
+          1 ||
       (signed_count | unsigned_count) & (void_count | bool_count) ||
       !(long_count | signed_count | unsigned_count | int_count | bool_count |
-        short_count | char_count | void_count) &
-          is_typedef)
+        short_count | char_count | void_count | struct_count | union_count) &
+          is_typedef ||
+      (long_count | signed_count | unsigned_count | int_count | bool_count |
+       short_count | char_count | void_count) &
+          (struct_count | union_count))
     error_at(old->str, get_token()->str - old->str + get_token()->len,
              "invalid type specifier");
+
+  if (struct_count | union_count)
+  {  // struct または union
+    Token* token = consume_ident();
+    if (token)
+    {
+      for (size_t i = 1; i <= vector_size(StructList); i++)
+      {
+        Vector* struct_nest = vector_peek_at(StructList, i);
+        for (size_t j = 1; j <= vector_size(struct_nest); j++)
+        {
+          struct_list* tmp = vector_peek_at(struct_nest, j);
+          if (tmp->name->len == token->len &&
+              !strncmp(tmp->name->str, token->str, token->len))
+          {
+            Type* type = tmp->type;
+            if (is_typedef)
+            {
+              Type* tmp = alloc_type(TYPE_TYPEDEF);
+              tmp->ptr_to = type;
+              type = tmp;
+            }
+            return type;
+          }
+        }
+      }
+    }
+    else if (!peek("{", TK_RESERVED))
+      error_at(get_token()->str, get_token()->len, "invalid struct");
+    // struct {} のような無名structの場合や未定義の場合
+    struct_list* new = calloc(1, sizeof(struct_list));
+    new->is_union = union_count;
+    new->name = token;
+    Type* type = alloc_type(TYPE_STRUCT);
+    type->struct_type = ++struct_id;
+    new->type = type;
+    if (consume("{", TK_RESERVED))
+    {
+      if (new->data_list)
+        error_at(get_token()->str, get_token()->len, "struct redefinition");
+      new->data_list = vector_new();
+      size_t struct_size = 0;
+      size_t struct_alignment = 0;
+      for (;;)
+      {
+        Type* type = declaration_specifiers();
+        Token* token = consume_ident();
+        if (!type || type->type == TYPE_TYPEDEF || !token)
+          error_at(get_token()->str, get_token()->len,
+                   "invalid struct definition");
+        struct_data_list* new_data = malloc(sizeof(struct_data_list));
+        new_data->name = token;
+        new_data->type = type;
+        vector_push(new->data_list, new_data);
+        size_t alignment = align_of(type);
+        if (!new->is_union)
+          struct_size = (struct_size % alignment
+                             ? (struct_size / alignment + 1) * alignment
+                             : struct_size) +
+                        size_of(type);
+        else if (struct_size < size_of(type))
+          struct_size = size_of(type);
+        if (struct_alignment < alignment)
+          struct_alignment = alignment;
+        expect(";", TK_RESERVED);
+        if (consume("}", TK_RESERVED))
+          break;
+      }
+      new->struct_size = struct_size;
+      new->struct_alignment = struct_alignment;
+    }
+    vector_push(vector_peek(StructList), new);
+    if (is_typedef)
+    {
+      Type* tmp = alloc_type(TYPE_TYPEDEF);
+      tmp->ptr_to = type;
+      type = tmp;
+    }
+    return type;
+  }
 
   if (!(long_count | signed_count | unsigned_count | int_count | bool_count |
         short_count | char_count | void_count))
   {
     // typedefにあるか調べる
-    Token* token = consume_ident();
+    Token* token = peek_ident();
     if (token)
     {
       for (size_t i = 1; i <= vector_size(TypedefList); i++)
@@ -83,10 +192,12 @@ Type* declaration_specifiers()
           typedef_list* tmp = vector_peek_at(typedef_nest, j);
           if (tmp->name->len == token->len &&
               !strncmp(tmp->name->str, token->str, token->len))
+          {
+            consume_ident(token);
             return tmp->type;
+          }
         }
       }
-      set_token(token);
     }
     return NULL;
   }
@@ -117,8 +228,7 @@ Type* declaration_specifiers()
     kind = TYPE_INT;
   else
     unreachable();
-  Type* type = calloc(1, sizeof(Type));
-  type->type = kind;
+  Type* type = alloc_type(kind);
   if (!unsigned_count)
     type->is_signed = true;
   while (ref_count--)
@@ -187,7 +297,23 @@ size_t size_of(Type* type)
     case TYPE_VOID: return 0;
     case TYPE_STRUCT:
     {
+      for (size_t i = 1; i <= vector_size(StructList); i++)
+      {
+        Vector* struct_nest = vector_peek_at(StructList, i);
+        for (size_t j = 1; j <= vector_size(struct_nest); j++)
+        {
+          struct_list* tmp = vector_peek_at(struct_nest, j);
+          if (tmp->type == type)
+          {
+            if (tmp->struct_size)
+              return tmp->struct_size;
+            error_at(tmp->name->str, tmp->name->len, "struct not defined");
+          }
+        }
+      }
+      error_exit("struct not found");
     }
+    break;
     default: break;
   }
   unreachable();
@@ -200,7 +326,25 @@ size_t align_of(Type* type)
   {
     case TYPE_STR:
     case TYPE_ARRAY: return 8;
-    case TYPE_STRUCT: unimplemented(); break;
+    case TYPE_STRUCT:
+    {
+      for (size_t i = 1; i <= vector_size(StructList); i++)
+      {
+        Vector* struct_nest = vector_peek_at(StructList, i);
+        for (size_t j = 1; j <= vector_size(struct_nest); j++)
+        {
+          struct_list* tmp = vector_peek_at(struct_nest, j);
+          if (tmp->type == type)
+          {
+            if (tmp->struct_alignment)
+              return tmp->struct_alignment;
+            error_at(tmp->name->str, tmp->name->len, "struct not defined");
+          }
+        }
+      }
+      error_exit("struct not found");
+    }
+    break;
     default: return size_of(type);
   }
   unreachable();
@@ -212,16 +356,21 @@ void init_types()
   Vector* root_typedef = vector_new();
   TypedefList = vector_new();
   vector_push(TypedefList, root_typedef);
+  Vector* root_struct = vector_new();
   StructList = vector_new();
+  vector_push(StructList, root_struct);
 }
 
 void new_nest_type()
 {
   Vector* new = vector_new();
   vector_push(TypedefList, new);
+  new = vector_new();
+  vector_push(StructList, new);
 }
 
 void exit_nest_type()
 {
   vector_pop(TypedefList);
+  vector_pop(StructList);
 }

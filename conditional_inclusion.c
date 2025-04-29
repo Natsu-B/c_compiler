@@ -189,6 +189,8 @@ static void shunting_yard_algorithm(Token *token)
         long long *num = malloc(sizeof(long long));
         char *tmp;
         *num = strtoll(token->str, &tmp, 10);
+        while (strchr("UuLl", *tmp))
+          tmp++;
         if (tmp != token->str + token->len)
           error_at(token->str, token->len, "cannot convert to integer");
         new->data = num;

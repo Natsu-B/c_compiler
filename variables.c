@@ -88,6 +88,8 @@ void exit_nest_variables()
 // 変数の追加
 Var *add_variables(Token *token, Type *type)
 {
+  if (!token)
+    return NULL;
   if (type)
   {
     Type *tmp = type;

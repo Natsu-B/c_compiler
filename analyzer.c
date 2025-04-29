@@ -225,7 +225,9 @@ void analyze_type(Node *node)
         {
           switch (node->type->type)
           {
-            case TYPE_STRUCT: unimplemented(); break;
+            case TYPE_STRUCT:
+              node->var->offset = calculate_offset(size_of(node->type));
+              break;
             case TYPE_ARRAY:
               node->var->offset = calculate_offset(size_of(node->type->ptr_to) *
                                                    node->type->size);

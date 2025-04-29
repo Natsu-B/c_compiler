@@ -21,8 +21,13 @@ const char *tokenkindlist[TK_END] = {TokenKindTable};
 
 void fix_token_head()
 {
-  while (token->kind == TK_IGNORABLE || token->kind == TK_LINEBREAK)
+  while (token->kind == TK_IGNORABLE || token->kind == TK_LINEBREAK ||
+         token->kind == TK_EOF)
+  {
     token = token->next;
+    if (!token->next)
+      break;
+  }
 }
 
 // TK_IGNORABLE と TK_LINEBREAKを無視してトークンを進める
@@ -58,14 +63,21 @@ Token *consume_token_if_next_matches(TokenKind kind, char reserved)
   return NULL;
 }
 
-// 次のトークンが引数の記号だったら読み進めtokenをその他のときはNULLを返す関数
-// ただし、TK_IGNORABLEを除く
-Token *consume(char *op, TokenKind kind)
+Token *peek(char *op, TokenKind kind)
 {
   if (token->kind != kind || strlen(op) != token->len ||
       memcmp(op, token->str, token->len))
     return NULL;
-  return token_next();
+  return token;
+}
+
+// 次のトークンが引数の記号だったら読み進めtokenをその他のときはNULLを返す関数
+// ただし、TK_IGNORABLEを除く
+Token *consume(char *op, TokenKind kind)
+{
+  if (peek(op, kind))
+    return token_next();
+  return NULL;
 }
 
 // 次のトークンが引数の記号だったら読み進め、そうでなければerror_atを呼び出す
@@ -73,7 +85,7 @@ Token *expect(char *op, TokenKind kind)
 {
   Token *result = consume(op, kind);
   if (!result)
-    error_at(token->str, token->len, "トークンが %c でありませんでした", op);
+    error_at(token->str, token->len, "トークンが %s でありませんでした", op);
   return result;
 }
 
@@ -83,12 +95,19 @@ Token *get_old_token()
   return token_old;
 }
 
-Token *consume_ident()
+Token *peek_ident()
 {
   long tmp;
   if (token->kind != TK_IDENT || is_number(&tmp))
     return NULL;
-  return token_next();
+  return token;
+}
+
+Token *consume_ident()
+{
+  if (peek_ident())
+    return token_next();
+  return NULL;
 }
 
 Token *expect_ident()
@@ -283,6 +302,11 @@ Token *tokenizer(char *input, Token *next_token)
       int i = 1;
       while (isdigit(*++input))
         i++;
+      while (strchr("UuLl", *input))
+      {
+        input++;
+        i++;
+      }
       cur = new_token(TK_IDENT, cur, input - i);
       cur->len = i;
       continue;

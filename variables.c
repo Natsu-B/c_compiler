@@ -88,6 +88,17 @@ void exit_nest_variables()
 // 変数の追加
 Var *add_variables(Token *token, Type *type)
 {
+  if (type)
+  {
+    Type *tmp = type;
+    while (tmp->type == TYPE_ARRAY)
+      tmp = tmp->ptr_to;
+    if (tmp->type == TYPE_TYPEDEF)
+    {
+      add_typedef(token, type);
+      return NULL;
+    }
+  }
   // 変数名が同じものが以前あったかどうかを調査
   Var *same = find_local_var_in_current_nested_block(token);
   Var *all_locals = find_local_var_all(token);

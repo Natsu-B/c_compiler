@@ -219,7 +219,7 @@ void gen(Node *node)
 {
   output_debug2("entor gen");
   if (!node)
-    error_exit_with_guard("null pointer");
+    return;
 
   switch (node->kind)
   {
@@ -450,6 +450,8 @@ void generator(FuncBlock *parsed, char *output_filename)
   for (FuncBlock *pointer = parsed; pointer; pointer = pointer->next)
   {
     Node *node = pointer->node;
+    if (!node)
+      continue;
     if (node->kind == ND_FUNCDEF)
     {
       output_file("\n.global %.*s", (int)node->func_len, node->func_name);

@@ -4,6 +4,9 @@
 
 #include "include/type.h"
 
+#include <stdio.h>
+#include <string.h>
+
 #include "include/error.h"
 #include "include/parser.h"
 #include "include/tokenizer.h"
@@ -11,6 +14,12 @@
 
 static Vector* TypedefList;
 static Vector* StructList;
+
+typedef struct
+{
+  Token* name;
+  Type* type;
+} typedef_list;
 
 Type* declaration_specifiers()
 {
@@ -23,6 +32,10 @@ Type* declaration_specifiers()
   size_t short_count = 0;
   size_t void_count = 0;
   Token* old = get_token();
+  bool is_typedef = false;
+  if (consume("typedef", TK_IDENT))
+    is_typedef = true;
+
   for (;;)
   {
     if (consume("long", TK_IDENT))
@@ -48,7 +61,10 @@ Type* declaration_specifiers()
       (long_count & (bool_count + char_count + short_count + void_count)) ||
       signed_count + unsigned_count > 1 ||
       int_count + bool_count + char_count + short_count + void_count > 1 ||
-      (signed_count | unsigned_count) & (void_count | bool_count))
+      (signed_count | unsigned_count) & (void_count | bool_count) ||
+      !(long_count | signed_count | unsigned_count | int_count | bool_count |
+        short_count | char_count | void_count) &
+          is_typedef)
     error_at(old->str, get_token()->str - old->str + get_token()->len,
              "invalid type specifier");
 
@@ -56,7 +72,22 @@ Type* declaration_specifiers()
         short_count | char_count | void_count))
   {
     // typedefにあるか調べる
-    
+    Token* token = consume_ident();
+    if (token)
+    {
+      for (size_t i = 1; i <= vector_size(TypedefList); i++)
+      {
+        Vector* typedef_nest = vector_peek_at(TypedefList, i);
+        for (size_t j = 1; j <= vector_size(typedef_nest); j++)
+        {
+          typedef_list* tmp = vector_peek_at(typedef_nest, j);
+          if (tmp->name->len == token->len &&
+              !strncmp(tmp->name->str, token->str, token->len))
+            return tmp->type;
+        }
+      }
+      set_token(token);
+    }
     return NULL;
   }
 
@@ -92,12 +123,43 @@ Type* declaration_specifiers()
     type->is_signed = true;
   while (ref_count--)
   {
-    Type* new = calloc(1, sizeof(Type));
-    new->type = TYPE_PTR;
+    Type* new = alloc_type(TYPE_PTR);
+    new->ptr_to = type;
+    type = new;
+  }
+
+  if (is_typedef)
+  {
+    Type* new = alloc_type(TYPE_TYPEDEF);
     new->ptr_to = type;
     type = new;
   }
   return type;
+}
+
+void add_typedef(Token* token, Type* type)
+{
+  // TYPE_ARRRAYの場合 TYPE_ARRAYがTYPE_DEFより上にくるのを修正
+  Type* tmp = type;
+  Type* old = NULL;
+  while (tmp->type == TYPE_ARRAY)
+  {
+    old = tmp;
+    tmp = tmp->ptr_to;
+  }
+  if (tmp->type != TYPE_TYPEDEF)
+    unreachable();
+  tmp = tmp->ptr_to;
+  if (old)
+    old->ptr_to = tmp;
+  else
+    type = tmp;
+
+  // 名前とTypeを関連付ける
+  typedef_list* new = malloc(sizeof(typedef_list));
+  new->name = token;
+  new->type = type;
+  vector_push(vector_peek(TypedefList), new);
 }
 
 // Typeを作成する関数
@@ -113,12 +175,12 @@ size_t size_of(Type* type)
 {
   switch (type->type)
   {
-    case TYPE_INT:
-    case TYPE_LONG: return 4;
+    case TYPE_INT: return 4;
     case TYPE_BOOL:
     case TYPE_CHAR: return 1;
     case TYPE_SHORT: return 2;
     case TYPE_STR:
+    case TYPE_LONG:
     case TYPE_LONGLONG:
     case TYPE_PTR:
     case TYPE_ARRAY: return 8;
@@ -147,14 +209,19 @@ size_t align_of(Type* type)
 
 void init_types()
 {
+  Vector* root_typedef = vector_new();
   TypedefList = vector_new();
+  vector_push(TypedefList, root_typedef);
   StructList = vector_new();
 }
 
 void new_nest_type()
 {
+  Vector* new = vector_new();
+  vector_push(TypedefList, new);
 }
 
 void exit_nest_type()
 {
+  vector_pop(TypedefList);
 }

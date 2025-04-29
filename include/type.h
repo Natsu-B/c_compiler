@@ -12,7 +12,7 @@ typedef enum
   TYPE_INT,       // int型 signed 32bit
   TYPE_BOOL,      // bool型 8 bit
   TYPE_CHAR,      // char型 8bit
-  TYPE_LONG,      // long型 32bit
+  TYPE_LONG,      // long型 64bit
   TYPE_LONGLONG,  // long long型 signed 64bit
   TYPE_SHORT,     // short型 16bit
   TYPE_VOID,      // void型
@@ -20,6 +20,7 @@ typedef enum
   TYPE_STRUCT,    // struct、union で定義されている型
   TYPE_PTR,       // 型へのポインタ
   TYPE_ARRAY,     // 配列
+  TYPE_TYPEDEF,   // typedef
   TYPE_NULL,      // 失敗時等に返す 実際の型ではない
 } TypeKind;
 
@@ -27,7 +28,7 @@ typedef enum
 struct Type
 {
   TypeKind type;
-  Type *ptr_to;  // TYPE_PTR, TYPE_ARRAYのとき利用
+  Type *ptr_to;  // TYPE_PTR, TYPE_ARRAY, TYPE_TYPEDEFのとき利用
   union
   {
     bool is_signed;      // TYPE_INT等の整数型のとき利用
@@ -40,6 +41,7 @@ Type *alloc_type(TypeKind kind);
 Type *declaration_specifiers();
 size_t size_of(Type *type);
 size_t align_of(Type *type);
+void add_typedef();
 void init_types();
 void new_nest_type();
 void exit_nest_type();

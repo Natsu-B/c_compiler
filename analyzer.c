@@ -54,6 +54,8 @@ TypeKind implicit_type_conversion_assign(Type *lhs, Type *rhs)
 
 void add_type(Node *node)
 {
+  if (!node)
+    return;
   if (node->lhs)
     add_type(node->lhs);
   if (node->rhs)
@@ -147,38 +149,22 @@ void add_type(Node *node)
   }
   if (node->kind == ND_ARRAY)
   {
-    if (node->lhs->is_new)
-    {
-      // old1 -> old2 -> old3 ... のように並んでいた Typeを
-      // old1 -> new -> old2 -> old3 ... に変更することで同じ変数の
-      // Typeを変更する
-      Type *new = alloc_type(node->lhs->type->type);
-      new->ptr_to = node->lhs->type->ptr_to;
-      new->size = node->rhs->val;
-      node->lhs->type->type = TYPE_ARRAY;
-      node->lhs->type->ptr_to = new;
-      node->lhs->type->size = node->rhs->val;
-      node->rhs->type = node->lhs->type;
-      node->rhs->type = node->lhs->type;
-      node->lhs->val = node->rhs->val;
-    }
-    else
-    {
-      // char *i = "hoge"; i[3]; 等が使えなくなるためコメントアウト
-      // if (node->rhs->val < 0 || node->rhs->val >= node->lhs->type->size)
-      //     error_at(node->token->str, "index out of bounds for type array");
-      node->kind = ND_DEREF;
-      node->lhs = new_node(ND_ADD, node->lhs, node->rhs, node->token);
-      node->rhs = NULL;
-      node->lhs->type = node->lhs->lhs->type;
-      add_type(node);
-    }
+    // char *i = "hoge"; i[3]; 等が使えなくなるためコメントアウト
+    // if (node->rhs->val < 0 || node->rhs->val >= node->lhs->type->size)
+    //     error_at(node->token->str, "index out of bounds for type array");
+    node->kind = ND_DEREF;
+    node->lhs = new_node(ND_ADD, node->lhs, node->rhs, node->token);
+    node->rhs = NULL;
+    node->lhs->type = node->lhs->lhs->type;
+    add_type(node);
     return;
   }
 }
 
 void analyze_type(Node *node)
 {
+  if (!node)
+    return;
   if (node->lhs)
     analyze_type(node->lhs);
   if (node->rhs)
@@ -226,7 +212,7 @@ void analyze_type(Node *node)
       break;
 
     case ND_NUM:
-      if (node->type->type == TYPE_PTR)
+      if (node->type->type == TYPE_PTR || node->type->type == TYPE_ARRAY)
       {
         node->val = node->val * size_of(node->type->ptr_to);
       }
@@ -271,6 +257,8 @@ FuncBlock *analyzer(FuncBlock *funcblock)
   for (FuncBlock *pointer = funcblock; pointer; pointer = pointer->next)
   {
     Node *node = pointer->node;
+    if (!node)
+      continue;
     if (node->kind == ND_FUNCDEF)
     {
       for (NDBlock *tmp = node->expr; tmp; tmp = tmp->next)
@@ -298,6 +286,8 @@ FuncBlock *analyzer(FuncBlock *funcblock)
   for (FuncBlock *pointer = funcblock; pointer; pointer = pointer->next)
   {
     Node *node = pointer->node;
+    if (!node)
+      continue;
     if (node->kind == ND_FUNCDEF)
     {
       init_nest();

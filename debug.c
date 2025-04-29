@@ -52,6 +52,8 @@ void make_space(int nest)
 
 void _print_parse_result(Node *node, int nest)
 {
+  if (!node)
+    return;
   make_space(nest);
   switch (node->kind)
   {

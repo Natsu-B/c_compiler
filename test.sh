@@ -155,6 +155,10 @@ assert '#ifdef __STDC__
 #include <stdbool.h>
 #endif
 bool f; int main() {if (f) return 1; f = 1; if (f) f; else return 2; f = f + 1; if (f) f; else return 4; return 3;}'
+assert 'typedef int hoge; int main() {hoge a = 1; return a;}'
+assert 'int main() { typedef long long fuga; fuga x; return sizeof(x); }'
+assert 'typedef int *hoge; int main() {hoge x; *x = 1; return *x;}'
+assert 'typedef int hoge[2]; int main() {hoge x; x[1] = 10; x[0] = 2; return x[1];}'
 
 (
   cd test

@@ -204,15 +204,23 @@ Node *init_declarator(Type *type)
 Node *declarator(Type *type)
 {
   Token *token = consume_ident();
-  Node *node = calloc(1, sizeof(Node));
-  node->token = token;
-  node->kind = ND_VAR;
-  node->is_new = true;
-  node->var = add_variables(token, type);
   if (consume("[", TK_RESERVED))
   {
-    node = new_node(ND_ARRAY, node, new_node_num(expect_number()), token);
+    Type *new = alloc_type(TYPE_ARRAY);
+    new->ptr_to = type;
+    new->size = expect_number();
+    type = new;
     expect("]", TK_RESERVED);
+  }
+  Var *var = add_variables(token, type);
+  Node *node = NULL;
+  if (var)
+  {
+    node = calloc(1, sizeof(Node));
+    node->token = token;
+    node->kind = ND_VAR;
+    node->is_new = true;
+    node->var = var;
   }
   return node;
 }

@@ -39,7 +39,7 @@ typedef struct
   size_t struct_alignment;  // structのアライメント
 } struct_list;
 
-Type* declaration_specifiers()
+Type* _declaration_specifiers(bool* is_typedef)
 {
   size_t long_count = 0;
   size_t signed_count = 0;
@@ -52,9 +52,8 @@ Type* declaration_specifiers()
   size_t struct_count = 0;
   size_t union_count = 0;
   Token* old = get_token();
-  bool is_typedef = false;
   if (consume("typedef", TK_IDENT))
-    is_typedef = true;
+    *is_typedef = true;
 
   for (;;)
   {
@@ -90,7 +89,7 @@ Type* declaration_specifiers()
       (signed_count | unsigned_count) & (void_count | bool_count) ||
       !(long_count | signed_count | unsigned_count | int_count | bool_count |
         short_count | char_count | void_count | struct_count | union_count) &
-          is_typedef ||
+          *is_typedef ||
       (long_count | signed_count | unsigned_count | int_count | bool_count |
        short_count | char_count | void_count) &
           (struct_count | union_count))
@@ -111,14 +110,7 @@ Type* declaration_specifiers()
           if (tmp->name->len == token->len &&
               !strncmp(tmp->name->str, token->str, token->len))
           {
-            Type* type = tmp->type;
-            if (is_typedef)
-            {
-              Type* tmp = alloc_type(TYPE_TYPEDEF);
-              tmp->ptr_to = type;
-              type = tmp;
-            }
-            return type;
+            return tmp->type;
           }
         }
       }
@@ -164,16 +156,14 @@ Type* declaration_specifiers()
         if (consume("}", TK_RESERVED))
           break;
       }
+      struct_size =
+          struct_size % struct_alignment
+              ? (struct_size / struct_alignment + 1) * struct_alignment
+              : struct_size;
       new->struct_size = struct_size;
       new->struct_alignment = struct_alignment;
     }
     vector_push(vector_peek(StructList), new);
-    if (is_typedef)
-    {
-      Type* tmp = alloc_type(TYPE_TYPEDEF);
-      tmp->ptr_to = type;
-      type = tmp;
-    }
     return type;
   }
 
@@ -202,15 +192,6 @@ Type* declaration_specifiers()
     return NULL;
   }
 
-  size_t ref_count = 0;
-  for (;;)
-  {
-    if (consume("*", TK_RESERVED))
-      ref_count++;
-    else
-      break;
-  }
-
   TypeKind kind;
   if (long_count == 2)
     kind = TYPE_LONGLONG;
@@ -231,18 +212,36 @@ Type* declaration_specifiers()
   Type* type = alloc_type(kind);
   if (!unsigned_count)
     type->is_signed = true;
-  while (ref_count--)
-  {
-    Type* new = alloc_type(TYPE_PTR);
-    new->ptr_to = type;
-    type = new;
-  }
+  return type;
+}
 
-  if (is_typedef)
+Type* declaration_specifiers()
+{
+  bool is_typedef = false;
+  Type* type = _declaration_specifiers(&is_typedef);
+  if (type)
   {
-    Type* new = alloc_type(TYPE_TYPEDEF);
-    new->ptr_to = type;
-    type = new;
+    size_t ref_count = 0;
+    for (;;)
+    {
+      if (consume("*", TK_RESERVED))
+        ref_count++;
+      else
+        break;
+    }
+    while (ref_count--)
+    {
+      Type* new = alloc_type(TYPE_PTR);
+      new->ptr_to = type;
+      type = new;
+    }
+
+    if (is_typedef)
+    {
+      Type* new = alloc_type(TYPE_TYPEDEF);
+      new->ptr_to = type;
+      type = new;
+    }
   }
   return type;
 }

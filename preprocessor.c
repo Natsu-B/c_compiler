@@ -89,25 +89,14 @@ static size_t lib_path_size[] = {
 Token *preprocess(char *input, char *file_name, Token *token);
 
 // #~ のプリプロセッサで処理するものたち
-Token *directive(Token *token)
+Token *directive(Token *old)
 {
+  token_void(old);
+  Token *token = token_next_not_ignorable_void(old);
   switch (token->len)
   {
-    case 1:
-      if (token->str[0] == '#')
-      {
-        token_void(token);
-        token = token_next_not_ignorable_void(token);
-        char *directive_name = malloc(token->len + 1);
-        strncpy(directive_name + 1, token->str, token->len);
-        directive_name[0] = '#';
-        token->str = directive_name;
-        token->len++;
-        return directive(token);
-      }
-      break;
-    case 3:
-      if (!strncmp(token->str, "#if", 3))
+    case 2:
+      if (!strncmp(token->str, "if", 2))
       {
         Vector *conditional_list;
         for (;;)
@@ -115,22 +104,22 @@ Token *directive(Token *token)
           if (!vector_has_data(Conditional_Inclusion_List))
             unreachable();
           conditional_list = vector_shift(Conditional_Inclusion_List);
-          if (token == vector_peek_at(conditional_list, 1))
+          if (old == vector_peek_at(conditional_list, 1))
             break;
         }
         conditional_inclusion(token_if, conditional_list);
         return token->next;
       }
       break;
-    case 5:
-      if (!strncmp(token->str, "#line", 5))
+    case 4:
+      if (!strncmp(token->str, "line", 4))
       {
         unimplemented();
         return token->next;
       }
       break;
-    case 6:
-      if (!strncmp(token->str, "#ifdef", 6))
+    case 5:
+      if (!strncmp(token->str, "ifdef", 5))
       {
         Vector *conditional_list;
         for (;;)
@@ -138,22 +127,22 @@ Token *directive(Token *token)
           if (!vector_has_data(Conditional_Inclusion_List))
             unreachable();
           conditional_list = vector_shift(Conditional_Inclusion_List);
-          if (token == vector_peek_at(conditional_list, 1))
+          if (old == vector_peek_at(conditional_list, 1))
             break;
         }
         conditional_inclusion(token_ifdef, conditional_list);
         return token->next;
       }
-      if (!strncmp(token->str, "#error", 6))
+      if (!strncmp(token->str, "error", 5))
         error_at(token->str, token->len, "#error directive found");
-      if (!strncmp(token->str, "#undef", 6))
+      if (!strncmp(token->str, "undef", 5))
       {
         unimplemented();
         return token->next;
       }
       break;
-    case 7:
-      if (!strncmp(token->str, "#define", 7))
+    case 6:
+      if (!strncmp(token->str, "define", 6))
       {
         token_void(token);
         Token *ptr = token_next_not_ignorable_void(token);
@@ -236,22 +225,28 @@ Token *directive(Token *token)
           add_object_like_macro(token_list);
         return token->next;
       }
-      if (!strncmp(token->str, "#ifndef", 7))
+      if (!strncmp(token->str, "ifndef", 6))
       {
-        Vector *conditional_list = vector_shift(Conditional_Inclusion_List);
-        if (token != vector_peek_at(conditional_list, 1))
-          unreachable();
+        Vector *conditional_list;
+        for (;;)
+        {
+          if (!vector_has_data(Conditional_Inclusion_List))
+            unreachable();
+          conditional_list = vector_shift(Conditional_Inclusion_List);
+          if (old == vector_peek_at(conditional_list, 1))
+            break;
+        }
         conditional_inclusion(token_ifndef, conditional_list);
         return token->next;
       }
-      if (!strncmp(token->str, "#pragma", 7))
+      if (!strncmp(token->str, "pragma", 6))
       {
         unimplemented();
         return token->next;
       }
       break;
-    case 8:
-      if (!strncmp(token->str, "#include", 8))
+    case 7:
+      if (!strncmp(token->str, "include", 7))
       {
         token_void(token);
         Token *tmp = token_next_not_ignorable(token);

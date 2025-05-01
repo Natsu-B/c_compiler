@@ -158,6 +158,10 @@ assert 'typedef int hoge[2]; int main() {hoge x; x[1] = 10; x[0] = 2; return x[1
 assert 'struct HOGE { int x; int y; }; int main() {struct HOGE x; return sizeof(x);}'
 assert '#include <stdbool.h>
 struct HOGE { int x; int y; }; struct FUGA { bool x; bool y; }; typedef struct FUGA HOGE; int main() {HOGE x; return sizeof(x);}'
+assert 'typedef int hoge; int main() {hoge* a; *a = 1; return *a;}'
+assert '#include <stdbool.h>
+struct HOGE { int x; int y; }; struct FUGA { bool x; bool y; }; typedef struct FUGA HOGE; int main() {HOGE x; return sizeof(x.x);}'
+
 
 (
   cd test

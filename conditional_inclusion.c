@@ -189,7 +189,7 @@ static void shunting_yard_algorithm(Token *token)
         long long *num = malloc(sizeof(long long));
         char *tmp;
         *num = strtoll(token->str, &tmp, 10);
-        while (strchr("UuLl", *tmp))
+        while (*tmp == 'u' || *tmp == 'U' || *tmp == 'l' || *tmp == 'L')
           tmp++;
         if (tmp != token->str + token->len)
           error_at(token->str, token->len, "cannot convert to integer");
@@ -434,10 +434,12 @@ void next_conditional_inclusion(Token *token, bool is_true,
 {
   switch (token->len)
   {
-    case 5:  // #else #elif
-      if (!strncmp(token->str, "#else", 5))
+    case 4:  // #else #elif
+      if (!strncmp(token->str, "else", 4))
       {  // #else
         Token *next = vector_shift(conditional_list);
+        token_void(next);
+        next = token_next_not_ignorable_void(next);
         token_void(token);
         if (is_true)
           clean_while_next(token, next);
@@ -452,17 +454,19 @@ void next_conditional_inclusion(Token *token, bool is_true,
         else
         {
           Token *next = vector_shift(conditional_list);
+          token_void(next);
+          next = token_next_not_ignorable_void(next);
           clean_while_next(token, next);
           next_conditional_inclusion(next, is_true, conditional_list, false);
         }
       }
       break;
-    case 6:  // #endif
+    case 5:  // #endif
       token_void(token);
       token_next_not_ignorable_void(token);
       return;
-    case 8:  // #elifdef
-    case 9:  // #elifndef
+    case 7:  // #elifdef
+    case 8:  // #elifndef
       if (is_end)
         error_at(token->str, token->len, "Invalid #elifdef use");
       if (!is_true)
@@ -475,6 +479,8 @@ void next_conditional_inclusion(Token *token, bool is_true,
       else
       {
         Token *next = vector_shift(conditional_list);
+        token_void(next);
+        next = token_next_not_ignorable_void(next);
         clean_while_next(token, next);
         next_conditional_inclusion(next, is_true, conditional_list, false);
       }
@@ -495,6 +501,8 @@ static void _conditional_inclusion(if_directive type, Token *head,
       head = token_next_not_ignorable_void(head);
       bool is_true = condition_interpreter(head);
       Token *next = vector_shift(conditional_list);
+      token_void(next);
+      next = token_next_not_ignorable_void(next);
       if (!is_true)
         clean_while_next(head, next);
       next_conditional_inclusion(next, is_true, conditional_list, false);
@@ -518,6 +526,8 @@ static void _conditional_inclusion(if_directive type, Token *head,
 
       // #else #endif 等の対応するディレクティブ
       Token *next = vector_shift(conditional_list);
+      token_void(next);
+      next = token_next_not_ignorable_void(next);
       if (!is_true)
         clean_while_next(head, next);
       next_conditional_inclusion(next, is_true, conditional_list, false);
@@ -530,5 +540,7 @@ static void _conditional_inclusion(if_directive type, Token *head,
 void conditional_inclusion(if_directive type, Vector *conditional_list)
 {
   Token *head = vector_shift(conditional_list);
+  token_void(head);
+  head = token_next_not_ignorable_void(head);
   _conditional_inclusion(type, head, conditional_list);
 }

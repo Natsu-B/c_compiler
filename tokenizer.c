@@ -237,14 +237,20 @@ Token *tokenizer(char *input, Token *next_token)
     if (*input == '#')
     {
       cur = new_token(TK_DIRECTIVE, cur, input);
-      size_t counter = 1;
-      while (is_alnum(*++input))
+      cur->len = 1;
+      size_t counter = 0;
+      char *tmp = ++input;
+      while (isspace(*tmp) && *tmp != '\n')
+        tmp++;
+      while (is_alnum(*tmp))
+      {
         counter++;
-      cur->len = counter;
+        tmp++;
+      }
       // Conditional_Inclusion (#if #endif 等)を高速化するためにまとめる
-      if ((counter == 3 && !strncmp(cur->str, "#if", 3)) ||
-          (counter == 6 && !strncmp(cur->str, "#ifdef", 6)) ||
-          (counter == 7 && !strncmp(cur->str, "#ifndef", 7)))
+      if ((counter == 2 && !strncmp(tmp - counter, "if", 2)) ||
+          (counter == 5 && !strncmp(tmp - counter, "ifdef", 5)) ||
+          (counter == 6 && !strncmp(tmp - counter, "ifndef", 6)))
       {
         Vector *new = vector_new();
         vector_push(Conditional_Inclusion_List, new);
@@ -252,15 +258,15 @@ Token *tokenizer(char *input, Token *next_token)
         vector_push(new, cur);
         continue;
       }
-      if ((counter == 5 && (!strncmp(cur->str, "#else", 5) ||
-                            !strncmp(cur->str, "#elif", 5))) ||
-          (counter == 8 && !strncmp(cur->str, "#elifdef", 8)) ||
-          (counter == 9 && !strncmp(cur->str, "#elifndef", 9)))
+      if ((counter == 4 && (!strncmp(tmp - counter, "else", 4) ||
+                            !strncmp(tmp - counter, "elif", 4))) ||
+          (counter == 7 && !strncmp(tmp - counter, "elifdef", 7)) ||
+          (counter == 8 && !strncmp(tmp - counter, "elifndef", 8)))
       {
         vector_push(vector_peek(nest_list), cur);
         continue;
       }
-      if (counter == 6 && !strncmp(cur->str, "#endif", 6))
+      if (counter == 5 && !strncmp(tmp - counter, "endif", 5))
       {
         vector_push(vector_pop(nest_list), cur);
         continue;
@@ -272,19 +278,13 @@ Token *tokenizer(char *input, Token *next_token)
     {
       cur = new_token(TK_RESERVED, cur, input);
       // "==", "<=", ">=", "!=" の場合
-      if (*(input + 1) == '=')
+      if ((*(input + 1) == '=' && (*input == '<' || *input == '>' ||
+                                   *input == '!' || *input == '=')) ||
+          (*(input + 1) == '&' && *input == '&') ||
+          (*(input + 1) == '|' && *input == '|') ||
+          (*(input + 1) == '>' && *input == '-'))
       {
         pr_debug2("find RESERVED token: %.2s", input);
-        cur->len = 2;
-        input += 2;
-      }
-      else if (*(input + 1) == '&' && *(input) == '&')
-      {
-        cur->len = 2;
-        input += 2;
-      }
-      else if (*(input + 1) == '|' && *(input) == '|')
-      {
         cur->len = 2;
         input += 2;
       }

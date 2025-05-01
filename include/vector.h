@@ -15,6 +15,7 @@ void *vector_pop(Vector *vec);
 void *vector_shift(Vector *vec);
 void *vector_peek(Vector *vec);
 void *vector_peek_at(Vector *vec, size_t location);
+void *vector_pop_at(Vector *vec, size_t location);
 void vector_free(Vector *vec);
 
 #endif

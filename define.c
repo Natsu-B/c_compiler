@@ -17,11 +17,17 @@
 Vector *object_like_macro_list;
 Vector *function_like_macro_list;
 
+int find_macro_name_without_hide_set(Token *identifier, Vector *hide_set,
+                                     Vector **argument_list,
+                                     Vector **token_string, Token **token,
+                                     size_t *location);
+
 // 引数の文字列が object like macro に定義されている場合は1を
 // function like macro に定義されている場合は2を、その他の場合は0を返す
 inline int find_macro_name_all(Token *identifier)
 {
-  return find_macro_name_without_hide_set(identifier, NULL, NULL, NULL, NULL);
+  return find_macro_name_without_hide_set(identifier, NULL, NULL, NULL, NULL,
+                                          NULL);
 }
 
 // 引数の文字列が object like macro に定義されている場合は1を
@@ -30,7 +36,8 @@ inline int find_macro_name_all(Token *identifier)
 // ただし、すでに展開済みのものを除く
 int find_macro_name_without_hide_set(Token *identifier, Vector *hide_set,
                                      Vector **argument_list,
-                                     Vector **token_string, Token **token)
+                                     Vector **token_string, Token **token,
+                                     size_t *location)
 {
   // hide set
   if (hide_set)
@@ -52,6 +59,8 @@ int find_macro_name_without_hide_set(Token *identifier, Vector *hide_set,
         *token_string = tmp->token_string;
       if (token)
         *token = tmp->identifier;
+      if (location)
+        *location = i;
       return 1;
     }
   }
@@ -69,6 +78,8 @@ int find_macro_name_without_hide_set(Token *identifier, Vector *hide_set,
         *argument_list = tmp->arguments;
       if (token)
         *token = tmp->identifier;
+      if (location)
+        *location = i;
       return 2;
     }
   }
@@ -202,7 +213,8 @@ bool ident_replacement(Token *token)
     Token *token_identifier;
     Vector *argument_list = NULL;
     size_t is_defined = find_macro_name_without_hide_set(
-        token, hide_set, &argument_list, &token_string, &token_identifier);
+        token, hide_set, &argument_list, &token_string, &token_identifier,
+        NULL);
     if (is_defined == 1)
     {  // object like macro の場合
       vector_push(hide_set, token_identifier);
@@ -259,9 +271,9 @@ bool ident_replacement(Token *token)
             memcpy(new, next, sizeof(Token));
             if (new->kind == TK_LINEBREAK)
               error_at(new->str, new->len, "invalid define directive");
-            if (new->kind == TK_RESERVED &&new->str[0] == '(')
+            if (new->kind == TK_RESERVED && new->str[0] == '(')
               nest_counter++;
-            if (new->kind == TK_RESERVED &&new->str[0] == ')')
+            if (new->kind == TK_RESERVED && new->str[0] == ')')
               nest_counter--;
             vector_push(list, new);
             token_void(next);
@@ -332,4 +344,18 @@ bool ident_replacement(Token *token)
   bool tmp = vector_has_data(hide_set);
   vector_free(hide_set);
   return tmp;
+}
+
+void undef_macro(Token *token)
+{
+  size_t location;
+  int result = find_macro_name_without_hide_set(token, NULL, NULL, NULL, NULL,
+                                                &location);
+  switch (result)
+  {
+    case 0: break;
+    case 1: vector_pop_at(object_like_macro_list, location); break;
+    case 2: vector_pop_at(function_like_macro_list, location); break;
+    default: unreachable(); break;
+  }
 }

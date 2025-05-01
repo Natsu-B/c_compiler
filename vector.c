@@ -88,6 +88,20 @@ void *vector_peek_at(Vector *vec, size_t location)
   return vec->data[location - 1];
 }
 
+void *vector_pop_at(Vector *vec, size_t location)
+{
+  if (vec->len < location || location == 0)
+    error_exit(
+        "vector_pop_at() tried to access index %lu, but the vector contains "
+        "only %lu elements",
+        location, vec->len);
+  void *return_data = vec->data[location - 1];
+  if (vec->len > 1)
+    memmove(&vec->data[location - 1], &vec->data[location],
+            vec->len-- - location);
+  return return_data;
+}
+
 void vector_free(Vector *vec)
 {
   if (vec->data)

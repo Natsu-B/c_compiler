@@ -25,11 +25,9 @@ struct function_like_macro_storage
 };
 
 int find_macro_name_all(Token *identifier);
-int find_macro_name_without_hide_set(Token *identifier, Vector *hide_set,
-                                     Vector **argument_list,
-                                     Vector **token_string, Token **token);
 void add_object_like_macro(Vector *token);
 void add_function_like_macro(Vector *token);
 bool ident_replacement(Token *token);
+void undef_macro(Token *token);
 
 #endif

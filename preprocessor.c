@@ -108,14 +108,14 @@ Token *directive(Token *old)
             break;
         }
         conditional_inclusion(token_if, conditional_list);
-        return token->next;
+        return token_next_not_ignorable_void(token);
       }
       break;
     case 4:
       if (!strncmp(token->str, "line", 4))
       {
         unimplemented();
-        return token->next;
+        return token_next_not_ignorable_void(token);
       }
       break;
     case 5:
@@ -131,14 +131,17 @@ Token *directive(Token *old)
             break;
         }
         conditional_inclusion(token_ifdef, conditional_list);
-        return token->next;
+        return token_next_not_ignorable_void(token);
       }
       if (!strncmp(token->str, "error", 5))
         error_at(token->str, token->len, "#error directive found");
       if (!strncmp(token->str, "undef", 5))
       {
-        unimplemented();
-        return token->next;
+        token_void(token);
+        token = token_next_not_ignorable_void(token);
+        undef_macro(token);
+        token_void(token);
+        return token_next_not_ignorable_void(token);
       }
       break;
     case 6:
@@ -237,12 +240,12 @@ Token *directive(Token *old)
             break;
         }
         conditional_inclusion(token_ifndef, conditional_list);
-        return token->next;
+        return token_next_not_ignorable_void(token);
       }
       if (!strncmp(token->str, "pragma", 6))
       {
         unimplemented();
-        return token->next;
+        return token_next_not_ignorable_void(token);
       }
       break;
     case 7:
@@ -331,7 +334,7 @@ Token *directive(Token *old)
       if (!strncmp(token->str, "#warning", 8))
       {
         unimplemented();
-        return token->next;
+        return token_next_not_ignorable_void(token);
       }
       break;
     default: break;

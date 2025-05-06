@@ -10,9 +10,11 @@
 #include "include/tokenizer.h"
 
 bool output_preprocess;
+bool gcc_compatible;
 
 // 引数の処理
 // -E:  プリプロセッサを実行し出力する
+// -g:  プリプロセッサにおいてgccの定義済みマクロをインポートする
 // -o:  出力ファイルを指定する
 // -i:  入力ファイルを指定する
 // -I:  入力をこの引数のあとの標準入力とする
@@ -31,6 +33,8 @@ int main(int argc, char **argv)
     {
       if (!strcmp(argv[i], "-E"))
         output_preprocess = true;
+      else if (!strcmp(argv[i], "-g"))
+        gcc_compatible = true;
       else if (!strcmp(argv[i], "-o") && ++i < argc)
         output_file_name = argv[i];
       else if (!strcmp(argv[i], "-i") && ++i < argc)
@@ -46,14 +50,14 @@ int main(int argc, char **argv)
   }
   if (input_file_name)
     input = openfile(input_file_name);
-  if (!input || !output_file_name)
+  if (!input || !output_file_name || (gcc_compatible && !output_preprocess))
     error_exit("invalid arguments");
   pr_debug("output_file_name: %s", output_file_name);
   pr_debug("input_file_name: %s", input_file_name);
 
   init_preprocessor();
   // プリプロセッサ(トークナイザ内包)
-  Token *token = preprocess(input, input_file_name, NULL);
+  Token *token = preprocess(input, NULL, input_file_name, NULL);
   if (output_preprocess)
     preprocessed_file_writer(token, output_file_name);
   fix_token_head();  // トークンの先頭をIGNORABLE、 LINEBREAKではなくす

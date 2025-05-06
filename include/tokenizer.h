@@ -33,7 +33,7 @@ struct Token
   size_t len;      // トークンの長さ
 };
 
-extern Token *tokenizer(char *input, Token *next_token);
+extern Token *tokenizer(char *input, char *end, Token *next_token);
 extern void re_tokenize(Token *token_head);
 extern bool at_eof();
 

@@ -86,7 +86,7 @@ static size_t lib_path_size[] = {
 // TODO
 #endif
 
-Token *preprocess(char *input, char *file_name, Token *token);
+Token *preprocess(char *input, char *end, char *file_name, Token *token);
 
 // #~ のプリプロセッサで処理するものたち
 Token *directive(Token *old)
@@ -155,13 +155,13 @@ Token *directive(Token *old)
         memcpy(new, ptr, sizeof(Token));
         vector_push(token_list, new);
         token_void(ptr);
-        ptr = token_next_not_ignorable_void(ptr);
+        ptr = ptr->next;
 
         bool is_function_like = false;
         switch (ptr->kind)
         {
-          case TK_LINEBREAK:
-          case TK_IDENT: break;
+          case TK_LINEBREAK: break;
+          case TK_IGNORABLE: ptr = token_next_not_ignorable_void(ptr); break;
           case TK_RESERVED:
             // function like macroのときの動作
             if (ptr->str[0] == '(')
@@ -328,7 +328,7 @@ Token *directive(Token *old)
           error_at(token->str, token->len, "invalid #include directive");
         File_Line++;
         token_void(token);
-        preprocess(file_read(include_file_ptr), file_name, old);
+        preprocess(file_read(include_file_ptr), NULL, file_name, old);
         return token;
       }
       if (!strncmp(token->str, "#warning", 8))
@@ -365,7 +365,7 @@ void preprocessor()
   }
 }
 
-Token *preprocess(char *input, char *file_name, Token *token)
+Token *preprocess(char *input, char *end, char *file_name, Token *token)
 {
   pr_debug("start preprocessing %s", file_name);
   char *old_file_name = File_Name;
@@ -378,7 +378,7 @@ Token *preprocess(char *input, char *file_name, Token *token)
   File_Line = 1;
   File_Start = input;
   error_init(File_Name, input);
-  Token *token_first = tokenizer(input, next_token);
+  Token *token_first = tokenizer(input, end, next_token);
   if (token)
     token->next = token_first;
   else
@@ -398,6 +398,22 @@ Token *preprocess(char *input, char *file_name, Token *token)
     error_init(File_Name, File_Start);
   pr_debug("end preprocessing %s", file_name);
   return token;
+}
+
+#ifdef __GNUC__
+__asm__(
+    "gcc_predef_start: \n"
+    " .incbin \"gcc_predef.h\" \n"
+    "gcc_predef_end: \n");
+extern char gcc_predef_start[];
+extern char gcc_predef_end[];
+#else
+#error this is only supported in gcc
+#endif
+
+void set_default_definition()
+{
+  preprocess(gcc_predef_start, gcc_predef_end, NULL, NULL);
 }
 
 [[noreturn]]
@@ -422,5 +438,6 @@ void init_preprocessor()
 {
   Conditional_Inclusion_List = vector_new();
   object_like_macro_list = vector_new();
-  // set_default_definition();
+  if (gcc_compatible)
+    set_default_definition();
 }

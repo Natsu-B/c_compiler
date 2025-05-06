@@ -171,14 +171,14 @@ Token *new_token(TokenKind kind, Token *old, char *str)
 }
 
 // トークナイズする関数
-Token *tokenizer(char *input, Token *next_token)
+Token *tokenizer(char *input, char *end, Token *next_token)
 {
   pr_debug("start tokenizer...");
   Token head;
   head.next = NULL;
   Token *cur = &head;
   Vector *nest_list = vector_new();
-  while (*input)
+  while (end ? input != end : *input)
   {
     // 改行 isspaceでは'\n'も処理されてしまうのでそれより前に置く
     if (*input == '\n')
@@ -274,10 +274,17 @@ Token *tokenizer(char *input, Token *next_token)
       continue;
     }
 
-    if (strchr("+-*/()=!<>;{},&[].\\'|%", *input))
+    if (strchr("+-*/()=!<>;{},&[].\\'|%?:", *input))
     {
+      if (*input == '\\' && *(input + 1) == '\n')
+      {
+        cur = new_token(TK_IGNORABLE, cur, input);
+        cur->len = 2;
+        input += 2;
+        continue;
+      }
       cur = new_token(TK_RESERVED, cur, input);
-      // "==", "<=", ">=", "!=" の場合
+      // "==", "<=", ">=", "!=", "&&", "||", "->" の場合
       if ((*(input + 1) == '=' && (*input == '<' || *input == '>' ||
                                    *input == '!' || *input == '=')) ||
           (*(input + 1) == '&' && *input == '&') ||

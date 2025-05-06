@@ -99,7 +99,18 @@ void *vector_pop_at(Vector *vec, size_t location)
   if (vec->len > 1)
     memmove(&vec->data[location - 1], &vec->data[location],
             vec->len-- - location);
+  else
+    vec->len--;
   return return_data;
+}
+
+// 引数の2つのベクトルが等しければtrueを返す
+bool vector_compare(Vector *vec1, Vector *vec2)
+{
+  if (vector_size(vec1) == vector_size(vec2) &&
+      !memcmp(*vec1->data, *vec2->data, vec1->len))
+    return true;
+  return false;
 }
 
 void vector_free(Vector *vec)

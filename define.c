@@ -89,7 +89,11 @@ int find_macro_name_without_hide_set(Token *identifier, Vector *hide_set,
 void add_object_like_macro(Vector *token_list)
 {  // #define identifier token-string_opt
   Token *identifier = vector_shift(token_list);
-  if (find_macro_name_all(identifier))
+  Vector *token_list_before = NULL;
+  int result = find_macro_name_without_hide_set(identifier, NULL, NULL,
+                                                &token_list_before, NULL, NULL);
+  if (result == 2 ||
+      (result == 1 && !vector_compare(token_list, token_list_before)))
     error_at(identifier->str, identifier->len,
              "identifier %s is already defined");
   object_like_macro_storage *new = malloc(sizeof(object_like_macro_storage));
@@ -103,9 +107,14 @@ void add_object_like_macro(Vector *token_list)
 void add_function_like_macro(Vector *token_list)
 {  // #define identifier(identifier_opt, identifier_opt) token-stirng_opt
   Token *identifier = vector_shift(token_list);
-  if (find_macro_name_all(identifier))
+  Vector *token_list_before = NULL;
+  int result = find_macro_name_without_hide_set(identifier, NULL, NULL,
+                                                &token_list_before, NULL, NULL);
+  if (result == 1 ||
+      (result == 2 && !vector_compare(token_list, token_list_before)))
     error_at(identifier->str, identifier->len,
              "identifier %s is already defined");
+
   function_like_macro_storage *new =
       malloc(sizeof(function_like_macro_storage));
   new->identifier = identifier;

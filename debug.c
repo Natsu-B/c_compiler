@@ -25,7 +25,7 @@ void print_polish_notation()
     conditional_inclusion_token *token = vector_peek_at(output_list, i);
     printf("%s", CPPTKlist[token->type]);
     if (token->type == CPPTK_Integer)
-      printf(": %lld", *(long long *)(token->data));
+      printf(": %lld", token->num);
     printf("\n");
   }
   pr_debug("end polish notation");

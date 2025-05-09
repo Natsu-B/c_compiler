@@ -274,7 +274,7 @@ Token *tokenizer(char *input, char *end, Token *next_token)
       continue;
     }
 
-    if (strchr("+-*/()=!<>;{},&[].\\'|%?:", *input))
+    if (strchr("+-*/()=!<>;{},&[].\\'|%?:~^", *input))
     {
       if (*input == '\\' && *(input + 1) == '\n')
       {
@@ -287,6 +287,8 @@ Token *tokenizer(char *input, char *end, Token *next_token)
       // "==", "<=", ">=", "!=", "&&", "||", "->" の場合
       if ((*(input + 1) == '=' && (*input == '<' || *input == '>' ||
                                    *input == '!' || *input == '=')) ||
+          (*(input + 1) == '>' && *input == '>') ||
+          (*(input + 1) == '<' && *input == '<') ||
           (*(input + 1) == '&' && *input == '&') ||
           (*(input + 1) == '|' && *input == '|') ||
           (*(input + 1) == '>' && *input == '-'))

@@ -1,6 +1,7 @@
 #include "include/conditional_inclusion.h"
 
 #include <ctype.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "include/debug.h"
@@ -17,7 +18,8 @@ static size_t operator_precedence(conditional_inclusion_type type)
 {
   switch (type)
   {
-    case CPPTK_Conditional:  // ?:
+    case CPPTK_Question:  // ?
+    case CPPTK_Colon:     // :
       return 0;
     case CPPTK_Logical_OR:  // ||
       return 1;
@@ -81,6 +83,8 @@ conditional_inclusion_type reserved_token_to_type(Token *token, bool is_unary)
       case 1:
         switch (token->str[0])
         {
+          case '?': return CPPTK_Question;
+          case ':': return CPPTK_Colon;
           case '<': return CPPTK_LessThan;
           case '>': return CPPTK_GreaterThan;
           case '+': return CPPTK_Plus;
@@ -133,23 +137,45 @@ static void shunting_yard_algorithm(Token *token)
   {
     if (token->kind == TK_RESERVED)
     {
+      if (token->len == 1 && token->str[0] == '\'')
+      {  // char文字の処理
+        if (token->next->len == 1 && token->next->next->len == 1 &&
+            token->next->next->str[0] == '\'')
+        {
+          conditional_inclusion_token *new =
+              malloc(sizeof(conditional_inclusion_token));
+          new->type = CPPTK_Integer;
+          new->num = token->next->str[0];
+          vector_push(output_list, new);
+          is_unary = false;
+          token_void(token);
+          token_void(token->next);
+          token_void(token->next->next);
+          token = token_next_not_ignorable_void(token->next->next);
+          continue;
+        }
+        error_at(token->str, token->len, "invalid #if directive");
+      }
       conditional_inclusion_type *type =
           malloc(sizeof(conditional_inclusion_type));
       *type = reserved_token_to_type(token, is_unary);
-      if (*type == CPPTK_Parentheses_End)
+      if (*type == CPPTK_Parentheses_End || *type == CPPTK_Colon)
       {
         conditional_inclusion_type *old = NULL;
         for (;;)
         {
           old = vector_pop(operator_stack);
-          if (*old == CPPTK_Parentheses_Start)
+          if (*type == CPPTK_Parentheses_End ? *old == CPPTK_Parentheses_Start
+                                             : *old == CPPTK_Question)
             break;
           conditional_inclusion_token *new =
               calloc(1, sizeof(conditional_inclusion_token));
           new->type = *old;
           vector_push(output_list, new);
-          is_unary = false;
         }
+        is_unary = *type == CPPTK_Colon;
+        if (*type == CPPTK_Colon)
+          vector_push(operator_stack, type);
       }
       else
       {
@@ -161,7 +187,6 @@ static void shunting_yard_algorithm(Token *token)
           {
             size_t old_precedence = operator_precedence(*old);
             size_t type_precedence = operator_precedence(*type);
-            // TODO ? :
             if (old_precedence > type_precedence ||
                 (old_precedence == type_precedence &&
                  (old_precedence != 0 && old_precedence != 11)))
@@ -185,15 +210,18 @@ static void shunting_yard_algorithm(Token *token)
           calloc(1, sizeof(conditional_inclusion_token));
       if (isdigit(token->str[0]))
       {
+        bool is_hex = false;
+        if (!strncmp(token->str, "0x", 2))
+          is_hex = true;
         new->type = CPPTK_Integer;
-        long long *num = malloc(sizeof(long long));
         char *tmp;
-        *num = strtoll(token->str, &tmp, 10);
+        new->num = strtoll(token->str, &tmp, 0);
         while (*tmp == 'u' || *tmp == 'U' || *tmp == 'l' || *tmp == 'L')
           tmp++;
-        if (tmp != token->str + token->len)
+        if (tmp != token->str + token->len + (is_hex ? token->next->len : 0))
           error_at(token->str, token->len, "cannot convert to integer");
-        new->data = num;
+        if (is_hex)
+          token = token->next;
       }
       else if (token->kind == TK_IDENT && token->len == 7 &&
                !strncmp(token->str, "defined", 7))
@@ -207,9 +235,7 @@ static void shunting_yard_algorithm(Token *token)
           token = token_next_not_ignorable(token);
         }
         pr_debug2("defined operator found");
-        long long *num = malloc(sizeof(long long));
-        *num = find_macro_name_all(token) ? 1 : 0;
-        new->data = num;
+        new->num = find_macro_name_all(token) ? 1 : 0;
         if (is_brackets)
         {
           token = token_next_not_ignorable(token);
@@ -218,19 +244,13 @@ static void shunting_yard_algorithm(Token *token)
         }
       }
       else if (ident_replacement(token))
-      {
-        is_unary = false;
-        continue;  // tokenを次に進めない
-      }
+        continue;
       else if (token->kind == TK_IDENT)
       {
         new->type = CPPTK_Integer;
-        long long *num = malloc(sizeof(long long));
-        *num = 0;
-        new->data = num;
+        new->num = 0;
       }
       else
-        // TODO char
         error_at(token->str, token->len, "invalid token");
       vector_push(output_list, new);
       is_unary = false;
@@ -265,102 +285,60 @@ static bool reverse_polish_notation_stack_machine()
       case CPPTK_Bitwise:
       {  // 単項右結合
         conditional_inclusion_token *tmp = vector_pop(stack);
+        if (tmp->type != CPPTK_Integer)
+          error_exit("invalid #if directive");
         switch (token->type)
         {
           case CPPTK_UnaryPlus: break;
-          case CPPTK_UnaryMinus:
-            *(long long *)(tmp->data) = -*(long long *)(tmp->data);
-            break;
-          case CPPTK_NOT:
-            *(long long *)(tmp->data) = !*(long long *)(tmp->data);
-            break;
-          case CPPTK_Bitwise:
-            *(long long *)(tmp->data) = ~*(long long *)(tmp->data);
-            break;
+          case CPPTK_UnaryMinus: tmp->num = -tmp->num; break;
+          case CPPTK_NOT: tmp->num = !tmp->num; break;
+          case CPPTK_Bitwise: tmp->num = ~tmp->num; break;
           default: unreachable(); break;
         }
         vector_push(stack, tmp);
+      }
+        continue;
+      case CPPTK_Question: unreachable(); break;
+      case CPPTK_Colon:  // 2項演算子
+      {
+        conditional_inclusion_token *left_hand_side = vector_pop(stack);
+        conditional_inclusion_token *middle_hand_side = vector_pop(stack);
+        conditional_inclusion_token *right_hand_side = vector_pop(stack);
+        if (left_hand_side->type != CPPTK_Integer ||
+            middle_hand_side->type != CPPTK_Integer ||
+            right_hand_side->type != CPPTK_Integer)
+          error_exit("invalid #if directive");
+        left_hand_side->num =
+            left_hand_side->num ? middle_hand_side->num : right_hand_side->num;
+        vector_push(stack, left_hand_side);
       }
         continue;
       default:  // 2項左結合演算子
       {
         conditional_inclusion_token *lhs = vector_pop(stack);
         conditional_inclusion_token *rhs = vector_pop(stack);
-
+        if (lhs->type != CPPTK_Integer || rhs->type != CPPTK_Integer)
+          error_exit("invalid #if directive");
         switch (token->type)
         {
-          case CPPTK_Logical_OR:
-            *((long long *)(rhs->data)) =
-                *((long long *)(rhs->data)) || *((long long *)(lhs->data));
-            break;
-          case CPPTK_Logical_AND:
-            *((long long *)(rhs->data)) =
-                *((long long *)(rhs->data)) && *((long long *)(lhs->data));
-            break;
-          case CPPTK_Inclusive_OR:
-            *((long long *)(rhs->data)) =
-                *((long long *)(rhs->data)) | *((long long *)(lhs->data));
-            break;
-          case CPPTK_Exclusive_OR:
-            *((long long *)(rhs->data)) =
-                *((long long *)(rhs->data)) ^ *((long long *)(lhs->data));
-            break;
-          case CPPTK_AND:
-            *((long long *)(rhs->data)) =
-                *((long long *)(rhs->data)) & *((long long *)(lhs->data));
-            break;
-          case CPPTK_Equality:
-            *((long long *)(rhs->data)) =
-                *((long long *)(rhs->data)) == *((long long *)(lhs->data));
-            break;
-          case CPPTK_NEquality:
-            *((long long *)(rhs->data)) =
-                *((long long *)(rhs->data)) != *((long long *)(lhs->data));
-            break;
-          case CPPTK_LessThan:
-            *((long long *)(rhs->data)) =
-                *((long long *)(rhs->data)) < *((long long *)(lhs->data));
-            break;
-          case CPPTK_LessThanEq:
-            *((long long *)(rhs->data)) =
-                *((long long *)(rhs->data)) <= *((long long *)(lhs->data));
-            break;
-          case CPPTK_GreaterThan:
-            *((long long *)(rhs->data)) =
-                *((long long *)(rhs->data)) > *((long long *)(lhs->data));
-            break;
-          case CPPTK_GreaterThanEq:
-            *((long long *)(rhs->data)) =
-                *((long long *)(rhs->data)) >= *((long long *)(lhs->data));
-            break;
-          case CPPTK_LeftShift:
-            *((long long *)(rhs->data)) = *((long long *)(rhs->data))
-                                          << *((long long *)(lhs->data));
-            break;
-          case CPPTK_RightShift:
-            *((long long *)(rhs->data)) =
-                *((long long *)(rhs->data)) >> *((long long *)(lhs->data));
-            break;
-          case CPPTK_Plus:
-            *((long long *)(rhs->data)) =
-                *((long long *)(rhs->data)) + *((long long *)(lhs->data));
-            break;
-          case CPPTK_Minus:
-            *((long long *)(rhs->data)) =
-                *((long long *)(rhs->data)) - *((long long *)(lhs->data));
-            break;
-          case CPPTK_Mul:
-            *((long long *)(rhs->data)) =
-                *((long long *)(rhs->data)) * *((long long *)(lhs->data));
-            break;
-          case CPPTK_Div:
-            *((long long *)(rhs->data)) =
-                *((long long *)(rhs->data)) / *((long long *)(lhs->data));
-            break;
-          case CPPTK_DivReminder:
-            *((long long *)(rhs->data)) =
-                *((long long *)(rhs->data)) % *((long long *)(lhs->data));
-            break;
+          case CPPTK_Logical_OR: rhs->num = rhs->num || lhs->num; break;
+          case CPPTK_Logical_AND: rhs->num = rhs->num && lhs->num; break;
+          case CPPTK_Inclusive_OR: rhs->num = rhs->num | lhs->num; break;
+          case CPPTK_Exclusive_OR: rhs->num = rhs->num ^ lhs->num; break;
+          case CPPTK_AND: rhs->num = rhs->num & lhs->num; break;
+          case CPPTK_Equality: rhs->num = rhs->num == lhs->num; break;
+          case CPPTK_NEquality: rhs->num = rhs->num != lhs->num; break;
+          case CPPTK_LessThan: rhs->num = rhs->num < lhs->num; break;
+          case CPPTK_LessThanEq: rhs->num = rhs->num <= lhs->num; break;
+          case CPPTK_GreaterThan: rhs->num = rhs->num > lhs->num; break;
+          case CPPTK_GreaterThanEq: rhs->num = rhs->num >= lhs->num; break;
+          case CPPTK_LeftShift: rhs->num = rhs->num << lhs->num; break;
+          case CPPTK_RightShift: rhs->num = rhs->num >> lhs->num; break;
+          case CPPTK_Plus: rhs->num = rhs->num + lhs->num; break;
+          case CPPTK_Minus: rhs->num = rhs->num - lhs->num; break;
+          case CPPTK_Mul: rhs->num = rhs->num * lhs->num; break;
+          case CPPTK_Div: rhs->num = rhs->num / lhs->num; break;
+          case CPPTK_DivReminder: rhs->num = rhs->num % lhs->num; break;
           default: unreachable(); break;
         }
         vector_push(stack, rhs);
@@ -368,8 +346,7 @@ static bool reverse_polish_notation_stack_machine()
         continue;
     }
   }
-  bool result =
-      *((long long *)((conditional_inclusion_token *)vector_pop(stack))->data);
+  bool result = ((conditional_inclusion_token *)vector_pop(stack))->num;
   if (vector_has_data(stack))
     error_exit("invalid #if directive");
   return result;

@@ -154,62 +154,58 @@ Token *directive(Token *old)
         Token *new = malloc(sizeof(Token));
         memcpy(new, ptr, sizeof(Token));
         vector_push(token_list, new);
+        char *str_ptr = ptr->str;
+        size_t str_len = ptr->len;
         token_void(ptr);
-        ptr = ptr->next;
-
+        ptr = token_next_not_ignorable_void(ptr);
         bool is_function_like = false;
-        switch (ptr->kind)
+
+        // function like macroのときの動作
+        if (*(str_ptr + str_len) == '(')
         {
-          case TK_LINEBREAK: break;
-          case TK_IGNORABLE: ptr = token_next_not_ignorable_void(ptr); break;
-          case TK_RESERVED:
-            // function like macroのときの動作
-            if (ptr->str[0] == '(')
+          if (ptr->str != str_ptr + str_len)
+            unreachable();
+          is_function_like = true;
+          Vector *formal_parameter = vector_new();
+          vector_push(token_list, formal_parameter);
+          token_void(ptr);
+          for (;;)
+          {
+            ptr = token_next_not_ignorable_void(ptr);
+            if (ptr->kind == TK_IDENT)
             {
-              is_function_like = true;
-              Vector *formal_parameter = vector_new();
-              vector_push(token_list, formal_parameter);
+              Token *new = malloc(sizeof(Token));
+              memcpy(new, ptr, sizeof(Token));
               token_void(ptr);
-              for (;;)
+              for (size_t i = 1; i <= vector_size(formal_parameter); i++)
               {
-                ptr = token_next_not_ignorable_void(ptr);
-                if (ptr->kind == TK_IDENT)
-                {
-                  Token *new = malloc(sizeof(Token));
-                  memcpy(new, ptr, sizeof(Token));
-                  token_void(ptr);
-                  for (size_t i = 1; i <= vector_size(formal_parameter); i++)
-                  {
-                    Token *argument = vector_peek_at(formal_parameter, i);
-                    if (argument->len == new->len &&
-                        !strncmp(argument->str, new->str, argument->len))
-                      error_at(new->str, new->len, "duplicate macro parameter");
-                  }
-                  vector_push(formal_parameter, new);
-                  while (ptr->kind == TK_IGNORABLE)
-                    ptr = ptr->next;
-                  if (ptr->kind == TK_RESERVED)
-                  {
-                    if (ptr->str[0] == ')')
-                    {
-                      token_void(ptr);
-                      ptr = token_next_not_ignorable_void(ptr);
-                      break;
-                    }
-                    if (ptr->str[0] == ',')
-                    {
-                      token_void(ptr);
-                      continue;
-                    }
-                  }
-                }
-                error_at(token->str, token->len, "Invalid #define use");
+                Token *argument = vector_peek_at(formal_parameter, i);
+                if (argument->len == new->len &&
+                    !strncmp(argument->str, new->str, argument->len))
+                  error_at(new->str, new->len, "duplicate macro parameter");
               }
-              break;
+              vector_push(formal_parameter, new);
+              while (ptr->kind == TK_IGNORABLE)
+                ptr = ptr->next;
+              if (ptr->kind == TK_RESERVED)
+              {
+                if (ptr->str[0] == ')')
+                {
+                  token_void(ptr);
+                  ptr = token_next_not_ignorable_void(ptr);
+                  break;
+                }
+                if (ptr->str[0] == ',')
+                {
+                  token_void(ptr);
+                  continue;
+                }
+              }
             }
-          // fall through
-          default: error_at(token->str, token->len, "invalid #define use");
+            error_at(token->str, token->len, "Invalid #define use");
+          }
         }
+
         for (;;)
         {
           if (ptr->kind == TK_LINEBREAK)

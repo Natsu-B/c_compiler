@@ -185,8 +185,7 @@ Token *directive(Token *old)
                   error_at(new->str, new->len, "duplicate macro parameter");
               }
               vector_push(formal_parameter, new);
-              while (ptr->kind == TK_IGNORABLE)
-                ptr = ptr->next;
+              ptr = token_next_not_ignorable_void(ptr);
               if (ptr->kind == TK_RESERVED)
               {
                 if (ptr->str[0] == ')')
@@ -202,7 +201,31 @@ Token *directive(Token *old)
                 }
               }
             }
-            error_at(token->str, token->len, "Invalid #define use");
+            else if (ptr->kind == TK_RESERVED && ptr->str[0] == '.')
+            {
+              if (strncmp(ptr->str, "...", 3) ||
+                  ptr->next->kind != TK_RESERVED || ptr->next->str[0] != '.' ||
+                  ptr->next->next->kind != TK_RESERVED ||
+                  ptr->next->next->str[0] != '.')
+                error_at(ptr->str, 1, "invalid identifier");
+              token_void(ptr);
+              token_void(ptr->next);
+              token_void(ptr->next->next);
+              ptr = token_next_not_ignorable_void(ptr->next->next);
+              if (ptr->str[0] != ')')
+                error_at(ptr->str, 1, "invalid identifier");
+              token_void(ptr);
+              ptr = token_next_not_ignorable_void(ptr);
+              Token *new = calloc(1, sizeof(Token));
+              new->kind = TK_IDENT;
+              new->len = 3;
+              new->str = malloc(3 * sizeof(char));
+              new->str[0] = new->str[1] = new->str[2] = '.';
+              vector_push(formal_parameter, new);
+              break;
+            }
+            else
+              error_at(token->str, token->len, "Invalid #define use");
           }
         }
 

@@ -32,7 +32,10 @@ inline int find_macro_name_all(Token *identifier)
 
 // 引数の文字列が object like macro に定義されている場合は1を
 // function like macro に定義されている場合は2を、その他の場合は0を返す
-// 1or2を返す場合は、token_stringにトークン列が入る
+// 1or2を返す場合は、token_stringにトークン列が、tokenにmacroの名前が、
+// locationにmacroが(object or function)_macro_listのどの位置にあるか
+// が入る(それぞれがnonnullの場合)
+// 2を返す場合はargument_listに関数引数列が入る
 // ただし、すでに展開済みのものを除く
 int find_macro_name_without_hide_set(Token *identifier, Vector *hide_set,
                                      Vector **argument_list,
@@ -218,6 +221,7 @@ bool ident_replacement(Token *token)
         return true;
       }
     }
+
     Vector *token_string = NULL;
     Token *token_identifier;
     Vector *argument_list = NULL;
@@ -253,6 +257,7 @@ bool ident_replacement(Token *token)
     {  // function like macro の場合
       token_void(token);
       token_void(token->next);
+      // function like macroの実際の引数リスト Vectorが入る
       Vector *argument_real_list = vector_new();
       vector_push(hide_set, token_identifier);
       Token *tmp = token;
@@ -310,34 +315,105 @@ bool ident_replacement(Token *token)
         error_at(next->str, next->len, "Invalid #define directive");
       }
       if (token_string && vector_size(token_string))
-      {
+      {  // function like macroの置換をしていく
+        size_t directive_count = 0;
         for (size_t i = 1; i <= vector_size(token_string); i++)
         {
-          bool is_argument = false;
           Token *replace_token = vector_peek_at(token_string, i);
-          for (size_t j = 1; j <= vector_size(argument_list); j++)
+          bool is_args = false;
+          bool is_ops = false;
+          if (replace_token->kind == TK_IGNORABLE)
+            continue;
+          switch (replace_token->kind)
           {
-            Token *argument = vector_peek_at(argument_list, j);
-            if (argument->len == replace_token->len &&
-                !strncmp(argument->str, replace_token->str, argument->len))
+            case TK_DIRECTIVE: directive_count++;
+            // fall through
+            case TK_IGNORABLE: continue;
+            case TK_LINEBREAK: unreachable();
+            default: break;
+          }
+
+          if (replace_token->len == 10 &&
+              !strncmp(replace_token->str, "__VA_OPS__", 10))
+            is_ops = true;
+          else if (replace_token->len == 11 &&
+                   !strncmp(replace_token->str, "__VA_ARGS__", 11))
+          {
+            switch (directive_count)
             {
-              token_void(tmp);
-              for (size_t k = 1;
-                   k <= vector_size(vector_peek_at(argument_real_list, j)); k++)
-              {
-                tmp = tmp->next = malloc(sizeof(Token));
-                memcpy(tmp,
-                       vector_peek_at(vector_peek_at(argument_real_list, j), k),
-                       sizeof(Token));
-              }
-              is_argument = true;
+              case 0: is_args = true; break;
+              case 2: is_ops = true; break;
+              default: unreachable();
             }
           }
-          if (!is_argument)
-            memcpy(tmp, vector_peek_at(token_string, i), sizeof(Token));
-          tmp->next = malloc(sizeof(Token));
+
+          if (is_args || is_ops)
+          {  // __VA_ARGS__ 等を置換する
+            // macroの引数の最後が"..."であることを確認する
+            Token *last =
+                vector_peek_at(argument_list, vector_size(argument_list));
+            if (last->len != 3 || strncmp(last->str, "...", 3) ||
+                (is_ops ? vector_size(argument_list) - 1 >
+                              vector_size(argument_real_list)
+                        : vector_size(argument_list) - 1 >=
+                              vector_size(argument_real_list)))
+              error_at(token->str, token->len,
+                       "invalid function like macro argument");
+            if (is_ops &&
+                vector_size(argument_list) - 1 ==
+                    vector_size(argument_real_list) &&
+                old->len == 1 && old->str[0] == ',')
+              token_void(old);
+            else
+            {
+              size_t j = vector_size(argument_list);
+              char *comma = ",";
+              for (;;)
+              {
+                Vector *real_argument = vector_peek_at(argument_real_list, j);
+                for (size_t k = 1; k <= vector_size(real_argument); k++)
+                {
+                  memcpy(tmp, vector_peek_at(real_argument, k), sizeof(Token));
+                  tmp = tmp->next = malloc(sizeof(Token));
+                }
+                if (++j > vector_size(argument_real_list))
+                  break;
+                tmp->kind = TK_RESERVED;
+                tmp->str = comma;
+                tmp->len = 1;
+                tmp = tmp->next = malloc(sizeof(Token));
+              }
+            }
+          }
+          else
+          {
+            bool is_argument = false;
+            for (size_t j = 1; j <= vector_size(argument_list); j++)
+            {
+              Token *argument = vector_peek_at(argument_list, j);
+              if (argument->len == replace_token->len &&
+                  !strncmp(argument->str, replace_token->str, argument->len))
+              {
+                token_void(tmp);
+                for (size_t k = 1;
+                     k <= vector_size(vector_peek_at(argument_real_list, j));
+                     k++)
+                {
+                  tmp = tmp->next = malloc(sizeof(Token));
+                  memcpy(
+                      tmp,
+                      vector_peek_at(vector_peek_at(argument_real_list, j), k),
+                      sizeof(Token));
+                }
+                is_argument = true;
+              }
+            }
+            if (!is_argument)
+              memcpy(tmp, vector_peek_at(token_string, i), sizeof(Token));
+          }
+          directive_count = 0;
           old = tmp;
-          tmp = tmp->next;
+          tmp = tmp->next = malloc(sizeof(Token));
         }
         old->next = next;
       }

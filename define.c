@@ -252,25 +252,25 @@ bool ident_replacement(Token *token)
         break;
       }
     }
-    else if (is_defined == 2 && token->next->kind == TK_RESERVED &&
-             token->next->str[0] == '(')
+    else if (is_defined == 2 &&
+             token_next_not_ignorable(token)->kind == TK_RESERVED &&
+             token_next_not_ignorable(token)->str[0] == '(')
     {  // function like macro の場合
       token_void(token);
-      token_void(token->next);
       // function like macroの実際の引数リスト Vectorが入る
       Vector *argument_real_list = vector_new();
       vector_push(hide_set, token_identifier);
-      Token *tmp = token;
       Token *old = token;
-      Token *next = token->next;
-      next = next->next;
+      Token *next = token_next_not_ignorable_void(token);
+      token_void(next);
+      next = token_next_not_ignorable_void(token);
       bool is_end = false;  // IDENTの直後かどうか
       size_t nest_counter = 0;
+      // 関数の引数をvectorに入れる
       for (;;)
       {
         if (next->kind == TK_IGNORABLE)
         {
-          token_void(next);
           next = next->next;
           continue;
         }
@@ -281,16 +281,13 @@ bool ident_replacement(Token *token)
           while (nest_counter || next->kind != TK_RESERVED ||
                  (next->str[0] != ',' && next->str[0] != ')'))
           {
-            Token *new = malloc(sizeof(Token));
-            memcpy(new, next, sizeof(Token));
-            if (new->kind == TK_LINEBREAK)
-              error_at(new->str, new->len, "invalid define directive");
-            if (new->kind == TK_RESERVED && new->str[0] == '(')
+            if (next->kind == TK_LINEBREAK)
+              error_at(next->str, next->len, "invalid define directive");
+            if (next->kind == TK_RESERVED && next->str[0] == '(')
               nest_counter++;
-            if (new->kind == TK_RESERVED && new->str[0] == ')')
+            if (next->kind == TK_RESERVED && next->str[0] == ')')
               nest_counter--;
-            vector_push(list, new);
-            token_void(next);
+            vector_push(list, next);
             next = next->next;
           }
           is_end = true;
@@ -300,7 +297,6 @@ bool ident_replacement(Token *token)
         {
           if (next->str[0] == ',')
           {
-            token_void(next);
             next = next->next;
             is_end = false;
             continue;
@@ -308,12 +304,12 @@ bool ident_replacement(Token *token)
           if (next->str[0] == ')')
           {
             token_void(next);
-            next = next->next;
             break;
           }
         }
         error_at(next->str, next->len, "Invalid #define directive");
       }
+      Token *tmp = old->next = malloc(sizeof(Token));
       if (token_string && vector_size(token_string))
       {  // function like macroの置換をしていく
         size_t directive_count = 0;
@@ -342,7 +338,12 @@ bool ident_replacement(Token *token)
             switch (directive_count)
             {
               case 0: is_args = true; break;
-              case 2: is_ops = true; break;
+              case 2:
+              {
+                is_ops = true;
+                directive_count = 0;
+                break;
+              }
               default: unreachable();
             }
           }
@@ -366,22 +367,16 @@ bool ident_replacement(Token *token)
               token_void(old);
             else
             {
-              size_t j = vector_size(argument_list);
-              char *comma = ",";
-              for (;;)
-              {
-                Vector *real_argument = vector_peek_at(argument_real_list, j);
-                for (size_t k = 1; k <= vector_size(real_argument); k++)
-                {
-                  memcpy(tmp, vector_peek_at(real_argument, k), sizeof(Token));
-                  tmp = tmp->next = malloc(sizeof(Token));
-                }
-                if (++j > vector_size(argument_real_list))
-                  break;
-                tmp->kind = TK_RESERVED;
-                tmp->str = comma;
-                tmp->len = 1;
+              // startは__VA_ARGS__の最初
+              Token *ptr =
+                  vector_peek_at(vector_peek_at(argument_real_list,
+                                                vector_size(argument_list)),
+                                 1);
+              while (ptr != next)
+              {  // nextは__VA_ARGS__の終了部分
+                memcpy(tmp, ptr, sizeof(Token));
                 tmp = tmp->next = malloc(sizeof(Token));
+                ptr = ptr->next;
               }
             }
           }
@@ -394,23 +389,44 @@ bool ident_replacement(Token *token)
               if (argument->len == replace_token->len &&
                   !strncmp(argument->str, replace_token->str, argument->len))
               {
-                token_void(tmp);
-                for (size_t k = 1;
-                     k <= vector_size(vector_peek_at(argument_real_list, j));
-                     k++)
+                switch (directive_count)
                 {
-                  tmp = tmp->next = malloc(sizeof(Token));
-                  memcpy(
-                      tmp,
-                      vector_peek_at(vector_peek_at(argument_real_list, j), k),
-                      sizeof(Token));
+                  case 0:
+                  {
+                    for (size_t k = 1; k <= vector_size(vector_peek_at(
+                                                argument_real_list, j));
+                         k++)
+                    {
+                      memcpy(tmp,
+                             vector_peek_at(
+                                 vector_peek_at(argument_real_list, j), k),
+                             sizeof(Token));
+                      tmp = tmp->next = malloc(sizeof(Token));
+                    }
+                    is_argument = true;
+                  }
+                  break;
+                  case 1:
+                  {
+                    unimplemented();
+                  }
+                  break;
+                  case 2:
+                  {
+                    unimplemented();
+                  }
+                  break;
+                  default: unreachable();
                 }
-                is_argument = true;
               }
             }
             if (!is_argument)
               memcpy(tmp, vector_peek_at(token_string, i), sizeof(Token));
+            else
+              token_void(tmp);
           }
+          if (directive_count)
+            unreachable();
           directive_count = 0;
           old = tmp;
           tmp = tmp->next = malloc(sizeof(Token));

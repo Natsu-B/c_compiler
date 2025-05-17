@@ -132,317 +132,308 @@ extern char *File_Name;
 extern size_t File_Line;
 extern long long include_level;
 
+bool ident_replacement_recursive(Token *token, Vector *hide_set)
+{
+  if (token->len == 8)
+  {
+    if (!strncmp(token->str, "__FILE__", 8))
+    {
+      size_t file_name_len = strlen(File_Name);
+      char *file_name = malloc(file_name_len + 2);  // NULL terminatorは必要ない
+      strncpy(file_name + 1, File_Name, file_name_len);
+      file_name[0] = file_name[file_name_len + 1] = '"';
+      token->kind = TK_STRING;
+      token->len = file_name_len + 2;
+      token->str = file_name;
+      return true;
+    }
+    if (!strncmp(token->str, "__LINE__", 8))
+    {
+      char *file_line_str = malloc(7 * sizeof(char));
+      int file_line_len = snprintf(file_line_str, 7, "%lu", File_Line);
+      if (file_line_len > 6 || file_line_len < 0)
+      {
+        int size = file_line_len;
+        file_line_str = realloc(file_line_str, file_line_len + 1);
+        file_line_len =
+            snprintf(file_line_str, file_line_len + 1, "%lu", File_Line);
+        if (file_line_len < 0 || file_line_len + 1 > size)
+          error_exit("failed to preprocess __LINE__");
+      }
+      token->len = file_line_len;
+      token->str = file_line_str;
+      return true;
+    }
+    int is_date = !strncmp(token->str, "__DATE__", 8);
+    int is_time = !strncmp(token->str, "__TIME__", 8);
+    if (is_date || is_time)
+    {
+      time_t current_time = time(NULL);
+      if (current_time == -1)
+        error_exit("failed to get time");
+      // asctime
+      char *asctime_str = asctime(localtime(&current_time));
+      char *time_str;
+      if (is_date)
+      {
+        time_str = malloc(13 * sizeof(char));
+        memcpy(time_str + 1, asctime_str + 4, 7);
+        memcpy(time_str + 8, asctime_str + 20, 4);
+        token->len = 13;
+      }
+      if (is_time)
+      {
+        time_str = malloc(10 * sizeof(char));
+        memcpy(time_str + 1, asctime_str + 11, 8);
+        token->len = 10;
+      }
+      token->kind = TK_STRING;
+      time_str[0] = time_str[token->len - 1] = '"';
+      token->str = time_str;
+      return true;
+    }
+  }
+  if (token->len == 17)
+  {
+    if (!strncmp(token->str, "__INCLUDE_LEVEL__", 17))
+    {
+      char *file_line_str = malloc(7 * sizeof(char));
+      int file_line_len = snprintf(file_line_str, 7, "%lld", include_level);
+      if (file_line_len > 6 || file_line_len < 0)
+      {
+        int size = file_line_len;
+        file_line_str = realloc(file_line_str, file_line_len + 1);
+        file_line_len =
+            snprintf(file_line_str, file_line_len + 1, "%lu", File_Line);
+        if (file_line_len < 0 || file_line_len + 1 > size)
+          error_exit("failed to preprocess __INCLUDE_LEVEL__");
+      }
+      token->kind = TK_STRING;
+      token->len = file_line_len;
+      token->str = file_line_str;
+      return true;
+    }
+  }
+
+  Vector *token_string = NULL;
+  Token *token_identifier;
+  Vector *argument_list = NULL;
+  size_t is_defined = find_macro_name_without_hide_set(
+      token, hide_set, &argument_list, &token_string, &token_identifier, NULL);
+  if (is_defined == 1)
+  {  // object like macro の場合
+    vector_push(hide_set, token_identifier);
+    Token *tmp = token;
+    Token *old = token;
+    Token *next = token->next;
+    if (token_string && vector_size(token_string))
+    {
+      for (size_t i = 1; i <= vector_size(token_string); i++)
+      {
+        Token *replace_token = vector_peek_at(token_string, i);
+        memcpy(tmp, replace_token, sizeof(Token));
+        tmp->next = malloc(sizeof(Token));
+        old = tmp;
+        tmp = tmp->next;
+      }
+      old->next = next;
+      ident_replacement_recursive(next, hide_set);
+      return true;
+    }
+    token_void(token);
+    return true;
+  }
+  else if (is_defined == 2 &&
+           token_next_not_ignorable(token)->kind == TK_RESERVED &&
+           token_next_not_ignorable(token)->str[0] == '(')
+  {  // function like macro の場合
+    token_void(token);
+    // function like macroの実際の引数リスト Vectorが入る
+    Vector *argument_real_list = vector_new();
+    vector_push(hide_set, token_identifier);
+    Token *old = token;
+    Token *next = token_next_not_ignorable_void(token);
+    token_void(next);
+    next = token_next_not_ignorable_void(token);
+    bool is_end = false;  // IDENTの直後かどうか
+    size_t nest_counter = 0;
+    // 関数の引数をvectorに入れる
+    for (;;)
+    {
+      if (next->kind == TK_IGNORABLE)
+      {
+        next = next->next;
+        continue;
+      }
+      if (!is_end)
+      {
+        Vector *list = vector_new();
+        vector_push(argument_real_list, list);
+        while (nest_counter || next->kind != TK_RESERVED ||
+               (next->str[0] != ',' && next->str[0] != ')'))
+        {
+          if (next->kind == TK_LINEBREAK)
+            error_at(next->str, next->len, "invalid define directive");
+          if (next->kind == TK_RESERVED && next->str[0] == '(')
+            nest_counter++;
+          if (next->kind == TK_RESERVED && next->str[0] == ')')
+            nest_counter--;
+          vector_push(list, next);
+          next = next->next;
+        }
+        is_end = true;
+        continue;
+      }
+      if (is_end && next->kind == TK_RESERVED)
+      {
+        if (next->str[0] == ',')
+        {
+          next = next->next;
+          is_end = false;
+          continue;
+        }
+        if (next->str[0] == ')')
+        {
+          token_void(next);
+          break;
+        }
+      }
+      error_at(next->str, next->len, "Invalid #define directive");
+    }
+    Token *tmp = old->next = malloc(sizeof(Token));
+    if (token_string && vector_size(token_string))
+    {  // function like macroの置換をしていく
+      size_t directive_count = 0;
+      for (size_t i = 1; i <= vector_size(token_string); i++)
+      {
+        Token *replace_token = vector_peek_at(token_string, i);
+        bool is_args = false;
+        bool is_ops = false;
+        if (replace_token->kind == TK_IGNORABLE)
+          continue;
+        switch (replace_token->kind)
+        {
+          case TK_DIRECTIVE: directive_count++;
+          // fall through
+          case TK_IGNORABLE: continue;
+          case TK_LINEBREAK: unreachable();
+          default: break;
+        }
+
+        if (replace_token->len == 10 &&
+            !strncmp(replace_token->str, "__VA_OPS__", 10))
+          is_ops = true;
+        else if (replace_token->len == 11 &&
+                 !strncmp(replace_token->str, "__VA_ARGS__", 11))
+        {
+          switch (directive_count)
+          {
+            case 0: is_args = true; break;
+            case 2:
+            {
+              is_ops = true;
+              directive_count = 0;
+              break;
+            }
+            default: unreachable();
+          }
+        }
+
+        if (is_args || is_ops)
+        {  // __VA_ARGS__ 等を置換する
+          // macroの引数の最後が"..."であることを確認する
+          Token *last =
+              vector_peek_at(argument_list, vector_size(argument_list));
+          if (last->len != 3 || strncmp(last->str, "...", 3) ||
+              (is_ops ? vector_size(argument_list) - 1 >
+                            vector_size(argument_real_list)
+                      : vector_size(argument_list) - 1 >=
+                            vector_size(argument_real_list)))
+            error_at(token->str, token->len,
+                     "invalid function like macro argument");
+          if (is_ops &&
+              vector_size(argument_list) - 1 ==
+                  vector_size(argument_real_list) &&
+              old->len == 1 && old->str[0] == ',')
+            token_void(old);
+          else
+          {
+            // startは__VA_ARGS__の最初
+            Token *ptr = vector_peek_at(
+                vector_peek_at(argument_real_list, vector_size(argument_list)),
+                1);
+            while (ptr != next)
+            {  // nextは__VA_ARGS__の終了部分
+              memcpy(tmp, ptr, sizeof(Token));
+              tmp = tmp->next = malloc(sizeof(Token));
+              ptr = ptr->next;
+            }
+          }
+        }
+        else
+        {
+          bool is_argument = false;
+          for (size_t j = 1; j <= vector_size(argument_list); j++)
+          {
+            Token *argument = vector_peek_at(argument_list, j);
+            if (argument->len == replace_token->len &&
+                !strncmp(argument->str, replace_token->str, argument->len))
+            {
+              for (size_t k = 1;
+                   k <= vector_size(vector_peek_at(argument_real_list, j)); k++)
+              {
+                memcpy(tmp,
+                       vector_peek_at(vector_peek_at(argument_real_list, j), k),
+                       sizeof(Token));
+                tmp = tmp->next = malloc(sizeof(Token));
+              }
+              is_argument = true;
+              ident_replacement_recursive(tmp, hide_set);
+              switch (directive_count)
+              {
+                case 0: break;
+                case 1:
+                {
+                  unimplemented();
+                }
+                break;
+                case 2:
+                {
+                  unimplemented();
+                }
+                break;
+                default: unreachable();
+              }
+              break;
+            }
+          }
+          if (!is_argument)
+            memcpy(tmp, vector_peek_at(token_string, i), sizeof(Token));
+          else
+            token_void(tmp);
+        }
+        if (directive_count)
+          unreachable();
+        directive_count = 0;
+        old = tmp;
+        tmp = tmp->next = malloc(sizeof(Token));
+      }
+      old->next = next;
+      return true;
+    }
+    token_void(token);
+    return true;
+  }
+  return false;
+}
+
 // #define を展開する関数
 // 返り値は展開終了のtoken
 bool ident_replacement(Token *token)
 {
   // #defineで定義されているものを展開する
   Vector *hide_set = vector_new();
-  for (;;)
-  {
-    if (token->len == 8)
-    {
-      if (!strncmp(token->str, "__FILE__", 8))
-      {
-        size_t file_name_len = strlen(File_Name);
-        char *file_name =
-            malloc(file_name_len + 2);  // NULL terminatorは必要ない
-        strncpy(file_name + 1, File_Name, file_name_len);
-        file_name[0] = file_name[file_name_len + 1] = '"';
-        token->kind = TK_STRING;
-        token->len = file_name_len + 2;
-        token->str = file_name;
-        return true;
-      }
-      if (!strncmp(token->str, "__LINE__", 8))
-      {
-        char *file_line_str = malloc(7 * sizeof(char));
-        int file_line_len = snprintf(file_line_str, 7, "%lu", File_Line);
-        if (file_line_len > 6 || file_line_len < 0)
-        {
-          int size = file_line_len;
-          file_line_str = realloc(file_line_str, file_line_len + 1);
-          file_line_len =
-              snprintf(file_line_str, file_line_len + 1, "%lu", File_Line);
-          if (file_line_len < 0 || file_line_len + 1 > size)
-            error_exit("failed to preprocess __LINE__");
-        }
-        token->len = file_line_len;
-        token->str = file_line_str;
-        return true;
-      }
-      int is_date = !strncmp(token->str, "__DATE__", 8);
-      int is_time = !strncmp(token->str, "__TIME__", 8);
-      if (is_date || is_time)
-      {
-        time_t current_time = time(NULL);
-        if (current_time == -1)
-          error_exit("failed to get time");
-        // asctime
-        char *asctime_str = asctime(localtime(&current_time));
-        char *time_str;
-        if (is_date)
-        {
-          time_str = malloc(13 * sizeof(char));
-          memcpy(time_str + 1, asctime_str + 4, 7);
-          memcpy(time_str + 8, asctime_str + 20, 4);
-          token->len = 13;
-        }
-        if (is_time)
-        {
-          time_str = malloc(10 * sizeof(char));
-          memcpy(time_str + 1, asctime_str + 11, 8);
-          token->len = 10;
-        }
-        token->kind = TK_STRING;
-        time_str[0] = time_str[token->len - 1] = '"';
-        token->str = time_str;
-        return true;
-      }
-    }
-    if (token->len == 17)
-    {
-      if (!strncmp(token->str, "__INCLUDE_LEVEL__", 17))
-      {
-        char *file_line_str = malloc(7 * sizeof(char));
-        int file_line_len = snprintf(file_line_str, 7, "%lld", include_level);
-        if (file_line_len > 6 || file_line_len < 0)
-        {
-          int size = file_line_len;
-          file_line_str = realloc(file_line_str, file_line_len + 1);
-          file_line_len =
-              snprintf(file_line_str, file_line_len + 1, "%lu", File_Line);
-          if (file_line_len < 0 || file_line_len + 1 > size)
-            error_exit("failed to preprocess __INCLUDE_LEVEL__");
-        }
-        token->kind = TK_STRING;
-        token->len = file_line_len;
-        token->str = file_line_str;
-        return true;
-      }
-    }
-
-    Vector *token_string = NULL;
-    Token *token_identifier;
-    Vector *argument_list = NULL;
-    size_t is_defined = find_macro_name_without_hide_set(
-        token, hide_set, &argument_list, &token_string, &token_identifier,
-        NULL);
-    if (is_defined == 1)
-    {  // object like macro の場合
-      vector_push(hide_set, token_identifier);
-      Token *tmp = token;
-      Token *old = token;
-      Token *next = token->next;
-      if (token_string && vector_size(token_string))
-      {
-        for (size_t i = 1; i <= vector_size(token_string); i++)
-        {
-          Token *replace_token = vector_peek_at(token_string, i);
-          memcpy(tmp, replace_token, sizeof(Token));
-          tmp->next = malloc(sizeof(Token));
-          old = tmp;
-          tmp = tmp->next;
-        }
-        old->next = next;
-      }
-      else
-      {
-        token_void(token);
-        break;
-      }
-    }
-    else if (is_defined == 2 &&
-             token_next_not_ignorable(token)->kind == TK_RESERVED &&
-             token_next_not_ignorable(token)->str[0] == '(')
-    {  // function like macro の場合
-      token_void(token);
-      // function like macroの実際の引数リスト Vectorが入る
-      Vector *argument_real_list = vector_new();
-      vector_push(hide_set, token_identifier);
-      Token *old = token;
-      Token *next = token_next_not_ignorable_void(token);
-      token_void(next);
-      next = token_next_not_ignorable_void(token);
-      bool is_end = false;  // IDENTの直後かどうか
-      size_t nest_counter = 0;
-      // 関数の引数をvectorに入れる
-      for (;;)
-      {
-        if (next->kind == TK_IGNORABLE)
-        {
-          next = next->next;
-          continue;
-        }
-        if (!is_end)
-        {
-          Vector *list = vector_new();
-          vector_push(argument_real_list, list);
-          while (nest_counter || next->kind != TK_RESERVED ||
-                 (next->str[0] != ',' && next->str[0] != ')'))
-          {
-            if (next->kind == TK_LINEBREAK)
-              error_at(next->str, next->len, "invalid define directive");
-            if (next->kind == TK_RESERVED && next->str[0] == '(')
-              nest_counter++;
-            if (next->kind == TK_RESERVED && next->str[0] == ')')
-              nest_counter--;
-            vector_push(list, next);
-            next = next->next;
-          }
-          is_end = true;
-          continue;
-        }
-        if (is_end && next->kind == TK_RESERVED)
-        {
-          if (next->str[0] == ',')
-          {
-            next = next->next;
-            is_end = false;
-            continue;
-          }
-          if (next->str[0] == ')')
-          {
-            token_void(next);
-            break;
-          }
-        }
-        error_at(next->str, next->len, "Invalid #define directive");
-      }
-      Token *tmp = old->next = malloc(sizeof(Token));
-      if (token_string && vector_size(token_string))
-      {  // function like macroの置換をしていく
-        size_t directive_count = 0;
-        for (size_t i = 1; i <= vector_size(token_string); i++)
-        {
-          Token *replace_token = vector_peek_at(token_string, i);
-          bool is_args = false;
-          bool is_ops = false;
-          if (replace_token->kind == TK_IGNORABLE)
-            continue;
-          switch (replace_token->kind)
-          {
-            case TK_DIRECTIVE: directive_count++;
-            // fall through
-            case TK_IGNORABLE: continue;
-            case TK_LINEBREAK: unreachable();
-            default: break;
-          }
-
-          if (replace_token->len == 10 &&
-              !strncmp(replace_token->str, "__VA_OPS__", 10))
-            is_ops = true;
-          else if (replace_token->len == 11 &&
-                   !strncmp(replace_token->str, "__VA_ARGS__", 11))
-          {
-            switch (directive_count)
-            {
-              case 0: is_args = true; break;
-              case 2:
-              {
-                is_ops = true;
-                directive_count = 0;
-                break;
-              }
-              default: unreachable();
-            }
-          }
-
-          if (is_args || is_ops)
-          {  // __VA_ARGS__ 等を置換する
-            // macroの引数の最後が"..."であることを確認する
-            Token *last =
-                vector_peek_at(argument_list, vector_size(argument_list));
-            if (last->len != 3 || strncmp(last->str, "...", 3) ||
-                (is_ops ? vector_size(argument_list) - 1 >
-                              vector_size(argument_real_list)
-                        : vector_size(argument_list) - 1 >=
-                              vector_size(argument_real_list)))
-              error_at(token->str, token->len,
-                       "invalid function like macro argument");
-            if (is_ops &&
-                vector_size(argument_list) - 1 ==
-                    vector_size(argument_real_list) &&
-                old->len == 1 && old->str[0] == ',')
-              token_void(old);
-            else
-            {
-              // startは__VA_ARGS__の最初
-              Token *ptr =
-                  vector_peek_at(vector_peek_at(argument_real_list,
-                                                vector_size(argument_list)),
-                                 1);
-              while (ptr != next)
-              {  // nextは__VA_ARGS__の終了部分
-                memcpy(tmp, ptr, sizeof(Token));
-                tmp = tmp->next = malloc(sizeof(Token));
-                ptr = ptr->next;
-              }
-            }
-          }
-          else
-          {
-            bool is_argument = false;
-            for (size_t j = 1; j <= vector_size(argument_list); j++)
-            {
-              Token *argument = vector_peek_at(argument_list, j);
-              if (argument->len == replace_token->len &&
-                  !strncmp(argument->str, replace_token->str, argument->len))
-              {
-                switch (directive_count)
-                {
-                  case 0:
-                  {
-                    for (size_t k = 1; k <= vector_size(vector_peek_at(
-                                                argument_real_list, j));
-                         k++)
-                    {
-                      memcpy(tmp,
-                             vector_peek_at(
-                                 vector_peek_at(argument_real_list, j), k),
-                             sizeof(Token));
-                      tmp = tmp->next = malloc(sizeof(Token));
-                    }
-                    is_argument = true;
-                  }
-                  break;
-                  case 1:
-                  {
-                    unimplemented();
-                  }
-                  break;
-                  case 2:
-                  {
-                    unimplemented();
-                  }
-                  break;
-                  default: unreachable();
-                }
-              }
-            }
-            if (!is_argument)
-              memcpy(tmp, vector_peek_at(token_string, i), sizeof(Token));
-            else
-              token_void(tmp);
-          }
-          if (directive_count)
-            unreachable();
-          directive_count = 0;
-          old = tmp;
-          tmp = tmp->next = malloc(sizeof(Token));
-        }
-        old->next = next;
-      }
-      else
-      {
-        token_void(token);
-        break;
-      }
-    }
-    else
-      break;
-  }
-  bool tmp = vector_has_data(hide_set);
+  bool tmp = ident_replacement_recursive(token, hide_set);
   vector_free(hide_set);
   return tmp;
 }

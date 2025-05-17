@@ -58,7 +58,13 @@ Token *get_token()
 // 引数のreservedと等しければ消費する その他の場合NULLを返す
 Token *consume_token_if_next_matches(TokenKind kind, char reserved)
 {
-  if (token->kind == kind && *(token->next->str) == reserved)
+  Token *next = token;
+  do
+  {
+    next = next->next;
+  } while (next->kind == TK_IGNORABLE || next->kind == TK_LINEBREAK);
+  if (token->kind == kind && next->kind == TK_RESERVED &&
+      next->str[0] == reserved)
     return token_next();
   return NULL;
 }
@@ -194,7 +200,7 @@ Token *tokenizer(char *input, char *end, Token *next_token)
       space_counter++;
       input++;
     }
-    if (space_counter && output_preprocess)
+    if (space_counter)
     {
       cur = new_token(TK_IGNORABLE, cur, input - space_counter);
       cur->len = space_counter;

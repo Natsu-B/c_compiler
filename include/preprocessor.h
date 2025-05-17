@@ -4,7 +4,6 @@
 #include "tokenizer.h"
 #include "vector.h"
 
-extern bool output_preprocess;
 extern bool gcc_compatible;
 extern Vector *Conditional_Inclusion_List;
 Token *token_next_not_ignorable(Token *token);

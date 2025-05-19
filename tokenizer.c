@@ -21,8 +21,8 @@ const char *tokenkindlist[TK_END] = {TokenKindTable};
 
 void fix_token_head()
 {
-  while (token->kind == TK_IGNORABLE || token->kind == TK_LINEBREAK ||
-         token->kind == TK_EOF)
+  while (token->kind == TK_IGNORABLE || token->kind == TK_ILB ||
+         token->kind == TK_LINEBREAK || token->kind == TK_EOF)
   {
     token = token->next;
     if (!token->next)
@@ -30,15 +30,17 @@ void fix_token_head()
   }
 }
 
-// TK_IGNORABLE と TK_LINEBREAKを無視してトークンを進める
+// TK_IGNORABLE、 TK_LIB と TK_LINEBREAKを無視してトークンを進める
 Token *token_next()
 {
   do
   {
-    if (token->kind != TK_IGNORABLE && token->kind != TK_LINEBREAK)
+    if (token->kind != TK_IGNORABLE && token->kind != TK_ILB &&
+        token->kind != TK_LINEBREAK)
       token_old = token;
     token = token->next;
-  } while (token->kind == TK_IGNORABLE || token->kind == TK_LINEBREAK);
+  } while (token->kind == TK_IGNORABLE || token->kind == TK_ILB ||
+           token->kind == TK_LINEBREAK);
   return token_old;
 }
 
@@ -62,7 +64,8 @@ Token *consume_token_if_next_matches(TokenKind kind, char reserved)
   do
   {
     next = next->next;
-  } while (next->kind == TK_IGNORABLE || next->kind == TK_LINEBREAK);
+  } while (next->kind == TK_IGNORABLE || next->kind == TK_ILB ||
+           next->kind == TK_LINEBREAK);
   if (token->kind == kind && next->kind == TK_RESERVED &&
       next->str[0] == reserved)
     return token_next();
@@ -284,7 +287,7 @@ Token *tokenizer(char *input, char *end, Token *next_token)
     {
       if (*input == '\\' && *(input + 1) == '\n')
       {
-        cur = new_token(TK_IGNORABLE, cur, input);
+        cur = new_token(TK_ILB, cur, input);
         cur->len = 2;
         input += 2;
         continue;

@@ -6,6 +6,7 @@
 
 extern bool gcc_compatible;
 extern Vector *Conditional_Inclusion_List;
+void line_count();
 Token *token_next_not_ignorable(Token *token);
 Token *token_next_not_ignorable_void(Token *token);
 

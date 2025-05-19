@@ -21,6 +21,11 @@ size_t File_Line = 1;
 char *File_Start;
 long long include_level = -1;
 
+void line_count()
+{
+  File_Line++;
+}
+
 void token_void(Token *token)
 {
   token->kind = TK_IGNORABLE;
@@ -32,16 +37,20 @@ Token *token_next_not_ignorable(Token *token)
 {
   do
   {
+    if (token->kind == TK_ILB)
+      line_count();
     token = token->next;
-  } while (token->kind == TK_IGNORABLE);
+  } while (token->kind == TK_IGNORABLE || token->kind == TK_ILB);
   return token;
 }
 
 Token *token_next_not_ignorable_void(Token *token)
 {
   token = token->next;
-  while (token->kind == TK_IGNORABLE)
+  while (token->kind == TK_IGNORABLE || token->kind == TK_ILB)
   {
+    if (token->kind == TK_ILB)
+      line_count();
     token_void(token);
     token = token->next;
   }
@@ -108,7 +117,7 @@ Token *directive(Token *old)
             break;
         }
         conditional_inclusion(token_if, conditional_list);
-        return token_next_not_ignorable_void(token);
+        return token->next;
       }
       break;
     case 4:
@@ -131,7 +140,7 @@ Token *directive(Token *old)
             break;
         }
         conditional_inclusion(token_ifdef, conditional_list);
-        return token_next_not_ignorable_void(token);
+        return token->next;
       }
       if (!strncmp(token->str, "error", 5))
         error_at(token->str, token->len, "#error directive found");
@@ -259,7 +268,7 @@ Token *directive(Token *old)
             break;
         }
         conditional_inclusion(token_ifndef, conditional_list);
-        return token_next_not_ignorable_void(token);
+        return token->next;
       }
       if (!strncmp(token->str, "pragma", 6))
       {
@@ -432,7 +441,14 @@ extern char gcc_predef_end[];
 
 void set_default_definition()
 {
-  preprocess(gcc_predef_start, gcc_predef_end, NULL, NULL);
+  char *predef_start =
+      "#define __FILE__ \n#define __LINE__ \n#define __DATE__ \n#define "
+      "__TIME__ \n #define __INCLUDE_LEVEL__\n";
+  char *predef_end = predef_start + strlen(predef_start);
+
+  preprocess(predef_start, predef_end, NULL, NULL);
+  if (gcc_compatible)
+    preprocess(gcc_predef_start, gcc_predef_end, NULL, NULL);
 }
 
 [[noreturn]]
@@ -457,6 +473,5 @@ void init_preprocessor()
 {
   Conditional_Inclusion_List = vector_new();
   object_like_macro_list = vector_new();
-  if (gcc_compatible)
-    set_default_definition();
+  set_default_definition();
 }

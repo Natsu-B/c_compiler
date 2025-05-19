@@ -10,6 +10,7 @@ typedef enum
   TK_DIRECTIVE,  // preprocessorで使われるディレクティブ
   TK_IGNORABLE,  // スペース、コメントアウト等の無視できるものたち
   TK_LINEBREAK,  // 改行
+  TK_ILB,        // 無視できる改行 Ignorable Line Break
   TK_IDENT,      // 識別子
   TK_NUM,        // 整数
   TK_STRING,     // string literal
@@ -18,9 +19,9 @@ typedef enum
 } TokenKind;     // トークンの種類
 
 // デバッグ出力用 TokenKindに追加したら必ず追加すること
-#define TokenKindTable                                                       \
-  "TK_RESERVED", "TK_DIRECTIVE", "TK_IGNORABLE", "TK_LINEBREAK", "TK_IDENT", \
-      "TK_NUM", "TK_STRING", "TK_EOF"
+#define TokenKindTable                                                     \
+  "TK_RESERVED", "TK_DIRECTIVE", "TK_IGNORABLE", "TK_LINEBREAK", "TK_ILB", \
+      "TK_IDENT", "TK_NUM", "TK_STRING", "TK_EOF"
 extern const char *tokenkindlist[TK_END];
 
 typedef struct Token Token;

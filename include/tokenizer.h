@@ -34,23 +34,23 @@ struct Token
   size_t len;      // トークンの長さ
 };
 
-extern Token *tokenizer(char *input, char *end, Token *next_token);
-extern void re_tokenize(Token *token_head);
-extern bool at_eof();
-
-extern void fix_token_head();
-extern void set_token(Token *next);
-extern Token *consume_token_if_next_matches(TokenKind kind, char reserved);
-extern Token *peek(char *op, TokenKind kind);
-extern Token *consume(char *op, TokenKind kind);
-extern Token *expect(char *op, TokenKind kind);
-extern Token *get_old_token();
-extern Token *get_token();
-extern Token *peek_ident();
-extern Token *consume_ident();
-extern Token *expect_ident();
-extern Token *consume_string();
-extern bool is_number(long *result);
-extern long expect_number();
+Token *tokenize_once(char *input, char **end);
+Token *tokenizer(char *input, char *end, Token *next_token);
+void re_tokenize(Token *token_head);
+bool at_eof();
+void fix_token_head();
+void set_token(Token *next);
+Token *consume_token_if_next_matches(TokenKind kind, char reserved);
+Token *peek(char *op, TokenKind kind);
+Token *consume(char *op, TokenKind kind);
+Token *expect(char *op, TokenKind kind);
+Token *get_old_token();
+Token *get_token();
+Token *peek_ident();
+Token *consume_ident();
+Token *expect_ident();
+Token *consume_string();
+bool is_number(long *result);
+long expect_number();
 
 #endif  // TOKENIZER_C_COMPILER

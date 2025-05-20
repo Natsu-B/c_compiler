@@ -14,6 +14,19 @@
 extern GTLabel *head_label;
 extern Vector *output_list;
 
+// gdb で呼び出す用
+void print_token_str(Vector *vec)
+{
+  pr_debug("start\n");
+  for (size_t i = 1; i <= vector_size(vec); i++)
+  {
+    Token *token = vector_peek_at(vec, i);
+    printf("%.*s", (int)token->len, token->str);
+  }
+  printf("\n");
+  pr_debug("end");
+}
+
 static char *CPPTKlist[] = {CPPTK_list};
 
 void print_polish_notation()

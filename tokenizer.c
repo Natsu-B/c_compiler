@@ -169,14 +169,146 @@ int is_alnum(char c)
 }
 
 // 新しくトークンを作る関数
-Token *new_token(TokenKind kind, Token *old, char *str)
+Token *new_token(TokenKind kind, char *str)
 {
   Token *new = calloc(1, sizeof(Token));
   new->kind = kind;
   new->str = str;
-  old->next = new;
-
   return new;
+}
+
+Token *tokenize_once(char *input, char **end)
+{
+  Token *cur;
+  // 改行 isspaceでは'\n'も処理されてしまうのでそれより前に置く
+  if (*input == '\n')
+  {
+    cur = new_token(TK_LINEBREAK, input++);
+    cur->len = 1;
+    *end = input;
+    return cur;
+  }
+
+  size_t space_counter = 0;
+  while (isspace(*input) && *input != '\n')
+  {
+    space_counter++;
+    input++;
+  }
+  if (space_counter)
+  {
+    cur = new_token(TK_IGNORABLE, input - space_counter);
+    cur->len = space_counter;
+    *end = input;
+    return cur;
+  }
+
+  // コメントを読み飛ばす
+  if (!strncmp(input, "//", 2))
+  {
+    input++;
+    size_t i = 1;
+    while (*++input != '\n')
+      i++;
+    cur = new_token(TK_IGNORABLE, input - i);
+    cur->len = i + 1;
+    *end = input;
+    return cur;
+  }
+  if (!strncmp(input, "/*", 2))
+  {
+    char *comment_end = strstr(input + 2, "*/");
+    if (!comment_end)
+      error_at(input, 1, "コメントが閉じられていません");
+    cur = new_token(TK_IGNORABLE, input);
+    char *pointer = input;
+    while (pointer <= comment_end)
+    {
+      if (*++pointer == '\n')
+      {
+        cur->len = pointer - input;
+        cur = new_token(TK_LINEBREAK, pointer);
+        cur->len = 1;
+        cur = new_token(TK_IGNORABLE, pointer);
+        input = pointer;
+      }
+    }
+    cur->len = comment_end + 2 - input;
+    *end = comment_end + 2;
+    return cur;
+  }
+
+  if (*input == '#')
+  {
+    cur = new_token(TK_DIRECTIVE, input);
+    cur->len = 1;
+    *end = input + 1;
+    return cur;
+  }
+
+  if (strchr("+-*/()=!<>;{},&[].\\'|%?:~^", *input))
+  {
+    if (*input == '\\' && *(input + 1) == '\n')
+    {
+      cur = new_token(TK_ILB, input);
+      cur->len = 2;
+      input += 2;
+      *end = input;
+      return cur;
+    }
+    cur = new_token(TK_RESERVED, input);
+    // "==", "<=", ">=", "!=", "&&", "||", "->" の場合
+    if ((*(input + 1) == '=' &&
+         (*input == '<' || *input == '>' || *input == '!' || *input == '=')) ||
+        (*(input + 1) == '>' && *input == '>') ||
+        (*(input + 1) == '<' && *input == '<') ||
+        (*(input + 1) == '&' && *input == '&') ||
+        (*(input + 1) == '|' && *input == '|') ||
+        (*(input + 1) == '>' && *input == '-'))
+    {
+      pr_debug2("find RESERVED token: %.2s", input);
+      cur->len = 2;
+      input += 2;
+    }
+    else
+    {
+      pr_debug2("find RESERVED token: %.1s", input);
+      cur->len = 1;
+      input++;
+    }
+    *end = input;
+    return cur;
+  }
+
+  // 文字列の検知
+  if (*input == '"')
+  {
+    int i = 0;  // 文字列のサイズ("は除く)
+    while (*(++input) != '"')
+      i++;
+    input++;  // 終了まで送る
+    cur = new_token(TK_STRING, input - i - 2);
+    cur->len = i + 2;
+    *end = input;
+    return cur;
+  }
+
+  // 英数字と'_'のみの場合は変数または予約語とみなす
+  int i = 0;
+  while (is_alnum(*input))
+  {
+    i++;
+    input++;
+  }
+  if (i)
+  {
+    cur = new_token(TK_IDENT, input - i);
+    cur->len = i;
+    *end = input;
+    return cur;
+  }
+  error_at(input, 1, "トークナイズに失敗しました");
+  return NULL;
 }
 
 // トークナイズする関数
@@ -189,66 +321,15 @@ Token *tokenizer(char *input, char *end, Token *next_token)
   Vector *nest_list = vector_new();
   while (end ? input != end : *input)
   {
-    // 改行 isspaceでは'\n'も処理されてしまうのでそれより前に置く
-    if (*input == '\n')
-    {
-      cur = new_token(TK_LINEBREAK, cur, input++);
-      cur->len = 1;
-      continue;
-    }
+    char *end = NULL;
+    cur->next = tokenize_once(input, &end);
+    input = end;
+    cur = cur->next;
 
-    size_t space_counter = 0;
-    while (isspace(*input) && *input != '\n')
+    if (cur->kind == TK_DIRECTIVE)
     {
-      space_counter++;
-      input++;
-    }
-    if (space_counter)
-    {
-      cur = new_token(TK_IGNORABLE, cur, input - space_counter);
-      cur->len = space_counter;
-      continue;
-    }
-
-    // コメントを読み飛ばす
-    if (!strncmp(input, "//", 2))
-    {
-      input++;
-      size_t i = 1;
-      while (*++input != '\n')
-        i++;
-      cur = new_token(TK_IGNORABLE, cur, input - i);
-      continue;
-    }
-    if (!strncmp(input, "/*", 2))
-    {
-      char *end = strstr(input + 2, "*/");
-      if (!end)
-        error_at(input, 1, "コメントが閉じられていません");
-      cur = new_token(TK_IGNORABLE, cur, input);
-      char *pointer = input;
-      while (pointer <= end)
-      {
-        if (*++pointer == '\n')
-        {
-          cur->len = pointer - input;
-          cur = new_token(TK_LINEBREAK, cur, pointer);
-          cur->len = 1;
-          cur = new_token(TK_IGNORABLE, cur, pointer);
-          input = pointer;
-        }
-      }
-      cur->len = end + 2 - input;
-      input = end + 2;
-      continue;
-    }
-
-    if (*input == '#')
-    {
-      cur = new_token(TK_DIRECTIVE, cur, input);
-      cur->len = 1;
       size_t counter = 0;
-      char *tmp = ++input;
+      char *tmp = input;
       while (isspace(*tmp) && *tmp != '\n')
         tmp++;
       while (is_alnum(*tmp))
@@ -265,101 +346,19 @@ Token *tokenizer(char *input, char *end, Token *next_token)
         vector_push(Conditional_Inclusion_List, new);
         vector_push(nest_list, new);
         vector_push(new, cur);
-        continue;
       }
-      if ((counter == 4 && (!strncmp(tmp - counter, "else", 4) ||
-                            !strncmp(tmp - counter, "elif", 4))) ||
-          (counter == 7 && !strncmp(tmp - counter, "elifdef", 7)) ||
-          (counter == 8 && !strncmp(tmp - counter, "elifndef", 8)))
-      {
+      else if ((counter == 4 && (!strncmp(tmp - counter, "else", 4) ||
+                                 !strncmp(tmp - counter, "elif", 4))) ||
+               (counter == 7 && !strncmp(tmp - counter, "elifdef", 7)) ||
+               (counter == 8 && !strncmp(tmp - counter, "elifndef", 8)))
         vector_push(vector_peek(nest_list), cur);
-        continue;
-      }
-      if (counter == 5 && !strncmp(tmp - counter, "endif", 5))
-      {
+      else if (counter == 5 && !strncmp(tmp - counter, "endif", 5))
         vector_push(vector_pop(nest_list), cur);
-        continue;
-      }
-      continue;
     }
-
-    if (strchr("+-*/()=!<>;{},&[].\\'|%?:~^", *input))
-    {
-      if (*input == '\\' && *(input + 1) == '\n')
-      {
-        cur = new_token(TK_ILB, cur, input);
-        cur->len = 2;
-        input += 2;
-        continue;
-      }
-      cur = new_token(TK_RESERVED, cur, input);
-      // "==", "<=", ">=", "!=", "&&", "||", "->" の場合
-      if ((*(input + 1) == '=' && (*input == '<' || *input == '>' ||
-                                   *input == '!' || *input == '=')) ||
-          (*(input + 1) == '>' && *input == '>') ||
-          (*(input + 1) == '<' && *input == '<') ||
-          (*(input + 1) == '&' && *input == '&') ||
-          (*(input + 1) == '|' && *input == '|') ||
-          (*(input + 1) == '>' && *input == '-'))
-      {
-        pr_debug2("find RESERVED token: %.2s", input);
-        cur->len = 2;
-        input += 2;
-      }
-      else
-      {
-        pr_debug2("find RESERVED token: %.1s", input);
-        cur->len = 1;
-        input++;
-      }
-      continue;
-    }
-
-    if (isdigit(*input))
-    {
-      int i = 1;
-      while (isdigit(*++input))
-        i++;
-      while (strchr("UuLl", *input))
-      {
-        input++;
-        i++;
-      }
-      cur = new_token(TK_IDENT, cur, input - i);
-      cur->len = i;
-      continue;
-    }
-
-    // 文字列の検知
-    if (*input == '"')
-    {
-      int i = 0;  // 文字列のサイズ("は除く)
-      while (*(++input) != '"')
-        i++;
-      input++;  // 終了まで送る
-      cur = new_token(TK_STRING, cur, input - i - 2);
-      cur->len = i + 2;
-      continue;
-    }
-
-    // 英数字と'_'のみの場合は変数または予約語とみなす
-    int i = 0;
-    while (is_alnum(*input))
-    {
-      i++;
-      input++;
-    }
-    if (i)
-    {
-      cur = new_token(TK_IDENT, cur, input - i);
-      cur->len = i;
-      continue;
-    }
-    error_at(input, 1, "トークナイズに失敗しました");
   }
 
-  cur = new_token(TK_EOF, cur, input);
-  cur->next = next_token;
+  cur->next = new_token(TK_EOF, input);
+  cur->next->next = next_token;
 
   pr_debug("complite tokenize");
   vector_free(nest_list);

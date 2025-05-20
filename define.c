@@ -303,6 +303,7 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
       error_at(next->str, next->len, "Invalid #define directive");
     }
     Token *tmp = old->next = malloc(sizeof(Token));
+    Token *old_str = NULL;
     if (token_string && vector_size(token_string))
     {  // function like macroの置換をしていく
       size_t directive_count = 0;
@@ -311,19 +312,10 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
         Token *replace_token = vector_peek_at(token_string, i);
         bool is_args = false;
         bool is_ops = false;
-        if (replace_token->kind == TK_IGNORABLE ||
-            replace_token->kind == TK_ILB)
-        {
-          if (replace_token->kind == TK_ILB)
-            line_count();
-          continue;
-        }
         switch (replace_token->kind)
         {
           case TK_DIRECTIVE: directive_count++; continue;
-          case TK_ILB: line_count();
-          // fall through
-          case TK_IGNORABLE: continue;
+          case TK_ILB: line_count(); continue;
           case TK_LINEBREAK: unreachable();
           default: break;
         }
@@ -362,8 +354,8 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
           if (is_ops &&
               vector_size(argument_list) - 1 ==
                   vector_size(argument_real_list) &&
-              old->len == 1 && old->str[0] == ',')
-            token_void(old);
+              old_str->len == 1 && old_str->str[0] == ',')
+            token_void(old_str);
           else
           {
             // startは__VA_ARGS__の最初
@@ -373,6 +365,7 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
             while (ptr != next)
             {  // nextは__VA_ARGS__の終了部分
               memcpy(tmp, ptr, sizeof(Token));
+              old_str = tmp;
               tmp = tmp->next = malloc(sizeof(Token));
               ptr = ptr->next;
             }
@@ -381,59 +374,100 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
         else
         {
           bool is_argument = false;
-          for (size_t j = 1; j <= vector_size(argument_list); j++)
-          {
-            Token *argument = vector_peek_at(argument_list, j);
-            if (argument->len == replace_token->len &&
-                !strncmp(argument->str, replace_token->str, argument->len))
+          if (replace_token->kind == TK_IDENT ||
+              replace_token->kind == TK_STRING ||
+              replace_token->kind == TK_RESERVED)
+          {  // 通常の置換を行っていく (__VA_ARGS__等以外の)
+            for (size_t j = 1; j <= vector_size(argument_list); j++)
+            {  // マクロの引数と同じものがないか探す
+              Token *argument = vector_peek_at(argument_list, j);
+              if (argument->len == replace_token->len &&
+                  !strncmp(argument->str, replace_token->str, argument->len))
+              {  // マクロの引数と同じ場合
+                Token *start = tmp;
+                for (size_t k = 1;
+                     k <= vector_size(vector_peek_at(argument_real_list, j));
+                     k++)
+                {  // マクロの引数に対応する実引数をコピーしてくる
+                  memcpy(
+                      tmp,
+                      vector_peek_at(vector_peek_at(argument_real_list, j), k),
+                      sizeof(Token));
+                  old_str = tmp;
+                  tmp = tmp->next = malloc(sizeof(Token));
+                }
+                token_void(tmp);
+                is_argument = true;
+                if (directive_count == 1)
+                {  // stringizing
+                  size_t stringizing_len_count = 0;
+                  Token *ptr = start;
+                  while (ptr != tmp)
+                  {
+                    stringizing_len_count += ptr->len;
+                    ptr = ptr->next;
+                  }
+                  char *stringizing = malloc(stringizing_len_count + 2);
+                  stringizing[0] = stringizing[stringizing_len_count + 1] = '"';
+                  size_t stringizing_ptr = 1;
+                  ptr = start;
+                  while (ptr != tmp)
+                  {
+                    strncpy(stringizing + stringizing_ptr, ptr->str, ptr->len);
+                    stringizing_ptr += ptr->len;
+                    token_void(ptr);
+                    ptr = ptr->next;
+                  }
+                  directive_count = 0;
+                  start->kind = TK_STRING;
+                  start->str = stringizing;
+                  start->len = stringizing_len_count + 2;
+                  start->next = tmp;
+                }
+                ident_replacement_recursive(start, hide_set);
+                break;
+              }
+            }
+
+            switch (directive_count)
             {
-              Token *start = tmp;
-              for (size_t k = 1;
-                   k <= vector_size(vector_peek_at(argument_real_list, j)); k++)
+              case 0: break;
+              case 2:
               {
-                memcpy(tmp,
-                       vector_peek_at(vector_peek_at(argument_real_list, j), k),
-                       sizeof(Token));
-                tmp = tmp->next = malloc(sizeof(Token));
-              }
-              token_void(tmp);
-              is_argument = true;
-              if (directive_count == 1)
-              {
-                size_t stringizing_len_count = 0;
-                Token *ptr = start;
-                while (ptr != tmp)
-                {
-                  stringizing_len_count += ptr->len;
-                  ptr = ptr->next;
-                }
-                char *stringizing = malloc(stringizing_len_count + 2);
-                stringizing[0] = stringizing[stringizing_len_count + 1] = '"';
-                size_t stringizing_ptr = 1;
-                ptr = start;
-                while (ptr != tmp)
-                {
-                  strncpy(stringizing + stringizing_ptr, ptr->str, ptr->len);
-                  stringizing_ptr += ptr->len;
-                  token_void(ptr);
-                  ptr = ptr->next;
-                }
+                if (!old_str)
+                  unreachable();
+                // concatenation
+                size_t concatenation_size = old_str->len + tmp->len + 1;
+                char *concatenation_str = malloc(concatenation_size);
+                int print_size = sprintf(concatenation_str, "%.*s",
+                                         (int)old_str->len, old_str->str);
+                if (print_size != (int)old_str->len)
+                  unreachable();
+                print_size = sprintf(concatenation_str + old_str->len, "%.*s",
+                                     (int)tmp->len, tmp->str);
+                if (print_size != (int)tmp->len)
+                  unreachable();
+                char *end = NULL;
+                Token *concatenation_token =
+                    tokenize_once(concatenation_str, &end);
+                if (end != concatenation_str + concatenation_size - 1)
+                  unreachable();
+                old_str->kind = concatenation_token->kind;
+                old_str->len = concatenation_token->len;
+                old_str->str = concatenation_token->str;
+                tmp = old_str;
                 directive_count = 0;
-                start->kind = TK_STRING;
-                start->str = stringizing;
-                start->len = stringizing_len_count + 2;
-                start->next = tmp;
               }
-              ident_replacement_recursive(start, hide_set);
               break;
+              default: unreachable();
             }
           }
           if (!is_argument)
             memcpy(tmp, vector_peek_at(token_string, i), sizeof(Token));
         }
         if (directive_count)
-          //          unreachable();
-          directive_count = 0;
+          unreachable();
+        directive_count = 0;
         old = tmp;
         tmp = tmp->next = malloc(sizeof(Token));
       }

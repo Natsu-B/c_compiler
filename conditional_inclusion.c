@@ -208,7 +208,7 @@ static void shunting_yard_algorithm(Token *token)
     {
       conditional_inclusion_token *new =
           calloc(1, sizeof(conditional_inclusion_token));
-      if (isdigit(token->str[0]))
+      if (token->len && isdigit(token->str[0]))
       {
         bool is_hex = false;
         if (!strncmp(token->str, "0x", 2))
@@ -244,7 +244,13 @@ static void shunting_yard_algorithm(Token *token)
         }
       }
       else if (ident_replacement(token))
+      {
+        while (token->kind == TK_IGNORABLE || token->kind == TK_ILB)
+        {
+          token = token->next;
+        }
         continue;
+      }
       else if (token->kind == TK_IDENT)
       {
         new->type = CPPTK_Integer;

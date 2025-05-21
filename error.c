@@ -40,6 +40,15 @@ void _debug2(char *file, int line, const char *func, char *fmt, ...)
   fprintf(stdout, "\n");
 }
 
+char *file_name;
+char *user_input;
+
+void error_init(char *name, char *input)
+{
+  file_name = name;
+  user_input = input;
+}
+
 // エラー時にログを出力し、終了する関数 errorから呼び出される
 [[noreturn]]
 void _error(char *file, int line, const char *func, char *fmt, ...)
@@ -48,16 +57,8 @@ void _error(char *file, int line, const char *func, char *fmt, ...)
   va_start(ap, fmt);
   fprintf(stderr, "\e[31m[ERROR] \e[37m");
   _debug2(file, line, func, fmt, ap);
+  fprintf(stderr, "\n error while compiling %s\n", file_name);
   exit(1);
-}
-
-char *file_name;
-char *user_input;
-
-void error_init(char *name, char *input)
-{
-  file_name = name;
-  user_input = input;
 }
 
 // 入力プログラムがおかしいとき、エラー箇所を可視化するプログラム

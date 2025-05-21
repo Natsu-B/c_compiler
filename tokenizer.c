@@ -207,11 +207,11 @@ Token *tokenize_once(char *input, char **end)
   if (!strncmp(input, "//", 2))
   {
     input++;
-    size_t i = 1;
+    size_t i = 2;
     while (*++input != '\n')
       i++;
     cur = new_token(TK_IGNORABLE, input - i);
-    cur->len = i + 1;
+    cur->len = i;
     *end = input;
     return cur;
   }

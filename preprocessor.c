@@ -163,17 +163,13 @@ Token *directive(Token *old)
         Token *new = malloc(sizeof(Token));
         memcpy(new, ptr, sizeof(Token));
         vector_push(token_list, new);
-        char *str_ptr = ptr->str;
-        size_t str_len = ptr->len;
         token_void(ptr);
-        ptr = token_next_not_ignorable_void(ptr);
+        ptr = ptr->next;
         bool is_function_like = false;
-
+        bool is_end = true;
         // function like macroのときの動作
-        if (*(str_ptr + str_len) == '(')
+        if (ptr->kind == TK_RESERVED && ptr->len == 1 && ptr->str[0] == '(')
         {
-          if (ptr->str != str_ptr + str_len)
-            unreachable();
           is_function_like = true;
           Vector *formal_parameter = vector_new();
           vector_push(token_list, formal_parameter);
@@ -194,21 +190,7 @@ Token *directive(Token *old)
                   error_at(new->str, new->len, "duplicate macro parameter");
               }
               vector_push(formal_parameter, new);
-              ptr = token_next_not_ignorable_void(ptr);
-              if (ptr->kind == TK_RESERVED)
-              {
-                if (ptr->str[0] == ')')
-                {
-                  token_void(ptr);
-                  ptr = token_next_not_ignorable_void(ptr);
-                  break;
-                }
-                if (ptr->str[0] == ',')
-                {
-                  token_void(ptr);
-                  continue;
-                }
-              }
+              is_end = true;
             }
             else if (ptr->kind == TK_RESERVED && ptr->str[0] == '.')
             {
@@ -233,11 +215,30 @@ Token *directive(Token *old)
               vector_push(formal_parameter, new);
               break;
             }
+            else if (is_end && ptr->kind == TK_RESERVED && ptr->len == 1)
+            {
+              if (ptr->str[0] == ')')
+              {
+                token_void(ptr);
+                ptr = token_next_not_ignorable_void(ptr);
+                break;
+              }
+              if (ptr->str[0] == ',')
+              {
+                is_end = false;
+                token_void(ptr);
+                continue;
+              }
+            }
             else
               error_at(token->str, token->len, "Invalid #define use");
           }
         }
-
+        else if (ptr->kind == TK_IGNORABLE || ptr->kind == TK_ILB)
+        {
+          token_void(ptr);
+          ptr = token_next_not_ignorable_void(ptr);
+        }
         for (;;)
         {
           if (ptr->kind == TK_LINEBREAK)
@@ -383,9 +384,9 @@ void preprocessor()
         token = directive(token);
         break;
       case TK_LINEBREAK: File_Line++; break;
-      case TK_IDENT:  // 識別子がトークン先頭の場合
-        ident_replacement(token);
-        break;
+      case TK_IDENT:
+      case TK_RESERVED:
+      case TK_STRING: ident_replacement(token); break;
       default: break;
     }
     // 次のトークンに送る

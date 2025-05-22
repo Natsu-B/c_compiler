@@ -52,11 +52,11 @@ Type* _declaration_specifiers(bool* is_typedef)
   size_t struct_count = 0;
   size_t union_count = 0;
   Token* old = get_token();
-  if (consume("typedef", TK_IDENT))
-    *is_typedef = true;
 
   for (;;)
   {
+    if (consume("typedef", TK_IDENT))
+      *is_typedef = true;
     if (consume("long", TK_IDENT))
       long_count++;
     else if (consume("signed", TK_IDENT))
@@ -164,6 +164,8 @@ Type* _declaration_specifiers(bool* is_typedef)
       new->struct_alignment = struct_alignment;
     }
     vector_push(vector_peek(StructList), new);
+    if (consume("typedef", TK_IDENT))
+      *is_typedef = true;
     return type;
   }
 

@@ -37,11 +37,14 @@ struct Type
   };
 };
 
+typedef struct Node Node;  // parser.hをincludeできないため定義だけしておく
+
 Type *alloc_type(TypeKind kind);
 Type *declaration_specifiers();
 size_t size_of(Type *type);
 size_t align_of(Type *type);
 void add_typedef();
+Type *find_struct_child(Node *parent, Node *child, size_t *offset);
 void init_types();
 void new_nest_type();
 void exit_nest_type();

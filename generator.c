@@ -208,6 +208,15 @@ void gen_lval(Node *node)
       output_file("    push rax");
       break;
     case ND_DEREF: gen(node->lhs); break;
+    case ND_DOT:
+    case ND_ARROW:
+      gen_lval(node->lhs);
+      output_file("    pop rax");
+      if (node->kind == ND_ARROW)
+        output_file("    mov rax, QWORD PTR [rax]");  // dereference
+      output_file("    add rax, %lu", node->child_offset);
+      output_file("    push rax");
+      break;
     default: error_exit_with_guard("代入の左辺値が変数でありません");
   }
   output_debug2("exit gen_lval");

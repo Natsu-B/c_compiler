@@ -159,6 +159,13 @@ void add_type(Node *node)
     add_type(node);
     return;
   }
+  if (node->kind == ND_DOT || node->kind == ND_ARROW)
+  {
+    size_t offset = 0;
+    node->type = find_struct_child(node->lhs, node->rhs, &offset);
+    node->child_offset = offset;
+    return;
+  }
 }
 
 void analyze_type(Node *node)

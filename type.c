@@ -352,6 +352,43 @@ size_t align_of(Type* type)
   return 0;
 }
 
+Type* find_struct_child(Node* parent, Node* child, size_t* offset)
+{  // structのchildを探してその型を返す
+  // また、そのchildのオフセットについても返す
+  for (size_t i = 1; i <= vector_size(StructList); i++)
+  {
+    Vector* struct_nest = vector_peek_at(StructList, i);
+    for (size_t j = 1; j <= vector_size(struct_nest); j++)
+    {
+      struct_list* tmp = vector_peek_at(struct_nest, j);
+      if (tmp->type == parent->type)
+      {
+        if (tmp->struct_size)
+        {
+          Vector* child_list = tmp->data_list;
+          for (size_t k = 1; k <= vector_size(child_list); k++)
+          {
+            struct_data_list* child_data = vector_peek_at(child_list, k);
+            if (child->token->len == child_data->name->len &&
+                !strncmp(child->token->str, child_data->name->str,
+                         child->token->len))
+            {
+              *offset = child_data->offset;
+              return child_data->type;
+            }
+          }
+          error_at(child->token->str, child->token->len,
+                   "unknown child name (parent: %.*s)", (int)parent->token->len,
+                   parent->token->str);
+        }
+        error_at(tmp->name->str, tmp->name->len, "struct not defined");
+      }
+    }
+  }
+  error_at(parent->token->str, parent->token->len, "unknown struct type");
+  return NULL;
+}
+
 void init_types()
 {
   Vector* root_typedef = vector_new();

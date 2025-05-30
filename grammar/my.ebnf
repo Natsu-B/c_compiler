@@ -184,7 +184,9 @@ unary-operator
 postfix-expression
         = primary-expression
         | postfix-expression, ( "[", expression, "]"
-        | "(", { assignment-expression }, ")" );
+        | "(", { assignment-expression }, ")" )
+        | ".", identifier
+        | "->", identifier;
 
 primary-expression
         = identifier

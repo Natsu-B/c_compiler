@@ -491,7 +491,20 @@ Node *postfix_expression()
       node = new_node(ND_ARRAY, node, new_node_num(expect_number()), old_token);
       expect("]", TK_RESERVED);
     }
-    return node;
+    else if (consume(".", TK_RESERVED))
+    {
+      Token *token = expect_ident();
+      node =
+          new_node(ND_DOT, node, new_node(ND_FIELD, NULL, NULL, token), token);
+    }
+    else if (consume("->", TK_RESERVED))
+    {
+      Token *token = expect_ident();
+      node = new_node(ND_ARROW, node, new_node(ND_FIELD, NULL, NULL, token),
+                      token);
+    }
+    else
+      return node;
   }
 }
 

@@ -63,6 +63,9 @@ typedef enum
   ND_WHILE,         // while
   ND_VAR,           // 変数
   ND_ARRAY,         // 配列
+  ND_DOT,           // .
+  ND_ARROW,         // ->
+  ND_FIELD,         // structのchild
   ND_NUM,           // 整数
   ND_BLOCK,         // ブロック
   ND_DISCARD_EXPR,  // 式文
@@ -75,8 +78,8 @@ typedef enum
   "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT",        \
       "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF", "ND_FUNCDEF",            \
       "ND_FUNCCALL", "ND_RETURN", "ND_SIZEOF", "ND_IF", "ND_ELIF", "ND_FOR", \
-      "ND_WHILE", "ND_VAR", "ND_ARRAY", "ND_NUM", "ND_BLOCK",                \
-      "ND_DISCARD_EXPR", "ND_STIRNG"
+      "ND_WHILE", "ND_VAR", "ND_ARRAY", "ND_DOT", "ND_ARROW", "ND_FIELD",    \
+      "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR", "ND_STIRNG"
 extern const char *nodekindlist[];
 
 struct Node
@@ -90,9 +93,9 @@ struct Node
   // 簡略化するため一時的にunionを使わないことにする
   struct
   {
-    Node *lhs;         // 左辺 left-hand side
-    Node *rhs;         // 右辺 right-hand side
-    size_t real_size;  // 置き換えられるサイズ sizeof演算子のみで用いる
+    Node *lhs;            // 左辺 left-hand side
+    Node *rhs;            // 右辺 right-hand side
+    size_t child_offset;  // ND_DOT, ND_ARROWのとき利用 そのchildのoffset
   };
 
   struct

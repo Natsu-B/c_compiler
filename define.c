@@ -268,7 +268,7 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
       {
         Vector *list = vector_new();
         vector_push(argument_real_list, list);
-        while (nest_counter || next->kind != TK_RESERVED ||
+        while (nest_counter || next->kind != TK_RESERVED || next->len != 1 ||
                (next->str[0] != ',' && next->str[0] != ')'))
         {
           if (next->kind == TK_LINEBREAK)
@@ -276,9 +276,11 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
             line_count();
             token_void(next);
           }
-          if (next->kind == TK_RESERVED && next->str[0] == '(')
+          if (next->kind == TK_RESERVED && next->len == 1 &&
+              next->str[0] == '(')
             nest_counter++;
-          if (next->kind == TK_RESERVED && next->str[0] == ')')
+          if (next->kind == TK_RESERVED && next->len == 1 &&
+              next->str[0] == ')')
             nest_counter--;
           vector_push(list, next);
           next = token_next_not_ignorable(next);

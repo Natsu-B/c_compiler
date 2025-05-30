@@ -1,6 +1,9 @@
 #ifndef ERROR_C_COMPILER
 #define ERROR_C_COMPILER
 
+// sigactionを有効にしたい
+// #define _GNU_SOURCE
+#include <signal.h>
 #include <stddef.h>
 
 #define DEBUG 0
@@ -34,14 +37,16 @@
   _error_at(error_location, error_len, __FILE__, __LINE__, __func__, fmt, \
             ##__VA_ARGS__)
 
-extern void _debug(char *file, int line, const char *func, char *fmt, ...);
-extern void _debug2(char *file, int line, const char *func, char *fmt, ...);
+void _debug(char *file, int line, const char *func, char *fmt, ...);
+void _debug2(char *file, int line, const char *func, char *fmt, ...);
 
-extern void _error(char *file, int line, const char *func, char *fmt, ...);
+void _error(char *file, int line, const char *func, char *fmt, ...);
 
-extern void error_init(char *name, char *input);
+void error_init(char *name, char *input);
 
-extern void _error_at(char *error_location, size_t error_len, char *file,
-                      int line, const char *func, char *fmt, ...);
+void _error_at(char *error_location, size_t error_len, char *file, int line,
+               const char *func, char *fmt, ...);
+
+void handle_signal(int signum, siginfo_t *info, void *ucontext);
 
 #endif  // ERROR_C_COMPILER

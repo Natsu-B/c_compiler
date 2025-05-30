@@ -23,6 +23,15 @@ int main(int argc, char **argv)
   fprintf(stdout, "\e[32mc_compiler\e[37m\n");
   if (argc < 3)
     error_exit("invalid arguments");
+
+  // abortのハンドル
+  struct sigaction sa;
+  sa.sa_handler = (__sighandler_t)(void *)handle_signal;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+  if (sigaction(SIGSEGV, &sa, NULL) == -1)
+    fprintf(stderr, "failed to set signal handler\n");
+
   char *input_file_name = NULL;
   char *output_file_name = NULL;
   char *input = NULL;

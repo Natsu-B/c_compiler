@@ -202,6 +202,12 @@ void _print_parse_result(Node *node, int nest)
               (int)node->token->len, node->token->str);
       break;
     }
+    case ND_GOTO:
+    {
+      fprintf(stdout, "NodeKind: %s label_name: %s", nodekindlist[node->kind],
+              node->label_name);
+      break;
+    }
     default:
     {
       fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);
@@ -230,11 +236,6 @@ void print_parse_result(FuncBlock *node)
   {
     fprintf(stdout, "node[%d]\n", i++);
     _print_parse_result(pointer->node, 0);
-  }
-  fprintf(stdout, "\njump label:\n");
-  for (GTLabel *pointer = head_label; pointer; pointer = pointer->next)
-  {
-    fprintf(stdout, "%.*s\n", (int)pointer->len, pointer->name);
   }
 }
 

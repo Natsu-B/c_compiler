@@ -92,7 +92,9 @@ void _error_at(char *error_location, size_t error_len, char *file, int line,
     fprintf(stderr, "%s:%d\n", file_name, line_num);
     fprintf(stderr, "%.*s\n", (int)(end_line - start_line), start_line);
     fprintf(stderr, "%*s", (int)error_position, " ");
-    fprintf(stderr, "\e[31m%.*s \e[37m", (int)error_len, "^");
+    fprintf(stderr, "\e[31m%.*s \e[37m", (int)error_len,
+            "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+            "^^^");
     vfprintf(stderr, fmt, ap);
     fprintf(stderr, "\n error at %s:%d:%s\n", file, line, func);
   }

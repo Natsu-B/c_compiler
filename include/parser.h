@@ -13,33 +13,6 @@ typedef struct NDBlock NDBlock;
 typedef struct FuncBlock FuncBlock;
 typedef struct NestedBlockVariables NestedBlockVariables;
 
-/**
- *  label の命名規則
- *
- *  if 文
- *  .LendXXX
- *  .LelseXXX
- *
- *  while 文
- *  .LbeginXXX
- *  .LendXXX
- *
- *  for 文
- *  .LbeginXXX
- *  .LendXXX
- *
- *  XXXには呼び出した関数名
- *  重複があれば0~の整数が入る e.g. begin_1_XXX end_1_XXX
- */
-
-// goto labelを管理するstruct
-struct GTLabel
-{
-  GTLabel *next;  // 次の変数
-  char *name;     // 変数名 e.g. _0_main
-  size_t len;     // 変数名の長さ
-};
-
 typedef enum
 {
   ND_ADD,           // +
@@ -70,8 +43,35 @@ typedef enum
   ND_BLOCK,         // ブロック
   ND_DISCARD_EXPR,  // 式文
   ND_STRING,        // string literal
+  ND_GOTO,          // goto, continue, break
   ND_END,           // デバッグ時利用
 } NodeKind;
+
+/**
+ *  label の命名規則
+ *
+ *  if 文
+ *  .LendXXX
+ *  .LelseXXX
+ *
+ *  while 文
+ *  .LbeginXXX
+ *  .LendXXX
+ *
+ *  for 文
+ *  .LbeginXXX
+ *  .LendXXX
+ *
+ *  XXXには呼び出した関数名
+ *  重複があれば0~の整数が入る e.g. begin_1_XXX end_1_XXX
+ */
+// goto labelを管理するstruct
+struct GTLabel
+{
+  NodeKind kind;  // Nodeの名前
+  char *name;     // 変数名 e.g. _0_main
+  size_t len;     // 変数名の長さ
+};
 
 // デバッグ時利用 NodeKindに追加したら必ず追加すること
 #define NodeKindTable                                                        \
@@ -79,7 +79,7 @@ typedef enum
       "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF", "ND_FUNCDEF",            \
       "ND_FUNCCALL", "ND_RETURN", "ND_SIZEOF", "ND_IF", "ND_ELIF", "ND_FOR", \
       "ND_WHILE", "ND_VAR", "ND_ARRAY", "ND_DOT", "ND_ARROW", "ND_FIELD",    \
-      "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR", "ND_STIRNG"
+      "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR", "ND_STIRNG", "ND_GOTO"
 extern const char *nodekindlist[];
 
 struct Node
@@ -100,7 +100,7 @@ struct Node
 
   struct
   {                                  // if for while の場合
-    GTLabel *name;                   // ラベルの名前
+    GTLabel *name;                   // ラベルの名前 goto でも利用
     Node *condition;                 // 判定条件
     Node *true_code;                 // trueの際に実行されるコード
     NestedBlockVariables *nest_var;  // 一行のときも使う
@@ -132,6 +132,10 @@ struct Node
   struct
   {                      // string型 ND_STRINGの場合
     char *literal_name;  // stirng literal にアクセスする名前
+  };
+  struct
+  {                    // goto continue breakで利用
+    char *label_name;  // 飛ぶ先のラベル
   };
 };
 

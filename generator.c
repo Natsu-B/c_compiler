@@ -384,6 +384,11 @@ void gen(Node *node)
                   access_size_specifier(size_of(node->type)));
       output_file("    push rax");
       return;
+
+    case ND_GOTO:
+      output_debug2("ND_GOTO");
+      output_file("    jmp %s", node->label_name);
+      return;
     default: break;
   }
 

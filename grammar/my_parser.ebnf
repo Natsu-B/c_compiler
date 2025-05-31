@@ -37,7 +37,10 @@ iteration-statement
         | "for", "(", declaration, [ expression ], ";", [ expression ], ")", statement;
 
 jump-statement
-        = "return", [ expression ], ";";
+        = "goto", identifier, ";"
+        | "continue", ";"
+        | "break", ";"
+        | "return", [ expression ], ";";
 
 (* DECLARATIONS *)
 declaration

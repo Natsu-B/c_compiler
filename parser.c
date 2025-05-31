@@ -13,43 +13,103 @@
 #include "include/tokenizer.h"
 #include "include/type.h"
 #include "include/variables.h"
+#include "include/vector.h"
 
 const char *nodekindlist[] = {NodeKindTable};
 
-GTLabel *head_label;
+// 同じnestのGTLabelを保持しているvectorを保持するvector
+// nestが深くなるとき新たなvectorがpushされ浅くなるときpopされる
+Vector *label_list;
 // 現在パースしている関数名と名前
 char *program_name;
 int program_name_len;
 
-GTLabel *generate_label_name()
+void new_nest_label()
 {
+  if (!label_list)
+    label_list = vector_new();
+  vector_push(label_list, NULL);
+}
+
+void exit_nest_label()
+{
+  vector_pop(label_list);
+}
+
+GTLabel *generate_label_name(NodeKind kind)
+{
+  static char *old_label_program_name;
+  static int old_label_program_name_len;
+  static size_t label_name_counter;
+
+  if (old_label_program_name_len != program_name_len ||
+      strncmp(old_label_program_name, program_name, program_name_len))
+    label_name_counter = 0;  // その関数がlabelを初めてつける関数の場合初期化
+  old_label_program_name = program_name;
+  old_label_program_name_len = program_name_len;
   size_t namesize = program_name_len + 6;
   GTLabel *next = calloc(1, sizeof(GTLabel));
-  next->len = namesize;
-  next->next = head_label;
+  next->kind = kind;
   char *mangle_name = malloc(namesize);
-  int i = 0;
-  for (;;)
+  int size = snprintf(mangle_name, namesize, "_%lu_%.*s", label_name_counter++,
+                      program_name_len, program_name);
+  if (size < 0 || (size_t)size >= namesize)
+    unreachable();
+  next->len = size;
+  next->name = mangle_name;
+  if (vector_pop(label_list))
+    unreachable();
+  vector_push(label_list, next);
+  return next;
+}
+
+// break continueで飛ぶ場所を探す関数
+// 引数のtypeに1が来たときcontinueで2が来たときbreakとする
+char *find_jmp_target(size_t type)
+{
+  // while, for文を探す ネストが深いほうから探していく
+  for (size_t i = vector_size(label_list); i >= 1; i--)
   {
-    snprintf(mangle_name, namesize, "_%d_%.*s", i++, program_name_len,
-             program_name);
-    GTLabel *var = head_label;
-    for (;;)
+    GTLabel *labeled_loop = vector_peek_at(label_list, i);
+    if (!labeled_loop)
+      continue;
+    if (labeled_loop->kind == ND_WHILE || labeled_loop->kind == ND_FOR)
     {
-      // 全部探索し終えたら
-      if (!var)
+      char *label_name = malloc(
+          labeled_loop->len +
+          13 /*.Lbeginwhile + null terminator*/);  // TODO
+                                                   // doWhileとかだとまた異なるかも
+      size_t printed = 0;
+      switch (type)
       {
-        next->name = mangle_name;
-        head_label = next;
-        return next;
+        case 1:
+          strcpy(label_name, ".Lbegin");
+          printed = 7;
+          break;
+        case 2:
+          strcpy(label_name, ".Lend");
+          printed = 5;
+          break;
+        default: unreachable(); break;
       }
-      if (namesize == var->len && !strncmp(mangle_name, var->name, namesize))
+      if (labeled_loop->kind == ND_WHILE)
       {
-        break;
+        strcpy(label_name + printed, "while");
+        printed += 5;
       }
-      var = var->next;
+      else
+      {
+        strcpy(label_name + printed, "for");
+        printed += 3;
+      }
+      strncpy(label_name + printed, labeled_loop->name, labeled_loop->len);
+      *(label_name + printed + labeled_loop->len) = '\0';
+      return label_name;
     }
   }
+  error_at(get_old_token()->str, get_old_token()->len,
+           "invalid break; continue; statement");
+  return NULL;
 }
 
 Node *new_node(NodeKind kind, Node *lhs, Node *rhs, Token *token)
@@ -77,12 +137,14 @@ Node *new_node_num(int val)
 NestedBlockVariables *new_nest()
 {
   new_nest_type();
+  new_nest_label();
   return new_nest_variables();
 }
 
 void exit_nest()
 {
   exit_nest_type();
+  exit_nest_label();
   exit_nest_variables();
 }
 
@@ -269,8 +331,8 @@ Node *statement()
   if (consume("if", TK_IDENT))
   {
     Node *node = calloc(1, sizeof(Node));
-    node->name = generate_label_name();
     node->nest_var = new_nest();
+    node->name = generate_label_name(ND_IF);
     expect("(", TK_RESERVED);
     node->condition = expression();
     expect(")", TK_RESERVED);
@@ -294,8 +356,8 @@ Node *statement()
   {
     Node *node = calloc(1, sizeof(Node));
     node->kind = ND_WHILE;
-    node->name = generate_label_name();
     node->nest_var = new_nest();
+    node->name = generate_label_name(ND_WHILE);
     expect("(", TK_RESERVED);
     node->condition = expression();
     expect(")", TK_RESERVED);
@@ -308,8 +370,8 @@ Node *statement()
   {
     Node *node = calloc(1, sizeof(Node));
     node->kind = ND_FOR;
-    node->name = generate_label_name();
     node->nest_var = new_nest();
+    node->name = generate_label_name(ND_FOR);
     expect("(", TK_RESERVED);
     // declarationかどうか
     Type *type = declaration_specifiers();
@@ -344,6 +406,22 @@ Node *statement()
   Node *node;
   if (consume("return", TK_IDENT))
     node = new_node(ND_RETURN, expression(), NULL, get_old_token());
+  else if (consume("continue", TK_IDENT))
+  {
+    node = new_node(ND_GOTO, NULL, NULL, get_old_token());
+    node->label_name = find_jmp_target(1);
+  }
+  else if (consume("break", TK_IDENT))
+  {
+    node = new_node(ND_GOTO, NULL, NULL, get_old_token());
+    node->label_name = find_jmp_target(2);
+  }
+  else if (consume("goto", TK_IDENT))
+  {
+    unimplemented();
+    // node = new_node(ND_GOTO, NULL, NULL, get_old_token());
+    // node->name = mangle_goto_label(expect_ident());
+  }
   else
     node = new_node(ND_DISCARD_EXPR, expression(), NULL, get_token());
   expect(";", TK_RESERVED);

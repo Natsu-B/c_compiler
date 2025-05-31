@@ -389,6 +389,10 @@ void gen(Node *node)
       output_debug2("ND_GOTO");
       output_file("    jmp %s", node->label_name);
       return;
+    case ND_LABEL:
+      output_debug2("ND_LABEL");
+      output_file("%s:", node->label_name);
+      return;
     default: break;
   }
 

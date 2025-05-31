@@ -75,10 +75,9 @@ char *find_jmp_target(size_t type)
       continue;
     if (labeled_loop->kind == ND_WHILE || labeled_loop->kind == ND_FOR)
     {
-      char *label_name = malloc(
-          labeled_loop->len +
-          13 /*.Lbeginwhile + null terminator*/);  // TODO
-                                                   // doWhileとかだとまた異なるかも
+      char *label_name =
+          malloc(labeled_loop->len + 13 /*.Lbeginwhile + null terminator*/);
+      // TODO doWhileとかだとまた異なるかも
       size_t printed = 0;
       switch (type)
       {
@@ -110,6 +109,17 @@ char *find_jmp_target(size_t type)
   error_at(get_old_token()->str, get_old_token()->len,
            "invalid break; continue; statement");
   return NULL;
+}
+
+// goto文のラベルを.Lgoto_YYY_XXX (YYYにラベル名、XXXに関数名)とする
+char *mangle_goto_label(Token *token)
+{
+  char *label_name = malloc(token->len + program_name_len + 9);
+  strcpy(label_name, ".Lgoto_");
+  strncpy(label_name + 7, token->str, token->len);
+  *(label_name + 7 + token->len) = '_';
+  strncpy(label_name + 7 + token->len + 1, program_name, program_name_len);
+  return label_name;
 }
 
 Node *new_node(NodeKind kind, Node *lhs, Node *rhs, Token *token)
@@ -404,6 +414,14 @@ Node *statement()
   }
 
   Node *node;
+  Token *token_ident = consume_token_if_next_matches(TK_IDENT, ':');
+  if (token_ident)
+  {
+    expect(":", TK_RESERVED);
+    node = new_node(ND_LABEL, NULL, NULL, token_ident);
+    node->label_name = mangle_goto_label(token_ident);
+    return node;
+  }
   if (consume("return", TK_IDENT))
     node = new_node(ND_RETURN, expression(), NULL, get_old_token());
   else if (consume("continue", TK_IDENT))
@@ -418,9 +436,8 @@ Node *statement()
   }
   else if (consume("goto", TK_IDENT))
   {
-    unimplemented();
-    // node = new_node(ND_GOTO, NULL, NULL, get_old_token());
-    // node->name = mangle_goto_label(expect_ident());
+    node = new_node(ND_GOTO, NULL, NULL, get_old_token());
+    node->label_name = mangle_goto_label(expect_ident());
   }
   else
     node = new_node(ND_DISCARD_EXPR, expression(), NULL, get_token());

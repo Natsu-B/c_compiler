@@ -12,10 +12,14 @@ function-definition = declaration-specifiers, identifier, "(", parameter-type-li
 
 (* STATEMENTS *)
 statement
-        = compound-statement
+        = labeled-statement
+        | compound-statement
         | expression-statement
         | iteration-statement
         | jump-statement;
+
+labeled-statement
+        = identifier, ":";
 
 compound-statement
         = "{", { block-item }, "}";

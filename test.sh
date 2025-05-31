@@ -161,7 +161,9 @@ struct HOGE { int x; int y; }; struct FUGA { bool x; bool y; }; typedef struct F
 assert 'typedef int hoge; int main() {hoge* a; *a = 1; return *a;}'
 assert '#include <stdbool.h>
 struct HOGE { int x; int y; }; struct FUGA { bool x; bool y; }; typedef struct FUGA HOGE; int main() {HOGE x; return sizeof(x.x);}'
-
+assert 'int main() { int x = 0; for(int i = 0; i <= 10; i = i+ 1) { x = x + i; if (x > 10) break; } return x;}'
+assert 'int main() { int x = 0; goto end; { x = 1; } x = 2; return x; end: return x; }'
+assert 'typedef int foo; int main(){ foo(i); i = 999; return i; }'
 
 (
   cd test

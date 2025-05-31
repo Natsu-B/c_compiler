@@ -44,6 +44,7 @@ typedef enum
   ND_DISCARD_EXPR,  // 式文
   ND_STRING,        // string literal
   ND_GOTO,          // goto, continue, break
+  ND_LABEL,         // goto label
   ND_END,           // デバッグ時利用
 } NodeKind;
 
@@ -51,19 +52,22 @@ typedef enum
  *  label の命名規則
  *
  *  if 文
- *  .LendXXX
- *  .LelseXXX
+ *  .Lend_N_XXX
+ *  .Lelse_N_XXX
  *
  *  while 文
- *  .LbeginXXX
- *  .LendXXX
+ *  .Lbegin_N_XXX
+ *  .Lend_N_XXX
  *
  *  for 文
- *  .LbeginXXX
- *  .LendXXX
+ *  .Lbegin_N_XXX
+ *  .Lend_N_XXX
  *
- *  XXXには呼び出した関数名
- *  重複があれば0~の整数が入る e.g. begin_1_XXX end_1_XXX
+ *  goto 文のとき
+ *  .Lgoto_YYY_XXX
+ *
+ *  XXXには呼び出した関数名 YYYにはラベル名
+ *  Nには 0~の整数が入る e.g. begin_1_XXX end_1_XXX
  */
 // goto labelを管理するstruct
 struct GTLabel
@@ -79,7 +83,8 @@ struct GTLabel
       "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF", "ND_FUNCDEF",            \
       "ND_FUNCCALL", "ND_RETURN", "ND_SIZEOF", "ND_IF", "ND_ELIF", "ND_FOR", \
       "ND_WHILE", "ND_VAR", "ND_ARRAY", "ND_DOT", "ND_ARROW", "ND_FIELD",    \
-      "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR", "ND_STIRNG", "ND_GOTO"
+      "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR", "ND_STIRNG", "ND_GOTO",       \
+      "ND_LABEL"
 extern const char *nodekindlist[];
 
 struct Node
@@ -134,8 +139,8 @@ struct Node
     char *literal_name;  // stirng literal にアクセスする名前
   };
   struct
-  {                    // goto continue breakで利用
-    char *label_name;  // 飛ぶ先のラベル
+  {                    // ND_GOTO ND_LABELの場合
+    char *label_name;  // ラベルの名前
   };
 };
 

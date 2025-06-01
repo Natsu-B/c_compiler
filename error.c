@@ -65,21 +65,33 @@ void _error(char *file, int line, const char *func, char *fmt, ...)
   exit(1);
 }
 
-// 入力プログラムがおかしいとき、エラー箇所を可視化するプログラム
-[[noreturn]]
-void _error_at(char *error_location, size_t error_len, char *file, int line,
-               const char *func, char *fmt, ...)
+void _info_at_(size_t log_level, char *location, size_t len, char *file,
+               int line, const char *func, char *fmt, va_list ap)
 {
-  va_list ap;
-  va_start(ap, fmt);
-  if (error_len)
+  char *color_ansi;
+  char *default_ansi = "\e[37m";
+  char *info;
+  switch (log_level)
+  {
+    case 0:  // error red
+      color_ansi = "\e[31m";
+      info = "error";
+      break;
+    case 1:  // warning yellow
+      color_ansi = "\e[33m";
+      info = "warning";
+      break;
+    default: unreachable(); break;
+  }
+  fprintf(stderr, "%s%s%s\n", color_ansi, info, default_ansi);
+  if (len)
   {  // error_locationの行を特定
     // 行開始
-    char *start_line = error_location;
+    char *start_line = location;
     while (user_input < start_line && start_line[-1] != '\n')
       start_line--;
     // 行終了
-    char *end_line = error_location;
+    char *end_line = location;
     while (*end_line != '\n')
       end_line++;
     // 何行目か
@@ -88,24 +100,46 @@ void _error_at(char *error_location, size_t error_len, char *file, int line,
       if (*p == '\n')
         line_num++;
     // エラー位置特定
-    size_t error_position = error_location - start_line;
+    size_t error_position = location - start_line;
     fprintf(stderr, "%s:%d\n", file_name, line_num);
     fprintf(stderr, "%.*s\n", (int)(end_line - start_line), start_line);
     fprintf(stderr, "%*s", (int)error_position, " ");
-    fprintf(stderr, "\e[31m%.*s \e[37m", (int)error_len,
-            "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
-            "^^^");
+    fprintf(stderr, "%s%.*s%s", color_ansi, (int)len,
+            "^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+            "~~~~~~~~~~~~~~~~~~~~",
+            default_ansi);
     vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n error at %s:%d:%s\n", file, line, func);
+    fprintf(stderr, "\n %s at %s:%d:%s\n", info, file, line, func);
   }
   else
   {
     fprintf(stderr, "%s\n", file_name);
     vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n error at %s:%d:%s\n", file, line, func);
+    fprintf(stderr, "\n %s at %s:%d:%s\n", info, file, line, func);
   }
+}
+
+[[noreturn]]
+void _error_at(char *error_location, size_t error_len, char *file, int line,
+               const char *func, char *fmt, ...)
+{
+  va_list args;
+  va_start(args, fmt);
+  _info_at_(0, error_location, error_len, file, line, func, fmt, args);
   exit(1);
 }
+
+// 入力プログラムがおかしいとき、その箇所を可視化するプログラム
+// log_levelが0のときエラーを表示し終了する、1のとき警告を表示して元の関数に戻る
+void _info_at(size_t log_level, char *location, size_t len, char *file,
+              int line, const char *func, char *fmt, ...)
+{
+  va_list args;
+  va_start(args, fmt);
+  _info_at_(log_level, location, len, file, line, func, fmt, args);
+}
+
+#include "include/tokenizer.h"
 
 // signal が発生したときにバックトレースを出す
 void handle_signal(int signum, siginfo_t *info, void *ucontext)
@@ -165,7 +199,17 @@ void handle_signal(int signum, siginfo_t *info, void *ucontext)
   write(STDERR_FILENO, file_name_header, strlen(file_name_header));
   write(STDERR_FILENO, file_name, strlen(file_name));
   write(STDERR_FILENO, "\n", 2);
-
+  const char *token_print = "token: ";
+  write(STDERR_FILENO, token_print, strlen(token_print));
+  Token *token = get_token();
+  for (int i = 0; i < 30; i++)
+  {
+    if (!token)
+      break;
+    len = snprintf(buffer, sizeof(buffer), "%.*s", (int)token->len, token->str);
+    write(STDERR_FILENO, buffer, len);
+    token = token->next;
+  }
   const char *msg_footer = "\n\n\e[31m--- Program Aborting ---\e[37m\n\n";
   write(STDERR_FILENO, msg_footer, strlen(msg_footer));
 

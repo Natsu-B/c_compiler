@@ -109,7 +109,8 @@ struct-declarator
         | [ declarator ], ":", constant-expression;
 
 enum-specifier
-        = "enum", [ identifier ], "{", enumerator, { ",", enumerator }, [ "," ], "}";
+        = "enum", [ identifier ], "{", enumerator, { ",", enumerator }, [ "," ], "}"
+        | "enum", identifier;
 
 enumerator
         = identifier, [ "=", constant-expression ];

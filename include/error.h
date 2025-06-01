@@ -37,15 +37,20 @@
   _error_at(error_location, error_len, __FILE__, __LINE__, __func__, fmt, \
             ##__VA_ARGS__)
 
+#define warn_at(warning_location, warning_len, fmt, ...)                   \
+  _info_at(1, warning_location, warning_len, __FILE__, __LINE__, __func__, \
+           fmt, ##__VA_ARGS__)
+
 void _debug(char *file, int line, const char *func, char *fmt, ...);
 void _debug2(char *file, int line, const char *func, char *fmt, ...);
 
 void _error(char *file, int line, const char *func, char *fmt, ...);
 
 void error_init(char *name, char *input);
-
 void _error_at(char *error_location, size_t error_len, char *file, int line,
                const char *func, char *fmt, ...);
+void _info_at(size_t log_level, char *location, size_t len, char *file,
+              int line, const char *func, char *fmt, ...);
 
 void handle_signal(int signum, siginfo_t *info, void *ucontext);
 

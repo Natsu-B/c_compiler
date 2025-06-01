@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 typedef struct Type Type;
+typedef struct Token Token;
 
 // サポートしている変数の型
 typedef enum
@@ -21,6 +22,7 @@ typedef enum
   TYPE_PTR,       // 型へのポインタ
   TYPE_ARRAY,     // 配列
   TYPE_TYPEDEF,   // typedef
+  TYPE_ENUM,      // enum
   TYPE_NULL,      // 失敗時等に返す 実際の型ではない
 } TypeKind;
 
@@ -31,9 +33,9 @@ struct Type
   Type *ptr_to;  // TYPE_PTR, TYPE_ARRAY, TYPE_TYPEDEFのとき利用
   union
   {
-    bool is_signed;      // TYPE_INT等の整数型のとき利用
-    size_t size;         // TYPE_ARRAYのとき利用
-    size_t struct_type;  // TYPE_STRUCTのとき利用
+    bool is_signed;   // TYPE_INT等の整数型のとき利用
+    size_t size;      // TYPE_ARRAYのとき利用
+    size_t type_num;  // TYPE_STRUCTのとき利用
   };
 };
 
@@ -41,6 +43,15 @@ typedef struct Node Node;  // parser.hをincludeできないため定義だけ�
 
 Type *alloc_type(TypeKind kind);
 Type *declaration_specifiers();
+
+enum member_name
+{
+  enum_member_name,
+  function_name,
+  none_of_them
+};
+enum member_name is_enum_or_function_name(Token *token, size_t *number);
+
 size_t size_of(Type *type);
 size_t align_of(Type *type);
 void add_typedef();

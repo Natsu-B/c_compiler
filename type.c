@@ -12,32 +12,44 @@
 #include "include/tokenizer.h"
 #include "include/vector.h"
 
-static Vector* TypedefList;
-static Vector* StructList;
-static size_t struct_id;
+static Vector* OrdinaryNamespaceList;  // 変数名 関数名 列挙体のメンバ名
+static Vector* TagNamespaceList;       // 構造体 共用体 列挙体のタグ名
+static size_t tag_id;                  // 構造体 共用体 列挙体につけられる番号
+
+typedef struct
+{
+  enum
+  {
+    typedef_name,
+    enum_member,
+  } ordinary_kind;
+  Token* name;
+  Type* type;
+  size_t enum_number;
+} ordinary_data_list;
 
 typedef struct
 {
   Token* name;
   Type* type;
-} typedef_list;
+  // structの先頭から何byte離れているか enumだったらその数字
+  size_t offset;
+} tag_data_list;
 
 typedef struct
 {
-  Token* name;
-  Type* type;
-  size_t offset;  // structの先頭から何byte離れているか
-} struct_data_list;
-
-typedef struct
-{
-  bool is_union;            // unionかstructか
-  Token* name;              // structの名前 なかったらNULL
+  enum
+  {
+    is_struct,
+    is_union,
+    is_enum,
+  } tagkind;                // unionかstructかenum
+  Token* name;              // 名前 なかったらNULL
   Vector* data_list;        // structの中身 前方宣言のみならNULL
-  Type* type;               // structのtype
+  Type* type;               // struct union enumのtype
   size_t struct_size;       // structのサイズ
   size_t struct_alignment;  // structのアライメント
-} struct_list;
+} tag_list;
 
 Type* _declaration_specifiers(bool* is_typedef)
 {
@@ -51,6 +63,7 @@ Type* _declaration_specifiers(bool* is_typedef)
   size_t void_count = 0;
   size_t struct_count = 0;
   size_t union_count = 0;
+  size_t enum_count = 0;
   Token* old = get_token();
 
   for (;;)
@@ -77,6 +90,8 @@ Type* _declaration_specifiers(bool* is_typedef)
       struct_count++;
     else if (consume("union", TK_IDENT))
       union_count++;
+    else if (consume("enum", TK_IDENT))
+      enum_count++;
     else
       break;
   }
@@ -88,11 +103,12 @@ Type* _declaration_specifiers(bool* is_typedef)
           1 ||
       (signed_count | unsigned_count) & (void_count | bool_count) ||
       !(long_count | signed_count | unsigned_count | int_count | bool_count |
-        short_count | char_count | void_count | struct_count | union_count) &
+        short_count | char_count | void_count | struct_count | union_count |
+        enum_count) &
           *is_typedef ||
       (long_count | signed_count | unsigned_count | int_count | bool_count |
        short_count | char_count | void_count) &
-          (struct_count | union_count))
+          (struct_count | union_count | enum_count))
     error_at(old->str, get_token()->str - old->str + get_token()->len,
              "invalid type specifier");
 
@@ -101,12 +117,16 @@ Type* _declaration_specifiers(bool* is_typedef)
     Token* token = consume_ident();
     if (token)
     {
-      for (size_t i = 1; i <= vector_size(StructList); i++)
+      for (size_t i = 1; i <= vector_size(TagNamespaceList); i++)
       {
-        Vector* struct_nest = vector_peek_at(StructList, i);
-        for (size_t j = 1; j <= vector_size(struct_nest); j++)
+        Vector* tag_nest = vector_peek_at(TagNamespaceList, i);
+        for (size_t j = 1; j <= vector_size(tag_nest); j++)
         {
-          struct_list* tmp = vector_peek_at(struct_nest, j);
+          tag_list* tmp = vector_peek_at(tag_nest, j);
+          if (tmp->tagkind == is_enum ||
+              (tmp->tagkind == is_struct && union_count) ||
+              (tmp->tagkind == is_union && struct_count))
+            error_at(token->str, token->len, "invalid type");
           if (tmp->name->len == token->len &&
               !strncmp(tmp->name->str, token->str, token->len))
           {
@@ -118,11 +138,11 @@ Type* _declaration_specifiers(bool* is_typedef)
     else if (!peek("{", TK_RESERVED))
       error_at(get_token()->str, get_token()->len, "invalid struct");
     // struct {} のような無名structの場合や未定義の場合
-    struct_list* new = calloc(1, sizeof(struct_list));
-    new->is_union = union_count;
+    tag_list* new = calloc(1, sizeof(tag_list));
+    new->tagkind = struct_count ? is_struct : is_union;
     new->name = token;
     Type* type = alloc_type(TYPE_STRUCT);
-    type->struct_type = ++struct_id;
+    type->type_num = ++tag_id;
     new->type = type;
     if (consume("{", TK_RESERVED))
     {
@@ -138,12 +158,12 @@ Type* _declaration_specifiers(bool* is_typedef)
         if (!type || type->type == TYPE_TYPEDEF || !token)
           error_at(get_token()->str, get_token()->len,
                    "invalid struct definition");
-        struct_data_list* new_data = malloc(sizeof(struct_data_list));
+        tag_data_list* new_data = malloc(sizeof(tag_data_list));
         new_data->name = token;
         new_data->type = type;
         vector_push(new->data_list, new_data);
         size_t alignment = align_of(type);
-        if (!new->is_union)
+        if (new->tagkind == is_struct)
           struct_size = (struct_size % alignment
                              ? (struct_size / alignment + 1) * alignment
                              : struct_size) +
@@ -163,10 +183,88 @@ Type* _declaration_specifiers(bool* is_typedef)
       new->struct_size = struct_size;
       new->struct_alignment = struct_alignment;
     }
-    vector_push(vector_peek(StructList), new);
+    vector_push(vector_peek(TagNamespaceList), new);
     if (consume("typedef", TK_IDENT))
       *is_typedef = true;
     return type;
+  }
+
+  if (enum_count)
+  {
+    Token* enum_name = consume_ident();
+    tag_list* new = NULL;
+    // 以前enum列に追加されてないかを調べる 名前空間はstructと一緒
+    if (enum_name)
+    {
+      for (size_t i = 1; i <= vector_size(TagNamespaceList); i++)
+      {
+        Vector* tag_nest = vector_peek_at(TagNamespaceList, i);
+        for (size_t j = 1; j <= vector_size(tag_nest); j++)
+        {
+          tag_list* tmp = vector_peek_at(tag_nest, j);
+          if (tmp->tagkind == is_struct || tmp->tagkind == is_union)
+            error_at(enum_name->str, enum_name->len, "invalid type");
+          if (tmp->name->len == enum_name->len &&
+              !strncmp(tmp->name->str, enum_name->str, enum_name->len))
+          {
+            new = tmp;
+          }
+        }
+      }
+    }
+    bool is_definition = consume("{", TK_RESERVED);
+    if (!is_definition && enum_name &&
+        new->data_list)  // enumが定義済みだったら
+      return new->type;
+    if (!is_definition)
+      error_at(get_old_token()->str, get_old_token()->len,
+               "incomplete enum type");
+    if (new && new->data_list)
+      error_at(get_old_token()->str, get_old_token()->len,
+               "multiple enum definition");
+    if (!new)
+      new = calloc(1, sizeof(tag_list));
+    new->tagkind = is_enum;
+    new->name = enum_name;
+    new->type = alloc_type(TYPE_ENUM);
+    new->type->type_num = ++tag_id;
+    new->data_list = vector_new();
+    size_t enum_num = 0;
+    for (;;)
+    {
+      bool is_comma = false;
+      Token* identifier = consume_ident();
+      if (!identifier)
+        error_at(get_token()->str, get_token()->len, "invalid enum definition");
+      tag_data_list* child = calloc(1, sizeof(tag_data_list));
+      child->name = identifier;
+      child->type = alloc_type(TYPE_INT);
+      ordinary_data_list* new_enum_member = malloc(sizeof(new_enum_member));
+      if (consume("=", TK_RESERVED))
+      {  // TODO constant_expression
+        long num = expect_number();
+        if (num < 0 || (size_t)num < enum_num)
+          error_at(get_old_token()->str, get_old_token()->len,
+                   "invalid enum value");
+        enum_num = num;
+      }
+      child->offset = enum_num;
+      vector_push(new->data_list, child);
+      new_enum_member->ordinary_kind = enum_member;
+      new_enum_member->enum_number = enum_num;
+      new_enum_member->name = identifier;
+      new_enum_member->type = alloc_type(TYPE_INT);
+      vector_push(vector_peek(OrdinaryNamespaceList), new_enum_member);
+      enum_num++;
+      if (consume(",", TK_RESERVED))
+        is_comma = true;
+      if (consume("}", TK_RESERVED))
+        break;
+      else if (is_comma)
+        continue;
+      error_at(get_token()->str, get_token()->len, "invalid enum definition");
+    }
+    return new->type;
   }
 
   if (!(long_count | signed_count | unsigned_count | int_count | bool_count |
@@ -176,13 +274,14 @@ Type* _declaration_specifiers(bool* is_typedef)
     Token* token = peek_ident();
     if (token)
     {
-      for (size_t i = 1; i <= vector_size(TypedefList); i++)
+      for (size_t i = 1; i <= vector_size(OrdinaryNamespaceList); i++)
       {
-        Vector* typedef_nest = vector_peek_at(TypedefList, i);
+        Vector* typedef_nest = vector_peek_at(OrdinaryNamespaceList, i);
         for (size_t j = 1; j <= vector_size(typedef_nest); j++)
         {
-          typedef_list* tmp = vector_peek_at(typedef_nest, j);
-          if (tmp->name->len == token->len &&
+          ordinary_data_list* tmp = vector_peek_at(typedef_nest, j);
+          if (tmp->ordinary_kind == typedef_name &&
+              tmp->name->len == token->len &&
               !strncmp(tmp->name->str, token->str, token->len))
           {
             consume_ident(token);
@@ -267,10 +366,30 @@ void add_typedef(Token* token, Type* type)
     type = tmp;
 
   // 名前とTypeを関連付ける
-  typedef_list* new = malloc(sizeof(typedef_list));
+  ordinary_data_list* new = malloc(sizeof(ordinary_data_list));
+  new->ordinary_kind = typedef_name;
   new->name = token;
   new->type = type;
-  vector_push(vector_peek(TypedefList), new);
+  vector_push(vector_peek(OrdinaryNamespaceList), new);
+}
+
+enum member_name is_enum_or_function_name(Token* token, size_t* number)
+{
+  for (size_t i = 1; i <= vector_size(OrdinaryNamespaceList); i++)
+  {
+    Vector* typedef_nest = vector_peek_at(OrdinaryNamespaceList, i);
+    for (size_t j = 1; j <= vector_size(typedef_nest); j++)
+    {
+      ordinary_data_list* tmp = vector_peek_at(typedef_nest, j);
+      if (tmp->ordinary_kind == enum_member && tmp->name->len == token->len &&
+          !strncmp(tmp->name->str, token->str, token->len))
+      {
+        *number = tmp->enum_number;
+        return enum_member_name;
+      }
+    }
+  }
+  return none_of_them;
 }
 
 // Typeを作成する関数
@@ -286,6 +405,7 @@ size_t size_of(Type* type)
 {
   switch (type->type)
   {
+    case TYPE_ENUM:
     case TYPE_INT: return 4;
     case TYPE_BOOL:
     case TYPE_CHAR: return 1;
@@ -298,12 +418,12 @@ size_t size_of(Type* type)
     case TYPE_VOID: return 0;
     case TYPE_STRUCT:
     {
-      for (size_t i = 1; i <= vector_size(StructList); i++)
+      for (size_t i = 1; i <= vector_size(TagNamespaceList); i++)
       {
-        Vector* struct_nest = vector_peek_at(StructList, i);
+        Vector* struct_nest = vector_peek_at(TagNamespaceList, i);
         for (size_t j = 1; j <= vector_size(struct_nest); j++)
         {
-          struct_list* tmp = vector_peek_at(struct_nest, j);
+          tag_list* tmp = vector_peek_at(struct_nest, j);
           if (tmp->type == type)
           {
             if (tmp->struct_size)
@@ -329,12 +449,12 @@ size_t align_of(Type* type)
     case TYPE_ARRAY: return 8;
     case TYPE_STRUCT:
     {
-      for (size_t i = 1; i <= vector_size(StructList); i++)
+      for (size_t i = 1; i <= vector_size(TagNamespaceList); i++)
       {
-        Vector* struct_nest = vector_peek_at(StructList, i);
+        Vector* struct_nest = vector_peek_at(TagNamespaceList, i);
         for (size_t j = 1; j <= vector_size(struct_nest); j++)
         {
-          struct_list* tmp = vector_peek_at(struct_nest, j);
+          tag_list* tmp = vector_peek_at(struct_nest, j);
           if (tmp->type == type)
           {
             if (tmp->struct_alignment)
@@ -355,12 +475,12 @@ size_t align_of(Type* type)
 Type* find_struct_child(Node* parent, Node* child, size_t* offset)
 {  // structのchildを探してその型を返す
   // また、そのchildのオフセットについても返す
-  for (size_t i = 1; i <= vector_size(StructList); i++)
+  for (size_t i = 1; i <= vector_size(TagNamespaceList); i++)
   {
-    Vector* struct_nest = vector_peek_at(StructList, i);
+    Vector* struct_nest = vector_peek_at(TagNamespaceList, i);
     for (size_t j = 1; j <= vector_size(struct_nest); j++)
     {
-      struct_list* tmp = vector_peek_at(struct_nest, j);
+      tag_list* tmp = vector_peek_at(struct_nest, j);
       if (tmp->type == parent->type)
       {
         if (tmp->struct_size)
@@ -368,7 +488,7 @@ Type* find_struct_child(Node* parent, Node* child, size_t* offset)
           Vector* child_list = tmp->data_list;
           for (size_t k = 1; k <= vector_size(child_list); k++)
           {
-            struct_data_list* child_data = vector_peek_at(child_list, k);
+            tag_data_list* child_data = vector_peek_at(child_list, k);
             if (child->token->len == child_data->name->len &&
                 !strncmp(child->token->str, child_data->name->str,
                          child->token->len))
@@ -392,23 +512,23 @@ Type* find_struct_child(Node* parent, Node* child, size_t* offset)
 void init_types()
 {
   Vector* root_typedef = vector_new();
-  TypedefList = vector_new();
-  vector_push(TypedefList, root_typedef);
+  OrdinaryNamespaceList = vector_new();
+  vector_push(OrdinaryNamespaceList, root_typedef);
   Vector* root_struct = vector_new();
-  StructList = vector_new();
-  vector_push(StructList, root_struct);
+  TagNamespaceList = vector_new();
+  vector_push(TagNamespaceList, root_struct);
 }
 
 void new_nest_type()
 {
   Vector* new = vector_new();
-  vector_push(TypedefList, new);
+  vector_push(OrdinaryNamespaceList, new);
   new = vector_new();
-  vector_push(StructList, new);
+  vector_push(TagNamespaceList, new);
 }
 
 void exit_nest_type()
 {
-  vector_pop(TypedefList);
-  vector_pop(StructList);
+  vector_pop(OrdinaryNamespaceList);
+  vector_pop(TagNamespaceList);
 }

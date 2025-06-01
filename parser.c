@@ -646,12 +646,22 @@ Node *primary_expression()
   token = consume_ident();
   if (token)
   {
-    Node *node = calloc(1, sizeof(Node));
-    node->token = token;
-    node->kind = ND_VAR;
-    node->is_new = false;
-    node->var = add_variables(token, NULL);
-    return node;
+    size_t enum_number;
+    switch (is_enum_or_function_name(token, &enum_number))
+    {
+      case enum_member_name: return new_node_num(enum_number);
+      case function_name: unimplemented(); break;
+      case none_of_them:
+      {
+        Node *node = calloc(1, sizeof(Node));
+        node->token = token;
+        node->kind = ND_VAR;
+        node->is_new = false;
+        node->var = add_variables(token, NULL);
+        return node;
+      }
+      default: unreachable();
+    }
   }
 
   if (consume_string())

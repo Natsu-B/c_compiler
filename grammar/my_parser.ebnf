@@ -71,6 +71,7 @@ type-specifier
         | "bool"
         | "_Bool"
         | struct-or-union-specifier
+        | enum-specifier
         | typedef-name;
 
 struct-or-union-specifier
@@ -89,6 +90,13 @@ specifier-qualifier-list
 
 struct-declarator
         = declarator;
+
+enum-specifier
+        = "enum", [ identifier ], "{", enumerator, { ",", enumerator }, [ "," ], "}"
+        | "enum", identifier;
+
+enumerator
+        = identifier, [ "=", constant-expression ];
 
 declarator
         = direct-declarator;
@@ -112,6 +120,9 @@ initializer
         = assignment-expression;
 
 (* EXPRESSIONS *)
+constant-expression
+        = conditional-expression;
+
 expression
         = assignment-expression;
 

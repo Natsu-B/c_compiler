@@ -89,6 +89,26 @@ Token *consume(char *op, TokenKind kind)
   return NULL;
 }
 
+Token *consume_reserved(char *op)
+{
+  switch (strlen(op))
+  {
+    case 1: return consume(op, TK_RESERVED);
+    case 2:
+      if (token->kind == TK_RESERVED && token->len == 1 &&
+          token->str[0] == op[0] && token->next->kind == TK_RESERVED &&
+          token->next->len == 1 && token->next->str[0] == op[1])
+      {
+        token_next();
+        return token_next();
+      }
+      return NULL;
+    default: break;
+  }
+  unreachable();
+  return NULL;
+}
+
 // 次のトークンが引数の記号だったら読み進め、そうでなければerror_atを呼び出す
 Token *expect(char *op, TokenKind kind)
 {
@@ -257,26 +277,9 @@ Token *tokenize_once(char *input, char **end)
       return cur;
     }
     cur = new_token(TK_RESERVED, input);
-    // "==", "<=", ">=", "!=", "&&", "||", "->" の場合
-    if ((*(input + 1) == '=' &&
-         (*input == '<' || *input == '>' || *input == '!' || *input == '=')) ||
-        (*(input + 1) == '>' && *input == '>') ||
-        (*(input + 1) == '<' && *input == '<') ||
-        (*(input + 1) == '&' && *input == '&') ||
-        (*(input + 1) == '|' && *input == '|') ||
-        (*(input + 1) == '>' && *input == '-'))
-    {
-      pr_debug2("find RESERVED token: %.2s", input);
-      cur->len = 2;
-      input += 2;
-    }
-    else
-    {
-      pr_debug2("find RESERVED token: %.1s", input);
-      cur->len = 1;
-      input++;
-    }
-    *end = input;
+    pr_debug2("find RESERVED token: %.1s", input);
+    cur->len = 1;
+    *end = input + 1;
     return cur;
   }
 

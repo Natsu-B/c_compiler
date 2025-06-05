@@ -42,6 +42,7 @@ void set_token(Token *next);
 Token *consume_token_if_next_matches(TokenKind kind, char reserved);
 Token *peek(char *op, TokenKind kind);
 Token *consume(char *op, TokenKind kind);
+Token *consume_reserved(char *op);
 Token *expect(char *op, TokenKind kind);
 Token *get_old_token();
 Token *get_token();

@@ -59,7 +59,7 @@ int main(int argc, char **argv)
   }
   if (input_file_name)
     input = openfile(input_file_name);
-  if (!input || !output_file_name || (gcc_compatible && !output_preprocess))
+  if (!input || !output_file_name)
     error_exit("invalid arguments");
   pr_debug("output_file_name: %s", output_file_name);
   pr_debug("input_file_name: %s", input_file_name);

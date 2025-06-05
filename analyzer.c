@@ -142,6 +142,12 @@ void add_type(Node *node)
       node->type = alloc_type(TYPE_INT);
     return;
   }
+  if (node->kind == ND_POSTDECREMENT || node->kind == ND_POSTINCREMENT ||
+      node->kind == ND_PREDECREMENT || node->kind == ND_PREINCREMENT)
+  {
+    node->type = node->lhs->type;
+    return;
+  }
   if (node->kind == ND_SIZEOF)
   {
     node->type = alloc_type(TYPE_LONG);

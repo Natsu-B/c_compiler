@@ -177,6 +177,8 @@ cast-expression
 
 unary-expression
         = postfix-expression
+        | ( "++"
+        | "--" ), unary-expression
         | unary-operator, cast-expression
         | "sizeof", unary-expression;
 
@@ -191,6 +193,8 @@ postfix-expression
         | postfix-expression, ( "[", expression, "]"
         | "(", { assignment-expression }, ")"
         | ".", identifier
+        | "++"
+        | "--"
         | "->", identifier );
 
 primary-expression

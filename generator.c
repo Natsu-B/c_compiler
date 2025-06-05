@@ -190,6 +190,7 @@ char *chose_register(int size, register_type reg_type)
 
 void gen(Node *node);
 
+// 左辺値をraxに出力する関数 raxが破壊されるため注意
 void gen_lval(Node *node)
 {
   output_debug2("enter gen_lval");
@@ -226,7 +227,7 @@ int align_counter;
 
 void gen(Node *node)
 {
-  output_debug2("entor gen");
+  output_debug2("enter gen");
   if (!node)
     return;
 
@@ -392,6 +393,27 @@ void gen(Node *node)
     case ND_LABEL:
       output_debug2("ND_LABEL");
       output_file("%s:", node->label_name);
+      return;
+    case ND_PREINCREMENT:
+    case ND_PREDECREMENT:
+    case ND_POSTINCREMENT:
+    case ND_POSTDECREMENT:
+      if (node->kind == ND_POSTINCREMENT || node->kind == ND_POSTDECREMENT)
+        output_file("    %s rdi, %s [rsp]", mv_instruction_specifier(8, false),
+                    access_size_specifier(8));  // peek register
+      else
+        output_file("    pop rdi");
+      if (node->kind == ND_PREINCREMENT || node->kind == ND_POSTINCREMENT)
+        output_file("    inc rdi");
+      else
+        output_file("    dec rdi");
+      gen_lval(node->lhs);
+      output_file("    pop rax");
+      output_file("    mov %s [rax], %s",
+                  access_size_specifier(size_of(node->type)),
+                  chose_register(size_of(node->type), rdi));
+      if (node->kind == ND_PREINCREMENT || node->kind == ND_PREDECREMENT)
+        output_file("    push rdi");
       return;
     default: break;
   }

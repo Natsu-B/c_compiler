@@ -560,6 +560,10 @@ Node *cast_expression()
 Node *unary_expression()
 {
   pr_debug2("unary");
+  if (consume_reserved("++"))
+    return new_node(ND_PREINCREMENT, unary_expression(), NULL, get_old_token());
+  if (consume_reserved("--"))
+    return new_node(ND_PREDECREMENT, unary_expression(), NULL, get_old_token());
   if (consume("sizeof", TK_IDENT))
     return new_node(ND_SIZEOF, cast_expression(), NULL, get_old_token());
   if (consume_reserved("+"))
@@ -598,6 +602,10 @@ Node *postfix_expression()
       node = new_node(ND_ARROW, node, new_node(ND_FIELD, NULL, NULL, token),
                       token);
     }
+    else if (consume_reserved("++"))
+      node = new_node(ND_POSTINCREMENT, node, NULL, get_old_token());
+    else if (consume_reserved("--"))
+      node = new_node(ND_POSTDECREMENT, node, NULL, get_old_token());
     else
       return node;
   }

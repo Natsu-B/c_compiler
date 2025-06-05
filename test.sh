@@ -164,6 +164,8 @@ struct HOGE { int x; int y; }; struct FUGA { bool x; bool y; }; typedef struct F
 assert 'int main() { int x = 0; for(int i = 0; i <= 10; i = i+ 1) { x = x + i; if (x > 10) break; } return x;}'
 assert 'int main() { int x = 0; goto end; { x = 1; } x = 2; return x; end: return x; }'
 assert 'enum tmp { a, b, c = 8, d,}; int main() {return b + d;}'
+assert 'int main () { int x = 0; int y = 0; return ++x + y++;}'
+assert 'int main () { int x = 0; int y = 0; return x-- - --y;}'
 assert 'enum tmp { a, b = a + 1, c = 2 * 2, d,}; int main() {return b + d;}'
 assert 'typedef int foo; int main(){ foo(i); i = 999; return i; }'
 

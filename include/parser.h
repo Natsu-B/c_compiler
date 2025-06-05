@@ -15,37 +15,41 @@ typedef struct NestedBlockVariables NestedBlockVariables;
 
 typedef enum
 {
-  ND_ADD,           // +
-  ND_SUB,           // -
-  ND_MUL,           // *
-  ND_DIV,           // /
-  ND_EQ,            // ==
-  ND_NEQ,           // !=
-  ND_LT,            // <
-  ND_LTE,           // <=
-  ND_ASSIGN,        // =
-  ND_ADDR,          // &
-  ND_DEREF,         // *
-  ND_FUNCDEF,       // 関数定義
-  ND_FUNCCALL,      // 関数呼び出し
-  ND_RETURN,        // return
-  ND_SIZEOF,        // sizeof
-  ND_IF,            // if
-  ND_ELIF,          // if else
-  ND_FOR,           // for
-  ND_WHILE,         // while
-  ND_VAR,           // 変数
-  ND_ARRAY,         // 配列
-  ND_DOT,           // .
-  ND_ARROW,         // ->
-  ND_FIELD,         // structのchild
-  ND_NUM,           // 整数
-  ND_BLOCK,         // ブロック
-  ND_DISCARD_EXPR,  // 式文
-  ND_STRING,        // string literal
-  ND_GOTO,          // goto, continue, break
-  ND_LABEL,         // goto label
-  ND_END,           // デバッグ時利用
+  ND_ADD,            // +
+  ND_SUB,            // -
+  ND_MUL,            // *
+  ND_DIV,            // /
+  ND_EQ,             // ==
+  ND_NEQ,            // !=
+  ND_LT,             // <
+  ND_LTE,            // <=
+  ND_ASSIGN,         // =
+  ND_ADDR,           // &
+  ND_DEREF,          // *
+  ND_PREINCREMENT,   // ++ ident
+  ND_PREDECREMENT,   // -- ident
+  ND_POSTINCREMENT,  // ident ++
+  ND_POSTDECREMENT,  // ident --
+  ND_FUNCDEF,        // 関数定義
+  ND_FUNCCALL,       // 関数呼び出し
+  ND_RETURN,         // return
+  ND_SIZEOF,         // sizeof
+  ND_IF,             // if
+  ND_ELIF,           // if else
+  ND_FOR,            // for
+  ND_WHILE,          // while
+  ND_VAR,            // 変数
+  ND_ARRAY,          // 配列
+  ND_DOT,            // .
+  ND_ARROW,          // ->
+  ND_FIELD,          // structのchild
+  ND_NUM,            // 整数
+  ND_BLOCK,          // ブロック
+  ND_DISCARD_EXPR,   // 式文
+  ND_STRING,         // string literal
+  ND_GOTO,           // goto, continue, break
+  ND_LABEL,          // goto label
+  ND_END,            // デバッグ時利用
 } NodeKind;
 
 /**
@@ -78,12 +82,13 @@ struct GTLabel
 };
 
 // デバッグ時利用 NodeKindに追加したら必ず追加すること
-#define NodeKindTable                                                        \
-  "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT",        \
-      "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF", "ND_FUNCDEF",            \
-      "ND_FUNCCALL", "ND_RETURN", "ND_SIZEOF", "ND_IF", "ND_ELIF", "ND_FOR", \
-      "ND_WHILE", "ND_VAR", "ND_ARRAY", "ND_DOT", "ND_ARROW", "ND_FIELD",    \
-      "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR", "ND_STIRNG", "ND_GOTO",       \
+#define NodeKindTable                                                          \
+  "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT",          \
+      "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF", "ND_PREINCREMENT",         \
+      "ND_PREDECREMENT", "ND_POSTINCREMENT", "ND_POSTDECREMENT", "ND_FUNCDEF", \
+      "ND_FUNCCALL", "ND_RETURN", "ND_SIZEOF", "ND_IF", "ND_ELIF", "ND_FOR",   \
+      "ND_WHILE", "ND_VAR", "ND_ARRAY", "ND_DOT", "ND_ARROW", "ND_FIELD",      \
+      "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR", "ND_STIRNG", "ND_GOTO",         \
       "ND_LABEL"
 extern const char *nodekindlist[];
 

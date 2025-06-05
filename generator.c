@@ -393,6 +393,7 @@ void gen(Node *node)
     case ND_LABEL:
       output_debug2("ND_LABEL");
       output_file("%s:", node->label_name);
+      gen(node->statement_child);
       return;
     case ND_PREINCREMENT:
     case ND_PREDECREMENT:

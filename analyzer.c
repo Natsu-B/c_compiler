@@ -68,6 +68,8 @@ void add_type(Node *node)
     add_type(node->false_code);
   if (node->update)
     add_type(node->update);
+  if (node->statement_child)
+    add_type(node->statement_child);
   if (node->expr)
     for (NDBlock *tmp = node->expr; tmp; tmp = tmp->next)
       add_type(tmp->node);
@@ -192,6 +194,8 @@ void analyze_type(Node *node)
     analyze_type(node->false_code);
   if (node->update)
     analyze_type(node->update);
+  if (node->statement_child)
+    analyze_type(node->statement_child);
   if (node->expr)
     for (NDBlock *tmp = node->expr; tmp; tmp = tmp->next)
       analyze_type(tmp->node);

@@ -209,6 +209,15 @@ void _print_parse_result(Node *node, int nest)
               node->label_name);
       break;
     }
+    case ND_LABEL:
+    {
+      fprintf(stdout, "NodeKind: %s label_name: %s\n", nodekindlist[node->kind],
+              node->label_name);
+      make_space(nest);
+      fprintf(stdout, "|    [statement]\n");
+      _print_parse_result(node->statement_child, nest + 1);
+      break;
+    }
     default:
     {
       fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);

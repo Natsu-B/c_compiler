@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "include/error.h"
+#include "include/eval_constant.h"
 #include "include/parser.h"
 #include "include/tokenizer.h"
 #include "include/vector.h"
@@ -241,8 +242,8 @@ Type* _declaration_specifiers(bool* is_typedef)
       child->type = alloc_type(TYPE_INT);
       ordinary_data_list* new_enum_member = malloc(sizeof(new_enum_member));
       if (consume("=", TK_RESERVED))
-      {  // TODO constant_expression
-        long num = expect_number();
+      {
+        long num = eval_constant_expression();
         if (num < 0 || (size_t)num < enum_num)
           error_at(get_old_token()->str, get_old_token()->len,
                    "invalid enum value");

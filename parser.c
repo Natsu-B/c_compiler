@@ -168,6 +168,7 @@ Node *block_item();
 Node *statement();
 Node *expression();
 Node *assignment_expression();
+Node *constant_expression();
 Node *conditional_expression();
 Node *equality_expression();
 Node *relational_expression();
@@ -420,6 +421,7 @@ Node *statement()
     expect(":", TK_RESERVED);
     node = new_node(ND_LABEL, NULL, NULL, token_ident);
     node->label_name = mangle_goto_label(token_ident);
+    node->statement_child = statement();
     return node;
   }
   if (consume("return", TK_IDENT))
@@ -461,6 +463,11 @@ Node *assignment_expression()
     node = new_node(ND_ASSIGN, node, assignment_expression(), get_old_token());
   }
   return node;
+}
+
+Node *constant_expression()
+{
+  return conditional_expression();
 }
 
 Node *conditional_expression()

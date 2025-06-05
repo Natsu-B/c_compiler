@@ -144,8 +144,9 @@ struct Node
     char *literal_name;  // stirng literal にアクセスする名前
   };
   struct
-  {                    // ND_GOTO ND_LABELの場合
-    char *label_name;  // ラベルの名前
+  {                         // ND_GOTO ND_LABELの場合
+    Node *statement_child;  // statement
+    char *label_name;       // ラベルの名前
   };
 };
 
@@ -173,6 +174,7 @@ struct FuncBlock
 };
 
 Node *new_node(NodeKind kind, Node *lhs, Node *rhs, Token *token);
+Node *constant_expression();
 FuncBlock *parser();
 
 #endif  // PARSER_C_COMPILER

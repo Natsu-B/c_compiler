@@ -78,81 +78,45 @@ conditional_inclusion_type reserved_token_to_type(Token *token, bool is_unary)
   }
   else
   {
-    // switch (token->len)
-    // {
-    //   case 1:
-    switch (token->str[0])
+    switch (token->len)
     {
-      case '?': return CPPTK_Question;
-      case ':': return CPPTK_Colon;
-      case '<':
-        if (token->next->kind == TK_RESERVED && token->next->len == 1)
+      case 1:
+        switch (token->str[0])
         {
-          if (token->next->str[0] == '=')
-          {
-            token_void(token->next);
-            return CPPTK_LessThanEq;
-          }
-          if (token->next->str[0] == '<')
-          {
-            token_void(token->next);
-            return CPPTK_LeftShift;
-          }
-        }
-        return CPPTK_LessThan;
-      case '>':
-        if (token->next->kind == TK_RESERVED && token->next->len == 1)
-        {
-          if (token->next->str[0] == '=')
-          {
-            token_void(token->next);
-            return CPPTK_GreaterThanEq;
-          }
-          if (token->next->str[0] == '<')
-          {
-            token_void(token->next);
-            return CPPTK_RightShift;
-          }
-        }
-        return CPPTK_GreaterThan;
-      case '+': return CPPTK_Plus;
-      case '-': return CPPTK_Minus;
-      case '*': return CPPTK_Mul;
-      case '/': return CPPTK_Div;
-      case '%': return CPPTK_DivReminder;
-      case '&':
-        if (token->next->kind == TK_RESERVED && token->next->len == 1 &&
-            token->next->str[0] == '&')
-        {
-          token_void(token->next);
-          return CPPTK_Logical_AND;
-        }
-        return CPPTK_AND;
-      case '|':
-        if (token->next->kind == TK_RESERVED && token->next->len == 1 &&
-            token->next->str[0] == '|')
-        {
-          token_void(token->next);
-          return CPPTK_Logical_OR;
-        }
-        return CPPTK_Inclusive_OR;
-      case '^': return CPPTK_Exclusive_OR;
-      case ')': return CPPTK_Parentheses_End;
-      case '=':
-        if (token->next->kind == TK_RESERVED && token->next->len == 1 &&
-            token->next->str[0] == '=')
-        {
-          token_void(token->next);
-          return CPPTK_Equality;
+          case '?': return CPPTK_Question;
+          case ':': return CPPTK_Colon;
+          case '<': return CPPTK_LessThan;
+          case '>': return CPPTK_GreaterThan;
+          case '+': return CPPTK_Plus;
+          case '-': return CPPTK_Minus;
+          case '*': return CPPTK_Mul;
+          case '/': return CPPTK_Div;
+          case '%': return CPPTK_DivReminder;
+          case '&': return CPPTK_AND;
+          case '|': return CPPTK_Inclusive_OR;
+          case '^': return CPPTK_Exclusive_OR;
+          case ')': return CPPTK_Parentheses_End;
+          default: break;
         }
         break;
-      case '!':
-        if (token->next->kind == TK_RESERVED && token->next->len == 1 &&
-            token->next->str[0] == '=')
-        {
-          token_void(token->next);
+
+      case 2:
+        if (memcmp(token->str, "&&", 2) == 0)
+          return CPPTK_Logical_AND;
+        if (memcmp(token->str, "||", 2) == 0)
+          return CPPTK_Logical_OR;
+        if (memcmp(token->str, "==", 2) == 0)
+          return CPPTK_Equality;
+        if (memcmp(token->str, "!=", 2) == 0)
           return CPPTK_NEquality;
-        }
+        if (memcmp(token->str, "<=", 2) == 0)
+          return CPPTK_LessThanEq;
+        if (memcmp(token->str, ">=", 2) == 0)
+          return CPPTK_GreaterThanEq;
+        if (memcmp(token->str, "<<", 2) == 0)
+          return CPPTK_LeftShift;
+        if (memcmp(token->str, ">>", 2) == 0)
+          return CPPTK_RightShift;
         break;
       default: break;
     }

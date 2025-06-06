@@ -52,10 +52,46 @@ TypeKind implicit_type_conversion_assign(Type *lhs, Type *rhs)
   return TYPE_NULL;
 }
 
+struct
+{
+  Vector *switch_info_list;
+  Vector *case_list;
+} switch_list;
+
+Vector *switch_new(GTLabel *name)
+{
+  if (!switch_list.case_list)
+  {
+    switch_list.case_list = vector_new();
+    switch_list.switch_info_list = vector_new();
+  }
+  vector_push(switch_list.switch_info_list, name);
+  Vector *tmp = vector_new();
+  vector_push(switch_list.case_list, tmp);
+  return tmp;
+}
+
+GTLabel *switch_add(Node *node, size_t *num)
+{
+  if (!switch_list.case_list || !vector_size(switch_list.case_list))
+    error_at(node->token->str, node->token->len, "invalid case statement");
+  *num = vector_size(vector_peek(switch_list.case_list));
+  vector_push(vector_peek(switch_list.case_list), node);
+  return vector_peek(switch_list.switch_info_list);
+}
+
+void switch_end()
+{
+  vector_pop(switch_list.switch_info_list);
+  vector_pop(switch_list.case_list);
+}
+
 void add_type(Node *node)
 {
   if (!node)
     return;
+  if (node->kind == ND_SWITCH)
+    node->case_list = switch_new(node->name);
   if (node->lhs)
     add_type(node->lhs);
   if (node->rhs)
@@ -64,8 +100,10 @@ void add_type(Node *node)
     add_type(node->condition);
   if (node->true_code)
     add_type(node->true_code);
-  if (node->false_code)  // node->init も同じ
+  if (node->false_code)
     add_type(node->false_code);
+  if (node->init)
+    add_type(node->init);
   if (node->update)
     add_type(node->update);
   if (node->statement_child)
@@ -76,6 +114,8 @@ void add_type(Node *node)
   if (node->stmt)
     for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
       add_type(tmp->node);
+  if (node->kind == ND_SWITCH)
+    switch_end();
 
   if (node->kind == ND_VAR)
   {
@@ -174,6 +214,13 @@ void add_type(Node *node)
     node->child_offset = offset;
     return;
   }
+  if (node->kind == ND_CASE)
+  {
+    size_t num;
+    node->switch_name = switch_add(node, &num);
+    node->case_num = num;
+    return;
+  }
 }
 
 void analyze_type(Node *node)
@@ -190,8 +237,10 @@ void analyze_type(Node *node)
     analyze_type(node->condition);
   if (node->true_code)
     analyze_type(node->true_code);
-  if (node->false_code)  // node->init も同じ
+  if (node->false_code)
     analyze_type(node->false_code);
+  if (node->init)
+    analyze_type(node->init);
   if (node->update)
     analyze_type(node->update);
   if (node->statement_child)

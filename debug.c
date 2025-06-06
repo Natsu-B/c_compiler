@@ -205,8 +205,11 @@ void _print_parse_result(Node *node, int nest)
     }
     case ND_GOTO:
     {
-      fprintf(stdout, "NodeKind: %s label_name: %s", nodekindlist[node->kind],
+      fprintf(stdout, "NodeKind: %s label_name: %s\n", nodekindlist[node->kind],
               node->label_name);
+      make_space(nest);
+      fprintf(stdout, "|   [statement]\n");
+      _print_parse_result(node->statement_child, nest + 1);
       break;
     }
     case ND_LABEL:
@@ -214,8 +217,29 @@ void _print_parse_result(Node *node, int nest)
       fprintf(stdout, "NodeKind: %s label_name: %s\n", nodekindlist[node->kind],
               node->label_name);
       make_space(nest);
-      fprintf(stdout, "|    [statement]\n");
+      fprintf(stdout, "|   [statement]\n");
       _print_parse_result(node->statement_child, nest + 1);
+      break;
+    }
+    case ND_CASE:
+    {
+      fprintf(stdout, "NodeKind: %s type: %s expression(integer): %ld\n",
+              nodekindlist[node->kind], node->is_case ? "case" : "default",
+              node->constant_expression);
+      make_space(nest);
+      fprintf(stdout, "|   [statement]\n");
+      _print_parse_result(node->statement_child, nest + 1);
+      break;
+    }
+    case ND_SWITCH:
+    {
+      fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);
+      make_space(nest);
+      fprintf(stdout, "|   [expression]\n");
+      _print_parse_result(node->condition, nest + 1);
+      make_space(nest);
+      fprintf(stdout, "|   [code]\n");
+      _print_parse_result(node->true_code, nest + 1);
       break;
     }
     default:

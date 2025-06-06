@@ -5,6 +5,7 @@
 
 #include "tokenizer.h"
 #include "type.h"
+#include "vector.h"
 
 typedef struct Node Node;
 typedef struct Var Var;
@@ -49,6 +50,8 @@ typedef enum
   ND_STRING,         // string literal
   ND_GOTO,           // goto, continue, break
   ND_LABEL,          // goto label
+  ND_CASE,           // case
+  ND_SWITCH,         // switch
   ND_END,            // デバッグ時利用
 } NodeKind;
 
@@ -89,7 +92,7 @@ struct GTLabel
       "ND_FUNCCALL", "ND_RETURN", "ND_SIZEOF", "ND_IF", "ND_ELIF", "ND_FOR",   \
       "ND_WHILE", "ND_VAR", "ND_ARRAY", "ND_DOT", "ND_ARROW", "ND_FIELD",      \
       "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR", "ND_STIRNG", "ND_GOTO",         \
-      "ND_LABEL"
+      "ND_LABEL", "ND_CASE", "ND_SWITCH"
 extern const char *nodekindlist[];
 
 struct Node
@@ -109,20 +112,18 @@ struct Node
   };
 
   struct
-  {                                  // if for while の場合
+  {                                  // if for while switch の場合
     GTLabel *name;                   // ラベルの名前 goto でも利用
     Node *condition;                 // 判定条件
     Node *true_code;                 // trueの際に実行されるコード
     NestedBlockVariables *nest_var;  // 一行のときも使う
-    union
-    {
-      Node *false_code;  // if else文 falseの際に実行されるコード
-      struct
-      {                // for文
-        Node *init;    // 初期化時のコード e.g. int i = 0
-        Node *update;  // 毎ステップごとに実行されるコード e.g. i++
-      };
+    Node *false_code;  // if else文 falseの際に実行されるコード
+    struct
+    {                // for文
+      Node *init;    // 初期化時のコード e.g. int i = 0
+      Node *update;  // 毎ステップごとに実行されるコード e.g. i++
     };
+    Vector *case_list;  // switch文 case の Node*が入っている
   };
   struct
   {                   // ND_BLOCK ND_FUNCCALL ND_FUNCDEF
@@ -130,8 +131,6 @@ struct Node
     NDBlock *stmt;    // stmt ND_BLOCK ND_FUNCDEFで利用
     char *func_name;  // ND_FUNCCALL ND_FUNCDEF で利用 関数名
     size_t func_len;  // ND_FUNCCALL ND_FUNCDEF のときのみ利用 関数名長さ
-    NestedBlockVariables
-        *var_list;  // ND_FUNCDEF ND_BLOCK のとき利用 変数リスト
   };
   long val;  // ND_NUMの場合 数値
   struct
@@ -144,9 +143,13 @@ struct Node
     char *literal_name;  // stirng literal にアクセスする名前
   };
   struct
-  {                         // ND_GOTO ND_LABELの場合
-    Node *statement_child;  // statement
-    char *label_name;       // ラベルの名前
+  {                            // ND_GOTO ND_LABEL ND_CASE ND_DEFAULTの場合
+    Node *statement_child;     // statement
+    char *label_name;          // ラベルの名前 ND_CASE ND_DEFAULTでは使われない
+    bool is_case;              // 以下ND_CASE ND_DEFAULT の場合
+    size_t case_num;           // switch文の中で何番目のcaseか 0始まり
+    GTLabel *switch_name;      // switch文のlabelの名前
+    long constant_expression;  // case n: のn部分
   };
 };
 

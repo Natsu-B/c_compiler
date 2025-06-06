@@ -10,6 +10,7 @@
 
 #include "include/debug.h"
 #include "include/error.h"
+#include "include/eval_constant.h"
 #include "include/tokenizer.h"
 #include "include/type.h"
 #include "include/variables.h"
@@ -71,12 +72,13 @@ char *find_jmp_target(size_t type)
   for (size_t i = vector_size(label_list); i >= 1; i--)
   {
     GTLabel *labeled_loop = vector_peek_at(label_list, i);
-    if (!labeled_loop)
+    if (!labeled_loop || (labeled_loop->kind == ND_SWITCH && type == 1))
       continue;
-    if (labeled_loop->kind == ND_WHILE || labeled_loop->kind == ND_FOR)
+    if (labeled_loop->kind == ND_WHILE || labeled_loop->kind == ND_FOR ||
+        labeled_loop->kind == ND_SWITCH)
     {
       char *label_name =
-          malloc(labeled_loop->len + 13 /*.Lbeginwhile + null terminator*/);
+          malloc(labeled_loop->len + 14 /*.Lbeginswitch + null terminator*/);
       // TODO doWhileとかだとまた異なるかも
       size_t printed = 0;
       switch (type)
@@ -91,16 +93,23 @@ char *find_jmp_target(size_t type)
           break;
         default: unreachable(); break;
       }
-      if (labeled_loop->kind == ND_WHILE)
+      switch (labeled_loop->kind)
       {
-        strcpy(label_name + printed, "while");
-        printed += 5;
+        case ND_WHILE:
+          strcpy(label_name + printed, "while");
+          printed += 5;
+          break;
+        case ND_FOR:
+          strcpy(label_name + printed, "for");
+          printed += 3;
+          break;
+        case ND_SWITCH:
+          strcpy(label_name + printed, "switch");
+          printed += 6;
+          break;
+        default: unreachable(); break;
       }
-      else
-      {
-        strcpy(label_name + printed, "for");
-        printed += 3;
-      }
+
       strncpy(label_name + printed, labeled_loop->name, labeled_loop->len);
       *(label_name + printed + labeled_loop->len) = '\0';
       return label_name;
@@ -219,7 +228,7 @@ Node *external_declaration()
     node->kind = ND_FUNCDEF;
     node->func_name = token->str;
     node->func_len = token->len;
-    node->var_list = new_nest();
+    new_nest();
     node->type = type;
     program_name = token->str;
     program_name_len = token->len;
@@ -311,6 +320,35 @@ Node *block_item()
   return statement();
 }
 
+Node *labeled_statement()
+{
+  Node *node = NULL;
+  if (consume("case", TK_IDENT) || consume("default", TK_IDENT))
+  {
+    node = new_node(ND_CASE, NULL, NULL, get_old_token());
+    if (get_old_token()->len == 4)  // case
+    {
+      node->is_case = true;
+      node->constant_expression = eval_constant_expression();
+    }
+    else
+      node->is_case = false;
+    expect(":", TK_RESERVED);
+    node->statement_child = statement();
+    return node;
+  }
+  Token *token_ident = consume_token_if_next_matches(TK_IDENT, ':');
+  if (token_ident)
+  {
+    expect(":", TK_RESERVED);
+    node = new_node(ND_LABEL, NULL, NULL, token_ident);
+    node->label_name = mangle_goto_label(token_ident);
+    node->statement_child = statement();
+    return node;
+  }
+  return node;
+}
+
 Node *statement()
 {
   pr_debug2("statement");
@@ -322,7 +360,7 @@ Node *statement()
     head.next = NULL;
     NDBlock *pointer = &head;
     node->kind = ND_BLOCK;
-    node->var_list = new_nest();
+    new_nest();
     for (;;)
     {
       if (consume("}", TK_RESERVED))
@@ -342,7 +380,7 @@ Node *statement()
   if (consume("if", TK_IDENT))
   {
     Node *node = calloc(1, sizeof(Node));
-    node->nest_var = new_nest();
+    new_nest();
     node->name = generate_label_name(ND_IF);
     expect("(", TK_RESERVED);
     node->condition = expression();
@@ -360,6 +398,19 @@ Node *statement()
     exit_nest();
     return node;
   }
+  if (consume("switch", TK_IDENT))
+  {
+    Node *node = calloc(1, sizeof(Node));
+    node->kind = ND_SWITCH;
+    new_nest();
+    expect("(", TK_RESERVED);
+    node->name = generate_label_name(ND_SWITCH);
+    node->condition = expression();
+    expect(")", TK_RESERVED);
+    node->true_code = statement();
+    exit_nest();
+    return node;
+  }
 
   // iteration-statement
   // while文の判定
@@ -367,7 +418,7 @@ Node *statement()
   {
     Node *node = calloc(1, sizeof(Node));
     node->kind = ND_WHILE;
-    node->nest_var = new_nest();
+    new_nest();
     node->name = generate_label_name(ND_WHILE);
     expect("(", TK_RESERVED);
     node->condition = expression();
@@ -381,7 +432,7 @@ Node *statement()
   {
     Node *node = calloc(1, sizeof(Node));
     node->kind = ND_FOR;
-    node->nest_var = new_nest();
+    new_nest();
     node->name = generate_label_name(ND_FOR);
     expect("(", TK_RESERVED);
     // declarationかどうか
@@ -414,16 +465,9 @@ Node *statement()
     return node;
   }
 
-  Node *node;
-  Token *token_ident = consume_token_if_next_matches(TK_IDENT, ':');
-  if (token_ident)
-  {
-    expect(":", TK_RESERVED);
-    node = new_node(ND_LABEL, NULL, NULL, token_ident);
-    node->label_name = mangle_goto_label(token_ident);
-    node->statement_child = statement();
+  Node *node = labeled_statement();
+  if (node)
     return node;
-  }
   if (consume("return", TK_IDENT))
     node = new_node(ND_RETURN, expression(), NULL, get_old_token());
   else if (consume("continue", TK_IDENT))

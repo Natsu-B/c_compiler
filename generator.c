@@ -11,6 +11,7 @@
 #include "include/error.h"
 #include "include/type.h"
 #include "include/variables.h"
+#include "include/vector.h"
 
 #define error_exit_with_guard(fmt, ...)                                     \
   do                                                                        \
@@ -399,6 +400,7 @@ void gen(Node *node)
     case ND_PREDECREMENT:
     case ND_POSTINCREMENT:
     case ND_POSTDECREMENT:
+      output_debug2("ND '++' or '--'");
       if (node->kind == ND_POSTINCREMENT || node->kind == ND_POSTDECREMENT)
         output_file("    %s rdi, %s [rsp]", mv_instruction_specifier(8, false),
                     access_size_specifier(8));  // peek register
@@ -415,6 +417,38 @@ void gen(Node *node)
                   chose_register(size_of(node->type), rdi));
       if (node->kind == ND_PREINCREMENT || node->kind == ND_PREDECREMENT)
         output_file("    push rdi");
+      return;
+    case ND_CASE:
+    {
+      output_debug2("ND_CASE");
+      output_file(".Lswitch%.*s_%lu:", (int)node->switch_name->len,
+                  node->switch_name->name, node->case_num);
+      gen(node->statement_child);
+      return;
+    }
+    case ND_SWITCH:
+    {
+      output_debug2("ND_SWITCH");
+      gen(node->condition);
+      output_file("    pop rdi");
+      GTLabel *switch_label = node->name;
+      for (size_t i = 1; i <= vector_size(node->case_list); i++)
+      {
+        Node *case_child = vector_peek_at(node->case_list, i);
+        if (case_child->is_case)
+        {
+          output_file("    cmp rdi, %ld", case_child->constant_expression);
+          output_file("    je .Lswitch%.*s_%lu", (int)switch_label->len,
+                      switch_label->name, i - 1);
+        }
+        else
+          output_file("    jmp .Lswitch%.*s_%lu", (int)switch_label->len,
+                      switch_label->name, i - 1);
+      }
+      gen(node->true_code);
+      output_file(".Lendswitch%.*s:", (int)switch_label->len,
+                  switch_label->name);
+    }
       return;
     default: break;
   }

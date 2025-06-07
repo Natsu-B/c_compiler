@@ -416,7 +416,7 @@ size_t size_of(Type* type)
     case TYPE_LONGLONG:
     case TYPE_PTR:
     case TYPE_ARRAY: return 8;
-    case TYPE_VOID: return 0;
+    case TYPE_VOID: error_exit("void"); break;
     case TYPE_STRUCT:
     {
       for (size_t i = 1; i <= vector_size(TagNamespaceList); i++)

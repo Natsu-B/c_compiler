@@ -168,6 +168,7 @@ assert 'enum tmp { a, b = a + 1, c = 2 * 2, d,}; int main() {return b + d;}'
 assert 'int main () { int x = 0; int y = 0; return ++x + y++;}'
 assert 'int main () { int x = 0; int y = 0; return x-- - --y;}'
 assert 'int main() {int x = 0; switch (x) { case 0: x = x + 10; break; case 1: x--; break;default: break;} switch(x) {case 0: return 255; default: return x;}}'
+assert 'int main() {int x = 1; void *y = &x; return 0;}'
 assert 'typedef int foo; int main(){ foo(i); i = 999; return i; }'
 
 (

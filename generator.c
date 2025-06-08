@@ -422,10 +422,20 @@ void gen(Node *node)
                   access_size_specifier(size_of(node->lhs->type)));
       if (node->kind == ND_POSTINCREMENT || node->kind == ND_POSTDECREMENT)
         output_file("    mov rsi, rdi");
-      if (node->kind == ND_PREINCREMENT || node->kind == ND_POSTINCREMENT)
-        output_file("    inc rdi");
+      if (node->val)
+      {
+        if (node->kind == ND_PREINCREMENT || node->kind == ND_POSTINCREMENT)
+          output_file("    add rdi, %ld", node->val);
+        else
+          output_file("    sub rdi, %ld", node->val);
+      }
       else
-        output_file("    dec rdi");
+      {
+        if (node->kind == ND_PREINCREMENT || node->kind == ND_POSTINCREMENT)
+          output_file("    inc rdi");
+        else
+          output_file("    dec rdi");
+      }
       output_file("    mov %s [rax], %s",
                   access_size_specifier(size_of(node->type)),
                   chose_register(size_of(node->type), rdi));

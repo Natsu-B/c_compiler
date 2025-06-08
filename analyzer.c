@@ -188,6 +188,8 @@ void add_type(Node *node)
       node->kind == ND_PREDECREMENT || node->kind == ND_PREINCREMENT)
   {
     node->type = node->lhs->type;
+    if (node->lhs->type->ptr_to)
+      node->val = size_of(node->lhs->type->ptr_to);
     return;
   }
   if (node->kind == ND_SIZEOF)

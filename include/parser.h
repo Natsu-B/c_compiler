@@ -133,7 +133,8 @@ struct Node
     char *func_name;  // ND_FUNCCALL ND_FUNCDEF で利用 関数名
     size_t func_len;  // ND_FUNCCALL ND_FUNCDEF のときのみ利用 関数名長さ
   };
-  long val;  // ND_NUMの場合 数値
+  long val;  // ND_NUMの場合数値 ND_POST/PRE INCREMENT/DECREMENT の場合
+             // その型がptrのときその大きさ、数値のとき0
   struct
   {               // 変数(ND_VAR)の場合
     bool is_new;  // 初めて定義された変数か否か

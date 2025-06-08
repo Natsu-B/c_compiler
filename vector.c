@@ -82,7 +82,7 @@ void *vector_peek_at(Vector *vec, size_t location)
 {
   if (vec->len < location || location == 0)
     error_exit(
-        "vector_peek_at() tried to access index %lu, but the vector contains "
+        "vector_peek_at() tried to access index %ld, but the vector contains "
         "only %lu elements",
         location, vec->len);
   return vec->data[location - 1];

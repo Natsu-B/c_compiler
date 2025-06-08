@@ -319,20 +319,33 @@ void gen(Node *node)
       output_debug("start %s block", loop_name);
       if (node->kind == ND_FOR)
         gen(node->init);
-      output_file(".Lbegin%s%s:", loop_name, node->name->name);
+      output_file(".Lbegin%s%.*s:", loop_name, (int)node->name->len,
+                  node->name->name);
       gen(node->condition);
       output_file("    pop rax");
       output_file("    cmp rax, 0");
-      output_file("    je .Lend%s%s", loop_name, node->name->name);
+      output_file("    je .Lend%s%.*s", loop_name, (int)node->name->len,
+                  node->name->name);
       gen(node->true_code);
       if (node->kind == ND_FOR)
         gen(node->update);
-      output_file("    jmp .Lbegin%s%s", loop_name, node->name->name);
+      output_file("    jmp .Lbegin%s%.*s", loop_name, (int)node->name->len,
+                  node->name->name);
       output_file(".Lend%s%s:", loop_name, node->name->name);
       output_debug("end %s block", loop_name);
     }
       return;
-
+    case ND_DO:
+      output_debug2("ND_DO");
+      output_file(".Lbegindo%.*s:", (int)node->name->len, node->name->name);
+      gen(node->true_code);
+      gen(node->condition);
+      output_file("    pop rax");
+      output_file("    cmp rax, 0");
+      output_file("    jne .Lbegindo%.*s", (int)node->name->len,
+                  node->name->name);
+      output_file(".Lenddo%.*s:", (int)node->name->len, node->name->name);
+      return;
     case ND_RETURN:
       output_debug2("ND_RETURN");
       gen(node->lhs);
@@ -401,21 +414,24 @@ void gen(Node *node)
     case ND_POSTINCREMENT:
     case ND_POSTDECREMENT:
       output_debug2("ND '++' or '--'");
+      gen_lval(node->lhs);
+      output_file("    pop rax");
+      output_file("    %s rdi, %s [rax]",
+                  mv_instruction_specifier(size_of(node->lhs->type),
+                                           node->lhs->type->is_signed),
+                  access_size_specifier(size_of(node->lhs->type)));
       if (node->kind == ND_POSTINCREMENT || node->kind == ND_POSTDECREMENT)
-        output_file("    %s rdi, %s [rsp]", mv_instruction_specifier(8, false),
-                    access_size_specifier(8));  // peek register
-      else
-        output_file("    pop rdi");
+        output_file("    mov rsi, rdi");
       if (node->kind == ND_PREINCREMENT || node->kind == ND_POSTINCREMENT)
         output_file("    inc rdi");
       else
         output_file("    dec rdi");
-      gen_lval(node->lhs);
-      output_file("    pop rax");
       output_file("    mov %s [rax], %s",
                   access_size_specifier(size_of(node->type)),
                   chose_register(size_of(node->type), rdi));
-      if (node->kind == ND_PREINCREMENT || node->kind == ND_PREDECREMENT)
+      if (node->kind == ND_POSTINCREMENT || node->kind == ND_POSTDECREMENT)
+        output_file("    push rsi");
+      else
         output_file("    push rdi");
       return;
     case ND_CASE:

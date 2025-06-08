@@ -113,6 +113,7 @@ void _print_parse_result(Node *node, int nest)
     case ND_IF:
     case ND_ELIF:
     case ND_WHILE:
+    case ND_DO:
     {
       fprintf(stdout, "NodeKind: %s labelname: %s\n", nodekindlist[node->kind],
               node->name->name);

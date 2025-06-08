@@ -75,11 +75,10 @@ char *find_jmp_target(size_t type)
     if (!labeled_loop || (labeled_loop->kind == ND_SWITCH && type == 1))
       continue;
     if (labeled_loop->kind == ND_WHILE || labeled_loop->kind == ND_FOR ||
-        labeled_loop->kind == ND_SWITCH)
+        labeled_loop->kind == ND_DO || labeled_loop->kind == ND_SWITCH)
     {
       char *label_name =
           malloc(labeled_loop->len + 14 /*.Lbeginswitch + null terminator*/);
-      // TODO doWhileとかだとまた異なるかも
       size_t printed = 0;
       switch (type)
       {
@@ -98,6 +97,10 @@ char *find_jmp_target(size_t type)
         case ND_WHILE:
           strcpy(label_name + printed, "while");
           printed += 5;
+          break;
+        case ND_DO:
+          strcpy(label_name + printed, "do");
+          printed += 2;
           break;
         case ND_FOR:
           strcpy(label_name + printed, "for");
@@ -424,6 +427,22 @@ Node *statement()
     node->condition = expression();
     expect(")", TK_RESERVED);
     node->true_code = statement();
+    exit_nest();
+    return node;
+  }
+  // do while文の判定
+  if (consume("do", TK_IDENT))
+  {
+    new_nest();
+    Node *node = calloc(1, sizeof(Node));
+    node->name = generate_label_name(ND_DO);
+    node->true_code = statement();
+    node->kind = ND_DO;
+    expect("while", TK_IDENT);
+    expect("(", TK_RESERVED);
+    node->condition = expression();
+    expect(")", TK_RESERVED);
+    expect(";", TK_RESERVED);
     exit_nest();
     return node;
   }

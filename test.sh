@@ -169,6 +169,8 @@ assert 'int main () { int x = 0; int y = 0; return ++x + y++;}'
 assert 'int main () { int x = 0; int y = 0; return x-- - --y;}'
 assert 'int main() {int x = 0; switch (x) { case 0: x = x + 10; break; case 1: x--; break;default: break;} switch(x) {case 0: return 255; default: return x;}}'
 assert 'int main() {int x = 1; void *y = &x; return 0;}'
+assert 'int main() {int i = 0; do {i =i+ 5;}while(0); return i;}'
+assert 'int main(){int r=0;int i=0;for(;i<1;i++)if(1)while(r==0)do{r++;if(r<3)continue;r=r+5;if(r>7)break;}while(r<10);return r;}'
 assert 'typedef int foo; int main(){ foo(i); i = 999; return i; }'
 
 (

@@ -116,6 +116,7 @@ Type* _declaration_specifiers(bool* is_typedef)
   if (struct_count | union_count)
   {  // struct または union
     Token* token = consume_ident();
+    tag_list* new = NULL;
     if (token)
     {
       for (size_t i = 1; i <= vector_size(TagNamespaceList); i++)
@@ -124,31 +125,34 @@ Type* _declaration_specifiers(bool* is_typedef)
         for (size_t j = 1; j <= vector_size(tag_nest); j++)
         {
           tag_list* tmp = vector_peek_at(tag_nest, j);
-          if (tmp->tagkind == is_enum ||
-              (tmp->tagkind == is_struct && union_count) ||
-              (tmp->tagkind == is_union && struct_count))
-            error_at(token->str, token->len, "invalid type");
           if (tmp->name->len == token->len &&
               !strncmp(tmp->name->str, token->str, token->len))
           {
-            return tmp->type;
+            if (tmp->tagkind == is_enum ||
+                (tmp->tagkind == is_struct && union_count) ||
+                (tmp->tagkind == is_union && struct_count))
+              error_at(token->str, token->len, "invalid type");
+            new = tmp;
           }
         }
       }
     }
-    else if (!peek("{", TK_RESERVED))
-      error_at(get_token()->str, get_token()->len, "invalid struct");
+    bool is_definition = consume("{", TK_RESERVED);
+    if (is_definition && new && new->data_list)
+      error_at(get_old_token()->str, get_old_token()->len,
+               "multiple struct/union definition");
     // struct {} のような無名structの場合や未定義の場合
-    tag_list* new = calloc(1, sizeof(tag_list));
-    new->tagkind = struct_count ? is_struct : is_union;
-    new->name = token;
-    Type* type = alloc_type(TYPE_STRUCT);
-    type->type_num = ++tag_id;
-    new->type = type;
-    if (consume("{", TK_RESERVED))
+    if (!new)
     {
-      if (new->data_list)
-        error_at(get_token()->str, get_token()->len, "struct redefinition");
+      new = calloc(1, sizeof(tag_list));
+      new->tagkind = struct_count ? is_struct : is_union;
+      new->name = token;
+      Type* type = alloc_type(TYPE_STRUCT);
+      type->type_num = ++tag_id;
+      new->type = type;
+    }
+    if (is_definition)
+    {
       new->data_list = vector_new();
       size_t struct_size = 0;
       size_t struct_alignment = 0;
@@ -187,7 +191,7 @@ Type* _declaration_specifiers(bool* is_typedef)
     vector_push(vector_peek(TagNamespaceList), new);
     if (consume("typedef", TK_IDENT))
       *is_typedef = true;
-    return type;
+    return new->type;
   }
 
   if (enum_count)
@@ -203,68 +207,71 @@ Type* _declaration_specifiers(bool* is_typedef)
         for (size_t j = 1; j <= vector_size(tag_nest); j++)
         {
           tag_list* tmp = vector_peek_at(tag_nest, j);
-          if (tmp->tagkind == is_struct || tmp->tagkind == is_union)
-            error_at(enum_name->str, enum_name->len, "invalid type");
           if (tmp->name->len == enum_name->len &&
               !strncmp(tmp->name->str, enum_name->str, enum_name->len))
           {
+            if (tmp->tagkind == is_struct || tmp->tagkind == is_union)
+              error_at(enum_name->str, enum_name->len, "invalid type");
             new = tmp;
           }
         }
       }
     }
     bool is_definition = consume("{", TK_RESERVED);
-    if (!is_definition && enum_name &&
-        new->data_list)  // enumが定義済みだったら
-      return new->type;
-    if (!is_definition)
-      error_at(get_old_token()->str, get_old_token()->len,
-               "incomplete enum type");
-    if (new && new->data_list)
+    if (is_definition && new && new->data_list)
       error_at(get_old_token()->str, get_old_token()->len,
                "multiple enum definition");
     if (!new)
-      new = calloc(1, sizeof(tag_list));
-    new->tagkind = is_enum;
-    new->name = enum_name;
-    new->type = alloc_type(TYPE_ENUM);
-    new->type->type_num = ++tag_id;
-    new->data_list = vector_new();
-    size_t enum_num = 0;
-    for (;;)
     {
-      bool is_comma = false;
-      Token* identifier = consume_ident();
-      if (!identifier)
-        error_at(get_token()->str, get_token()->len, "invalid enum definition");
-      tag_data_list* child = calloc(1, sizeof(tag_data_list));
-      child->name = identifier;
-      child->type = alloc_type(TYPE_INT);
-      ordinary_data_list* new_enum_member = malloc(sizeof(new_enum_member));
-      if (consume("=", TK_RESERVED))
-      {
-        long num = eval_constant_expression();
-        if (num < 0 || (size_t)num < enum_num)
-          error_at(get_old_token()->str, get_old_token()->len,
-                   "invalid enum value");
-        enum_num = num;
-      }
-      child->offset = enum_num;
-      vector_push(new->data_list, child);
-      new_enum_member->ordinary_kind = enum_member;
-      new_enum_member->enum_number = enum_num;
-      new_enum_member->name = identifier;
-      new_enum_member->type = alloc_type(TYPE_INT);
-      vector_push(vector_peek(OrdinaryNamespaceList), new_enum_member);
-      enum_num++;
-      if (consume(",", TK_RESERVED))
-        is_comma = true;
-      if (consume("}", TK_RESERVED))
-        break;
-      else if (is_comma)
-        continue;
-      error_at(get_token()->str, get_token()->len, "invalid enum definition");
+      new = calloc(1, sizeof(tag_list));
+      new->tagkind = is_enum;
+      new->name = enum_name;
+      new->type = alloc_type(TYPE_ENUM);
+      new->type->type_num = ++tag_id;
     }
+    if (is_definition)
+    {
+      new->data_list = vector_new();
+      size_t enum_num = 0;
+      for (;;)
+      {
+        bool is_comma = false;
+        Token* identifier = consume_ident();
+        if (!identifier)
+          error_at(get_token()->str, get_token()->len,
+                   "invalid enum definition");
+        tag_data_list* child = calloc(1, sizeof(tag_data_list));
+        child->name = identifier;
+        child->type = alloc_type(TYPE_INT);
+        ordinary_data_list* new_enum_member = malloc(sizeof(new_enum_member));
+        if (consume("=", TK_RESERVED))
+        {
+          long num = eval_constant_expression();
+          if (num < 0 || (size_t)num < enum_num)
+            error_at(get_old_token()->str, get_old_token()->len,
+                     "invalid enum value");
+          enum_num = num;
+        }
+        child->offset = enum_num;
+        vector_push(new->data_list, child);
+        new_enum_member->ordinary_kind = enum_member;
+        new_enum_member->enum_number = enum_num;
+        new_enum_member->name = identifier;
+        new_enum_member->type = alloc_type(TYPE_INT);
+        vector_push(vector_peek(OrdinaryNamespaceList), new_enum_member);
+        enum_num++;
+        if (consume(",", TK_RESERVED))
+          is_comma = true;
+        if (consume("}", TK_RESERVED))
+          break;
+        else if (is_comma)
+          continue;
+        error_at(get_token()->str, get_token()->len, "invalid enum definition");
+      }
+    }
+    vector_push(vector_peek(TagNamespaceList), new);
+    if (consume("typedef", TK_IDENT))
+      *is_typedef = true;
     return new->type;
   }
 

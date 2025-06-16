@@ -243,6 +243,20 @@ void _print_parse_result(Node *node, int nest)
       _print_parse_result(node->true_code, nest + 1);
       break;
     }
+    case ND_TERNARY:
+    {
+      fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);
+      make_space(nest);
+      fprintf(stdout, "|   [rhs]\n");
+      _print_parse_result(node->rhs, nest + 1);
+      make_space(nest);
+      fprintf(stdout, "|   [chs]\n");
+      _print_parse_result(node->chs, nest + 1);
+      make_space(nest);
+      fprintf(stdout, "|   [lhs]\n");
+      _print_parse_result(node->lhs, nest + 1);
+    }
+    break;
     default:
     {
       fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);

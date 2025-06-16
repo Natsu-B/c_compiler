@@ -94,6 +94,8 @@ void add_type(Node *node)
     node->case_list = switch_new(node->name);
   if (node->lhs)
     add_type(node->lhs);
+  if (node->chs)
+    add_type(node->chs);
   if (node->rhs)
     add_type(node->rhs);
   if (node->condition)
@@ -233,6 +235,8 @@ void analyze_type(Node *node)
     analyze_type(node->lhs);
   if (node->rhs)
     analyze_type(node->rhs);
+  if (node->chs)
+    analyze_type(node->chs);
   if (node->init)
     analyze_type(node->init);
   if (node->condition)

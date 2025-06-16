@@ -476,6 +476,20 @@ void gen(Node *node)
                   switch_label->name);
     }
       return;
+    case ND_TERNARY:
+    {
+      output_debug2("ND_TERNARY");
+      gen(node->lhs);
+      output_file("    pop rax");
+      output_file("    cmp rax, 0");
+      output_file("    je .Lfalseternary%s", node->name->name);
+      gen(node->chs);
+      output_file("    jmp .Lendternary%s", node->name->name);
+      output_file(".Lfalseternary%s:", node->name->name);
+      gen(node->rhs);
+      output_file(".Lendternary%s:", node->name->name);
+    }
+      return;
     default: break;
   }
 
@@ -595,7 +609,6 @@ void generator(FuncBlock *parsed, char *output_filename)
         }
       }
 
-      align_counter = 0;
       for (NDBlock *pointer = node->stmt; pointer; pointer = pointer->next)
         gen(pointer->node);
       output_file("    pop rax");

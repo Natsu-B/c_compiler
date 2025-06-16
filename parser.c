@@ -541,7 +541,17 @@ Node *conditional_expression()
   // exclusive-OR-expression
   // AND-expression
   // equality-expression
-  return equality_expression();
+  Node *node = equality_expression();
+  if (consume("?", TK_RESERVED))
+  {
+    Token *old = get_old_token();
+    Node *chs = expression();
+    expect(":", TK_RESERVED);
+    node = new_node(ND_TERNARY, node, expression(), old);
+    node->name = generate_label_name(ND_TERNARY);
+    node->chs = chs;
+  }
+  return node;
 }
 
 Node *equality_expression()

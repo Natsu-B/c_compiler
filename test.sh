@@ -175,7 +175,8 @@ assert 'int main() {int k[3]; k[0] = 0; k[1] = 1; k[2] = 2; int *ptr = k; int t 
 assert 'int main() {int k[3]; for (int i = 0; i < 3; i++) k[i] = i; int *ptr = k; int t = *++ptr; int s = *ptr++; return t + s;}'
 assert 'struct HOGE; struct HOGE { int x; int y; }; int main() {struct HOGE x; return sizeof(x);}'
 assert 'enum tmp; enum tmp { a, b, c = 8, d,}; int main() {return b + d;}'
-assert 'int main() {int x =0; return x ? 10 : 0;}'
+assert 'int main() {int x =0; return x ? 10 : 1;}'
+assert 'int y() { exit(11); return 0;} int a() {exit(2); return 1;} int main() {int x = 1; int z = 0; if (x || y()) if (z && a()) return 5; else return 10;}'
 assert 'typedef int foo; int main(){ foo(i); i = 999; return i; }'
 
 (

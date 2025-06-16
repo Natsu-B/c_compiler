@@ -141,10 +141,10 @@ conditional-expression
         = logical-OR-expression, [ "?", expression, ":", expression ];
 
 logical-OR-expression
-        = logical-AND-expression;
+        = logical-AND-expression, { "||", logical-AND-expression };
 
 logical-AND-expression
-        = inclusive-OR-expression;
+        = inclusive-OR-expression, { "&&", inclusive-OR-expression };
 
 inclusive-OR-expression
         = exclusive-OR-expression;

@@ -490,6 +490,26 @@ void gen(Node *node)
       output_file(".Lendternary%s:", node->name->name);
     }
       return;
+    case ND_LOGICALAND:
+    case ND_LOGICALOR:
+    {
+      output_debug2("ND_LOGICAL AND/OR");
+      gen(node->lhs);
+      output_file("    pop rax");
+      output_file("    cmp rax, 0");
+      output_file("    %s .Lfalselogical%s%s",
+                  node->kind == ND_LOGICALAND ? "je" : "jne",
+                  node->kind == ND_LOGICALAND ? "and" : "or", node->name->name);
+      gen(node->rhs);
+      output_file("    jmp .Lendlogical%s%s",
+                  node->kind == ND_LOGICALAND ? "and" : "or", node->name->name);
+      output_file(".Lfalselogical%s%s:",
+                  node->kind == ND_LOGICALAND ? "and" : "or", node->name->name);
+      output_file("    push rax");
+      output_file(".Lendlogical%s%s:",
+                  node->kind == ND_LOGICALAND ? "and" : "or", node->name->name);
+    }
+      return;
     default: break;
   }
 

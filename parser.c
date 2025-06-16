@@ -29,7 +29,7 @@ void new_nest_label()
 {
   if (!label_list)
     label_list = vector_new();
-  vector_push(label_list, NULL);
+  vector_push(label_list, vector_new());
 }
 
 void exit_nest_label()
@@ -39,15 +39,7 @@ void exit_nest_label()
 
 GTLabel *generate_label_name(NodeKind kind)
 {
-  static char *old_label_program_name;
-  static int old_label_program_name_len;
   static size_t label_name_counter;
-
-  if (old_label_program_name_len != program_name_len ||
-      strncmp(old_label_program_name, program_name, program_name_len))
-    label_name_counter = 0;  // その関数がlabelを初めてつける関数の場合初期化
-  old_label_program_name = program_name;
-  old_label_program_name_len = program_name_len;
   size_t namesize = program_name_len + 6;
   GTLabel *next = calloc(1, sizeof(GTLabel));
   next->kind = kind;
@@ -58,9 +50,7 @@ GTLabel *generate_label_name(NodeKind kind)
     unreachable();
   next->len = size;
   next->name = mangle_name;
-  if (vector_pop(label_list))
-    unreachable();
-  vector_push(label_list, next);
+  vector_push(vector_peek(label_list), next);
   return next;
 }
 
@@ -71,51 +61,54 @@ char *find_jmp_target(size_t type)
   // while, for文を探す ネストが深いほうから探していく
   for (size_t i = vector_size(label_list); i >= 1; i--)
   {
-    GTLabel *labeled_loop = vector_peek_at(label_list, i);
-    if (!labeled_loop || (labeled_loop->kind == ND_SWITCH && type == 1))
-      continue;
-    if (labeled_loop->kind == ND_WHILE || labeled_loop->kind == ND_FOR ||
-        labeled_loop->kind == ND_DO || labeled_loop->kind == ND_SWITCH)
+    for (size_t j = 1; j <= vector_size(vector_peek_at(label_list, i)); j++)
     {
-      char *label_name =
-          malloc(labeled_loop->len + 14 /*.Lbeginswitch + null terminator*/);
-      size_t printed = 0;
-      switch (type)
+      GTLabel *labeled_loop = vector_peek_at(vector_peek_at(label_list, i), j);
+      if (!labeled_loop || (labeled_loop->kind == ND_SWITCH && type == 1))
+        continue;
+      if (labeled_loop->kind == ND_WHILE || labeled_loop->kind == ND_FOR ||
+          labeled_loop->kind == ND_DO || labeled_loop->kind == ND_SWITCH)
       {
-        case 1:
-          strcpy(label_name, ".Lbegin");
-          printed = 7;
-          break;
-        case 2:
-          strcpy(label_name, ".Lend");
-          printed = 5;
-          break;
-        default: unreachable(); break;
-      }
-      switch (labeled_loop->kind)
-      {
-        case ND_WHILE:
-          strcpy(label_name + printed, "while");
-          printed += 5;
-          break;
-        case ND_DO:
-          strcpy(label_name + printed, "do");
-          printed += 2;
-          break;
-        case ND_FOR:
-          strcpy(label_name + printed, "for");
-          printed += 3;
-          break;
-        case ND_SWITCH:
-          strcpy(label_name + printed, "switch");
-          printed += 6;
-          break;
-        default: unreachable(); break;
-      }
+        char *label_name =
+            malloc(labeled_loop->len + 14 /*.Lbeginswitch + null terminator*/);
+        size_t printed = 0;
+        switch (type)
+        {
+          case 1:
+            strcpy(label_name, ".Lbegin");
+            printed = 7;
+            break;
+          case 2:
+            strcpy(label_name, ".Lend");
+            printed = 5;
+            break;
+          default: unreachable(); break;
+        }
+        switch (labeled_loop->kind)
+        {
+          case ND_WHILE:
+            strcpy(label_name + printed, "while");
+            printed += 5;
+            break;
+          case ND_DO:
+            strcpy(label_name + printed, "do");
+            printed += 2;
+            break;
+          case ND_FOR:
+            strcpy(label_name + printed, "for");
+            printed += 3;
+            break;
+          case ND_SWITCH:
+            strcpy(label_name + printed, "switch");
+            printed += 6;
+            break;
+          default: unreachable(); break;
+        }
 
-      strncpy(label_name + printed, labeled_loop->name, labeled_loop->len);
-      *(label_name + printed + labeled_loop->len) = '\0';
-      return label_name;
+        strncpy(label_name + printed, labeled_loop->name, labeled_loop->len);
+        *(label_name + printed + labeled_loop->len) = '\0';
+        return label_name;
+      }
     }
   }
   error_at(get_old_token()->str, get_old_token()->len,
@@ -182,6 +175,8 @@ Node *expression();
 Node *assignment_expression();
 Node *constant_expression();
 Node *conditional_expression();
+Node *logical_OR_expression();
+Node *logical_AND_expression();
 Node *equality_expression();
 Node *relational_expression();
 Node *shift_expression();
@@ -535,13 +530,11 @@ Node *constant_expression()
 
 Node *conditional_expression()
 {
-  // logical-OR-expression
-  // logical-AND-expression
   // inclusive-OR-expression
   // exclusive-OR-expression
   // AND-expression
   // equality-expression
-  Node *node = equality_expression();
+  Node *node = logical_OR_expression();
   if (consume("?", TK_RESERVED))
   {
     Token *old = get_old_token();
@@ -550,6 +543,30 @@ Node *conditional_expression()
     node = new_node(ND_TERNARY, node, expression(), old);
     node->name = generate_label_name(ND_TERNARY);
     node->chs = chs;
+  }
+  return node;
+}
+
+Node *logical_OR_expression()
+{
+  Node *node = logical_AND_expression();
+  while (consume("||", TK_RESERVED))
+  {
+    Token *old = get_old_token();
+    node = new_node(ND_LOGICALOR, node, logical_AND_expression(), old);
+    node->name = generate_label_name(ND_LOGICALOR);
+  }
+  return node;
+}
+
+Node *logical_AND_expression()
+{
+  Node *node = equality_expression();
+  while (consume("&&", TK_RESERVED))
+  {
+    Token *old = get_old_token();
+    node = new_node(ND_LOGICALAND, node, equality_expression(), old);
+    node->name = generate_label_name(ND_LOGICALAND);
   }
   return node;
 }

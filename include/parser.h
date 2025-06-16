@@ -41,6 +41,8 @@ typedef enum
   ND_WHILE,          // while
   ND_DO,             // do while
   ND_TERNARY,        // : ? 三項演算子
+  ND_LOGICALOR,      // ||
+  ND_LOGICALAND,     // &&
   ND_VAR,            // 変数
   ND_ARRAY,          // 配列
   ND_DOT,            // .
@@ -92,9 +94,10 @@ struct GTLabel
       "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF", "ND_PREINCREMENT",         \
       "ND_PREDECREMENT", "ND_POSTINCREMENT", "ND_POSTDECREMENT", "ND_FUNCDEF", \
       "ND_FUNCCALL", "ND_RETURN", "ND_SIZEOF", "ND_IF", "ND_ELIF", "ND_FOR",   \
-      "ND_WHILE", "ND_DO", "ND_TERNARY", "ND_VAR", "ND_ARRAY", "ND_DOT",       \
-      "ND_ARROW", "ND_FIELD", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR",         \
-      "ND_STIRNG", "ND_GOTO", "ND_LABEL", "ND_CASE", "ND_SWITCH"
+      "ND_WHILE", "ND_DO", "ND_TERNARY", "ND_LOGICALOR", "ND_LOGICALAND",      \
+      "ND_VAR", "ND_ARRAY", "ND_DOT", "ND_ARROW", "ND_FIELD", "ND_NUM",        \
+      "ND_BLOCK", "ND_DISCARD_EXPR", "ND_STIRNG", "ND_GOTO", "ND_LABEL",       \
+      "ND_CASE", "ND_SWITCH"
 extern const char *nodekindlist[];
 
 struct Node

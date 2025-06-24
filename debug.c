@@ -82,7 +82,6 @@ void _print_parse_result(Node *node, int nest)
         type_name = pointer->type;
         pointer = pointer->ptr_to;
       }
-      assert(reference_counter >= 0);
       fprintf(stdout, "NodeKind: %s value: %ld type: %.*s%d\n",
               nodekindlist[node->kind], node->val, reference_counter,
               "****************************************************************"

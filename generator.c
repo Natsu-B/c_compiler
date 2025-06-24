@@ -529,6 +529,19 @@ void gen(Node *node)
       output_file("    push rax");
     }
       return;
+    case ND_LEFT_SHIFT:
+    case ND_RIGHT_SHIFT:
+    {
+      output_debug2("ND_LEFT/RIGHT_SHIFT");
+      gen(node->lhs);
+      gen(node->rhs);
+      output_file("    pop rcx");
+      output_file("    pop rax");
+      output_file("    %s rax, cl",
+                  node->kind == ND_LEFT_SHIFT ? "sal" : "sar");
+      output_file("    push rax");
+    }
+      return;
     default: break;
   }
 

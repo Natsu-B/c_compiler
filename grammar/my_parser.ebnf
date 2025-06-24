@@ -167,7 +167,7 @@ relational-expression
         | ">=" ), shift-expression };
 
 shift-expression
-        = additive-expression;
+        = additive-expression, { ( "<<" | ">>" ), additive-expression };
 
 additive-expression
         = multiplicative-expression, { ( "+"

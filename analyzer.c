@@ -119,111 +119,158 @@ void add_type(Node *node)
   if (node->kind == ND_SWITCH)
     switch_end();
 
-  if (node->kind == ND_VAR)
+  switch (node->kind)
   {
-    node->type = node->var->type;
-    return;
-  }
-  if (node->kind == ND_MUL || node->kind == ND_DIV || node->kind == ND_FUNCCALL)
-  {
-    // TODO
-    node->type = alloc_type(TYPE_INT);
-    return;
-  }
-  if (node->kind == ND_ADDR)
-  {
-    Type *ptr = alloc_type(TYPE_PTR);
-    ptr->ptr_to = node->lhs->type;
-    node->lhs->type = ptr;
-    node->type = ptr;
-    return;
-  }
-  if (node->kind == ND_DEREF)
-  {
-    if (node->lhs->type->type != TYPE_PTR &&
-        node->lhs->type->type != TYPE_ARRAY)
-      error_at(node->token->str, node->token->len, "invalid dereference");
-    node->type = node->lhs->type->ptr_to;
-    return;
-  }
-  if (node->kind == ND_ADD)
-  {
-    int flag = 0;
-    Type *type = alloc_type(TYPE_INT);
-    if (node->lhs->type->type != TYPE_INT)
+    case ND_ADD:
     {
-      type = node->lhs->type;
-      flag++;
+      int flag = 0;
+      Type *type = alloc_type(TYPE_INT);
+      if (node->lhs->type->type != TYPE_INT)
+      {
+        type = node->lhs->type;
+        flag++;
+      }
+      if (node->rhs->type->type != TYPE_INT)
+      {
+        type = node->rhs->type;
+        flag++;
+      }
+      if (flag >= 2)
+        if (node->lhs->type->type == TYPE_PTR ||
+            node->lhs->type->type == TYPE_ARRAY ||
+            node->rhs->type->type == TYPE_PTR ||
+            node->rhs->type->type == TYPE_ARRAY)
+          error_at(node->token->str, node->token->len,
+                   "invalid use of the '+' operator");
+      node->lhs->type = type;
+      node->rhs->type = type;
+      node->type = type;
+      return;
     }
-    if (node->rhs->type->type != TYPE_INT)
-    {
-      type = node->rhs->type;
-      flag++;
-    }
-    if (flag >= 2)
-      if (node->lhs->type->type == TYPE_PTR ||
-          node->lhs->type->type == TYPE_ARRAY ||
-          node->rhs->type->type == TYPE_PTR ||
-          node->rhs->type->type == TYPE_ARRAY)
+
+    case ND_SUB:
+      if (node->rhs->type->type == TYPE_PTR)
         error_at(node->token->str, node->token->len,
-                 "invalid use of the '+' operator");
-    node->lhs->type = type;
-    node->rhs->type = type;
-    node->type = type;
-    return;
-  }
-  if (node->kind == ND_SUB)
-  {
-    if (node->rhs->type->type == TYPE_PTR)
-      error_at(node->token->str, node->token->len,
-               "invalid use of the '-' operator");
-    if (node->lhs->type->type == TYPE_PTR)
+                 "invalid use of the '-' operator");
+      if (node->lhs->type->type == TYPE_PTR)
+      {
+        node->rhs->type = node->lhs->type;
+        node->type = node->lhs->type;
+      }
+      else
+        node->type = alloc_type(TYPE_INT);
+      return;
+    case ND_MUL:
+    case ND_DIV:
     {
-      node->rhs->type = node->lhs->type;
-      node->type = node->lhs->type;
-    }
-    else
+      TypeKind kind = implicit_type_conversion_assign(node->lhs->type, node->rhs->type);
+      if (kind == TYPE_PTR)
+        error_at(node->token->str, node->token->len,
+                 "operands for '%s' must be integer types",
+                 (node->kind == ND_MUL ? "*" : "/"));
+      // todo
       node->type = alloc_type(TYPE_INT);
-    return;
-  }
-  if (node->kind == ND_POSTDECREMENT || node->kind == ND_POSTINCREMENT ||
-      node->kind == ND_PREDECREMENT || node->kind == ND_PREINCREMENT)
-  {
-    node->type = node->lhs->type;
-    if (node->lhs->type->ptr_to)
-      node->val = size_of(node->lhs->type->ptr_to);
-    return;
-  }
-  if (node->kind == ND_SIZEOF)
-  {
-    node->type = alloc_type(TYPE_LONG);
-    return;
-  }
-  if (node->kind == ND_ARRAY)
-  {
-    // char *i = "hoge"; i[3]; 等が使えなくなるためコメントアウト
-    // if (node->rhs->val < 0 || node->rhs->val >= node->lhs->type->size)
-    //     error_at(node->token->str, "index out of bounds for type array");
-    node->kind = ND_DEREF;
-    node->lhs = new_node(ND_ADD, node->lhs, node->rhs, node->token);
-    node->rhs = NULL;
-    node->lhs->type = node->lhs->lhs->type;
-    add_type(node);
-    return;
-  }
-  if (node->kind == ND_DOT || node->kind == ND_ARROW)
-  {
-    size_t offset = 0;
-    node->type = find_struct_child(node->lhs, node->rhs, &offset);
-    node->child_offset = offset;
-    return;
-  }
-  if (node->kind == ND_CASE)
-  {
-    size_t num;
-    node->switch_name = switch_add(node, &num);
-    node->case_num = num;
-    return;
+      return;
+    }
+    case ND_EQ:
+    case ND_NEQ:
+    case ND_LT:
+    case ND_LTE: node->type = alloc_type(TYPE_BOOL); return;
+    case ND_ASSIGN:
+      if (!is_equal_type(node->lhs->type, node->rhs->type) &&
+          node->rhs->kind != ND_STRING)
+      {
+        TypeKind converted_type =
+            implicit_type_conversion_assign(node->lhs->type, node->rhs->type);
+        if (converted_type == TYPE_NULL)
+          error_at(node->token->str, node->token->len,
+                   "cannot convert both sides of '=' types");
+        node->type = alloc_type(converted_type);
+      }
+      else
+        node->type = node->lhs->type;
+      return;
+    case ND_ADDR:
+    {
+      Type *ptr = alloc_type(TYPE_PTR);
+      ptr->ptr_to = node->lhs->type;
+      node->type = ptr;
+      return;
+    }
+    case ND_DEREF:
+      if (node->lhs->type->type != TYPE_PTR &&
+          node->lhs->type->type != TYPE_ARRAY)
+        error_at(node->token->str, node->token->len, "invalid dereference");
+      node->type = node->lhs->type->ptr_to;
+      size_of(node->type);  // 正しい型かを判定
+      return;
+    case ND_PREINCREMENT:
+    case ND_PREDECREMENT:
+    case ND_POSTINCREMENT:
+    case ND_POSTDECREMENT:
+      node->type = node->lhs->type;
+      if (node->lhs->type->ptr_to)
+        node->val = size_of(node->lhs->type->ptr_to);
+      return;
+    case ND_FUNCDEF: node->type = alloc_type(TYPE_VOID); return;
+    case ND_FUNCCALL: node->type = alloc_type(TYPE_INT); return;
+    case ND_RETURN: alloc_type(TYPE_VOID); return;
+    case ND_SIZEOF: node->type = alloc_type(TYPE_LONG); return;
+    case ND_IF:
+    case ND_ELIF:
+    case ND_FOR:
+    case ND_WHILE:
+    case ND_DO: node->type = alloc_type(TYPE_VOID); return;
+    case ND_TERNARY: node->type = node->lhs->type; return;
+    case ND_LOGICAL_OR:
+    case ND_LOGICAL_AND: alloc_type(TYPE_BOOL); return;
+    case ND_INCLUSIVE_OR:
+    case ND_EXCLUSIVE_OR:
+    case ND_AND:
+      // todo
+      node->type = alloc_type(TYPE_INT);
+      return;
+    case ND_LEFT_SHIFT:
+    case ND_RIGHT_SHIFT:
+      // TODO node->rhs->typeが整数型であるかの検証
+      node->type = node->lhs->type;
+      return;
+    case ND_VAR: node->type = node->var->type; return;
+    case ND_ARRAY:
+      // char *i = "hoge"; i[3]; 等が使えなくなるためコメントアウト
+      // if (node->rhs->val < 0 || node->rhs->val >= node->lhs->type->size)
+      //     error_at(node->token->str, "index out of bounds for type array");
+      node->kind = ND_DEREF;
+      node->lhs = new_node(ND_ADD, node->lhs, node->rhs, node->token);
+      node->rhs = NULL;
+      node->lhs->type = node->lhs->lhs->type;
+      add_type(node);
+      return;
+    case ND_DOT:
+    case ND_ARROW:
+    {
+      size_t offset = 0;
+      node->type = find_struct_child(node->lhs, node->rhs, &offset);
+      node->child_offset = offset;
+      return;
+    }
+    case ND_FIELD: node->type = alloc_type(TYPE_VOID); return;
+    case ND_NUM: node->type = alloc_type(TYPE_INT); return;
+    case ND_BLOCK: node->type = alloc_type(TYPE_VOID); return;
+    case ND_DISCARD_EXPR: node->type = alloc_type(TYPE_VOID); return;
+    case ND_STRING: node->type = alloc_type(TYPE_STR); return;
+    case ND_GOTO:
+    case ND_LABEL:
+    case ND_SWITCH: node->type = alloc_type(TYPE_VOID); return;
+    case ND_CASE:
+    {
+      size_t num;
+      node->switch_name = switch_add(node, &num);
+      node->case_num = num;
+      node->type = alloc_type(TYPE_VOID);
+      return;
+    }
+    default: unreachable();
   }
 }
 
@@ -267,20 +314,6 @@ void analyze_type(Node *node)
     case ND_STRING:
       // TODO ND_ARRAYのときは挙動が異なる
       node->literal_name = add_string_literal(node->token);
-      break;
-    case ND_ASSIGN:
-      if (!is_equal_type(node->lhs->type, node->rhs->type) &&
-          node->rhs->kind != ND_STRING)
-      {
-        TypeKind converted_type =
-            implicit_type_conversion_assign(node->lhs->type, node->rhs->type);
-        if (converted_type == TYPE_NULL)
-          error_at(node->token->str, node->token->len,
-                   "cannot convert both sides of '=' types");
-        node->type = alloc_type(converted_type);
-      }
-      else
-        node->type = node->lhs->type;
       break;
 
     case ND_NUM:

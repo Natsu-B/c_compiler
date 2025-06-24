@@ -143,9 +143,6 @@ Node *new_node_num(int val)
   Node *node = calloc(1, sizeof(Node));
   node->kind = ND_NUM;
   node->val = val;
-  Type *type = calloc(1, sizeof(Type));
-  type->type = TYPE_INT;
-  node->type = type;
   return node;
 }
 
@@ -640,7 +637,18 @@ Node *relational_expression()
 
 Node *shift_expression()
 {
-  return additive_expression();
+  Node *node = additive_expression();
+  for (;;)
+  {
+    Token *token = get_token();
+    if (consume(">>", TK_RESERVED))
+      node = new_node(ND_RIGHT_SHIFT, node, additive_expression(), token);
+    else if (consume("<<", TK_RESERVED))
+      node = new_node(ND_LEFT_SHIFT, node, additive_expression(), token);
+    else
+      break;
+  }
+  return node;
 }
 
 Node *additive_expression()
@@ -807,7 +815,6 @@ Node *primary_expression()
     node->kind = ND_STRING;
     Token *token = get_old_token();
     node->token = token;
-    node->type = alloc_type(TYPE_STR);
     return node;
   }
 

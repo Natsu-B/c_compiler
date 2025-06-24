@@ -178,6 +178,7 @@ assert 'enum tmp; enum tmp { a, b, c = 8, d,}; int main() {return b + d;}'
 assert 'int main() {int x =0; return x ? 10 : 1;}'
 assert 'int y() { exit(11); return 0;} int a() {exit(2); return 1;} int main() {int x = 1; int z = 0; if (x || y()) if (z && a()) return 5; else return 10;}'
 assert 'int main() { int x = 1; if (x | 0) x++; if (x&0) x--; if (x^1) x = x + 10; return x + 5;}'
+assert 'int main() { int x = 10; x = x << 5; x = x >> 1; return x;}'
 assert 'typedef int foo; int main(){ foo(i); i = 999; return i; }'
 
 (

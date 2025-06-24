@@ -177,6 +177,9 @@ Node *constant_expression();
 Node *conditional_expression();
 Node *logical_OR_expression();
 Node *logical_AND_expression();
+Node *inclusive_OR_expression();
+Node *exclusive_OR_expression();
+Node *AND_expression();
 Node *equality_expression();
 Node *relational_expression();
 Node *shift_expression();
@@ -530,10 +533,6 @@ Node *constant_expression()
 
 Node *conditional_expression()
 {
-  // inclusive-OR-expression
-  // exclusive-OR-expression
-  // AND-expression
-  // equality-expression
   Node *node = logical_OR_expression();
   if (consume("?", TK_RESERVED))
   {
@@ -553,20 +552,53 @@ Node *logical_OR_expression()
   while (consume("||", TK_RESERVED))
   {
     Token *old = get_old_token();
-    node = new_node(ND_LOGICALOR, node, logical_AND_expression(), old);
-    node->name = generate_label_name(ND_LOGICALOR);
+    node = new_node(ND_LOGICAL_OR, node, logical_AND_expression(), old);
+    node->name = generate_label_name(ND_LOGICAL_OR);
   }
   return node;
 }
 
 Node *logical_AND_expression()
 {
-  Node *node = equality_expression();
+  Node *node = inclusive_OR_expression();
   while (consume("&&", TK_RESERVED))
   {
     Token *old = get_old_token();
-    node = new_node(ND_LOGICALAND, node, equality_expression(), old);
-    node->name = generate_label_name(ND_LOGICALAND);
+    node = new_node(ND_LOGICAL_AND, node, equality_expression(), old);
+    node->name = generate_label_name(ND_LOGICAL_AND);
+  }
+  return node;
+}
+
+Node *inclusive_OR_expression()
+{
+  Node *node = exclusive_OR_expression();
+  while (consume("|", TK_RESERVED))
+  {
+    Token *old = get_old_token();
+    node = new_node(ND_INCLUSIVE_OR, node, exclusive_OR_expression(), old);
+  }
+  return node;
+}
+
+Node *exclusive_OR_expression()
+{
+  Node *node = AND_expression();
+  while (consume("^", TK_RESERVED))
+  {
+    Token *old = get_old_token();
+    node = new_node(ND_EXCLUSIVE_OR, node, AND_expression(), old);
+  }
+  return node;
+}
+
+Node *AND_expression()
+{
+  Node *node = equality_expression();
+  while (consume("&", TK_RESERVED))
+  {
+    Token *old = get_old_token();
+    node = new_node(ND_AND, node, equality_expression(), old);
   }
   return node;
 }

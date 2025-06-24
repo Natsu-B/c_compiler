@@ -66,7 +66,8 @@ storage-class-specifier
         | "auto";
 
 type-specifier
-        = "char"
+        = "void"
+        | "char"
         | "short"
         | "int"
         | "long"
@@ -147,13 +148,13 @@ logical-AND-expression
         = inclusive-OR-expression, { "&&", inclusive-OR-expression };
 
 inclusive-OR-expression
-        = exclusive-OR-expression;
+        = exclusive-OR-expression, { "|", exclusive-OR-expression };
 
 exclusive-OR-expression
-        = AND-expression;
+        = AND-expression, { "^", AND-expression };
 
 AND-expression
-        = equality-expression;
+        = equality-expression, { "&", equality-expression };
 
 equality-expression
         = relational-expression, { ( "=="

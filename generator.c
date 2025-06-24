@@ -490,24 +490,43 @@ void gen(Node *node)
       output_file(".Lendternary%s:", node->name->name);
     }
       return;
-    case ND_LOGICALAND:
-    case ND_LOGICALOR:
+    case ND_LOGICAL_AND:
+    case ND_LOGICAL_OR:
     {
       output_debug2("ND_LOGICAL AND/OR");
       gen(node->lhs);
       output_file("    pop rax");
       output_file("    cmp rax, 0");
       output_file("    %s .Lfalselogical%s%s",
-                  node->kind == ND_LOGICALAND ? "je" : "jne",
-                  node->kind == ND_LOGICALAND ? "and" : "or", node->name->name);
+                  node->kind == ND_LOGICAL_AND ? "je" : "jne",
+                  node->kind == ND_LOGICAL_AND ? "and" : "or",
+                  node->name->name);
       gen(node->rhs);
       output_file("    jmp .Lendlogical%s%s",
-                  node->kind == ND_LOGICALAND ? "and" : "or", node->name->name);
-      output_file(".Lfalselogical%s%s:",
-                  node->kind == ND_LOGICALAND ? "and" : "or", node->name->name);
+                  node->kind == ND_LOGICAL_AND ? "and" : "or",
+                  node->name->name);
+      output_file(
+          ".Lfalselogical%s%s:", node->kind == ND_LOGICAL_AND ? "and" : "or",
+          node->name->name);
       output_file("    push rax");
-      output_file(".Lendlogical%s%s:",
-                  node->kind == ND_LOGICALAND ? "and" : "or", node->name->name);
+      output_file(
+          ".Lendlogical%s%s:", node->kind == ND_LOGICAL_AND ? "and" : "or",
+          node->name->name);
+    }
+      return;
+    case ND_INCLUSIVE_OR:
+    case ND_AND:
+    case ND_EXCLUSIVE_OR:
+    {
+      output_debug2("ND_INCLUSIVE_OR / ND_AND");
+      gen(node->lhs);
+      gen(node->rhs);
+      output_file("    pop rax");
+      output_file("    pop rdi");
+      output_file("    %s rax, rdi", node->kind == ND_INCLUSIVE_OR ? "or"
+                                     : node->kind == ND_AND        ? "and"
+                                                                   : "xor");
+      output_file("    push rax");
     }
       return;
     default: break;

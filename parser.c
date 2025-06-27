@@ -276,8 +276,9 @@ Node *declaration(Type *type)
 Node *init_declarator(Type *type)
 {
   Node *node = declarator(type);
+  Token *old = get_token();
   if (consume("=", TK_RESERVED))
-    node = new_node(ND_ASSIGN, node, initializer(), get_old_token());
+    node = new_node(ND_ASSIGN, node, assignment_expression(), old);
   return node;
 }
 
@@ -515,11 +516,43 @@ Node *assignment_expression()
 {
   pr_debug2("assignment-expression");
   Node *node = conditional_expression();
-
+  Token *old = get_token();
   if (consume("=", TK_RESERVED))
-  {
     node = new_node(ND_ASSIGN, node, assignment_expression(), get_old_token());
-  }
+  else if (consume("*=", TK_RESERVED))
+    node = new_node(ND_ASSIGNMENT, NULL,
+                    new_node(ND_MUL, node, assignment_expression(), old), old);
+  else if (consume("/=", TK_RESERVED))
+    node = new_node(ND_ASSIGNMENT, NULL,
+                    new_node(ND_DIV, node, assignment_expression(), old), old);
+  else if (consume("%=", TK_RESERVED))
+    node = new_node(ND_ASSIGNMENT, NULL,
+                    new_node(ND_IDIV, node, assignment_expression(), old), old);
+  else if (consume("+=", TK_RESERVED))
+    node = new_node(ND_ASSIGNMENT, NULL,
+                    new_node(ND_ADD, node, assignment_expression(), old), old);
+  else if (consume("-=", TK_RESERVED))
+    node = new_node(ND_ASSIGNMENT, NULL,
+                    new_node(ND_SUB, node, assignment_expression(), old), old);
+  else if (consume("<<=", TK_RESERVED))
+    node = new_node(ND_ASSIGNMENT, NULL,
+                    new_node(ND_LEFT_SHIFT, node, assignment_expression(), old),
+                    old);
+  else if (consume(">>=", TK_RESERVED))
+    node = new_node(
+        ND_ASSIGNMENT, NULL,
+        new_node(ND_RIGHT_SHIFT, node, assignment_expression(), old), old);
+  else if (consume("&=", TK_RESERVED))
+    node = new_node(ND_ASSIGNMENT, NULL,
+                    new_node(ND_AND, node, assignment_expression(), old), old);
+  else if (consume("^=", TK_RESERVED))
+    node = new_node(
+        ND_ASSIGNMENT, NULL,
+        new_node(ND_EXCLUSIVE_OR, node, assignment_expression(), old), old);
+  else if (consume("|=", TK_RESERVED))
+    node = new_node(
+        ND_ASSIGNMENT, NULL,
+        new_node(ND_INCLUSIVE_OR, node, assignment_expression(), old), old);
   return node;
 }
 

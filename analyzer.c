@@ -86,39 +86,10 @@ void switch_end()
   vector_pop(switch_list.case_list);
 }
 
-void add_type(Node *node)
-{
-  if (!node)
-    return;
-  if (node->kind == ND_SWITCH)
-    node->case_list = switch_new(node->name);
-  if (node->lhs)
-    add_type(node->lhs);
-  if (node->chs)
-    add_type(node->chs);
-  if (node->rhs)
-    add_type(node->rhs);
-  if (node->condition)
-    add_type(node->condition);
-  if (node->true_code)
-    add_type(node->true_code);
-  if (node->false_code)
-    add_type(node->false_code);
-  if (node->init)
-    add_type(node->init);
-  if (node->update)
-    add_type(node->update);
-  if (node->statement_child)
-    add_type(node->statement_child);
-  if (node->expr)
-    for (NDBlock *tmp = node->expr; tmp; tmp = tmp->next)
-      add_type(tmp->node);
-  if (node->stmt)
-    for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
-      add_type(tmp->node);
-  if (node->kind == ND_SWITCH)
-    switch_end();
+void add_type(Node *node);
 
+void add_type_internal(Node *node)
+{
   switch (node->kind)
   {
     case ND_ADD:
@@ -163,7 +134,8 @@ void add_type(Node *node)
     case ND_MUL:
     case ND_DIV:
     {
-      TypeKind kind = implicit_type_conversion_assign(node->lhs->type, node->rhs->type);
+      TypeKind kind =
+          implicit_type_conversion_assign(node->lhs->type, node->rhs->type);
       if (kind == TYPE_PTR)
         error_at(node->token->str, node->token->len,
                  "operands for '%s' must be integer types",
@@ -235,6 +207,13 @@ void add_type(Node *node)
       // TODO node->rhs->typeが整数型であるかの検証
       node->type = node->lhs->type;
       return;
+    case ND_ASSIGNMENT:
+      node->kind = ND_ASSIGN;
+      if (!node->rhs->lhs || node->rhs->lhs->kind != ND_VAR)
+        error_at(node->token->str, node->token->len, "invalid token");
+      node->lhs = node->rhs->lhs;
+      add_type_internal(node);
+      return;
     case ND_VAR: node->type = node->var->type; return;
     case ND_ARRAY:
       // char *i = "hoge"; i[3]; 等が使えなくなるためコメントアウト
@@ -272,6 +251,42 @@ void add_type(Node *node)
     }
     default: unreachable();
   }
+}
+
+void add_type(Node *node)
+{
+  if (!node)
+    return;
+  if (node->kind == ND_SWITCH)
+    node->case_list = switch_new(node->name);
+  if (node->lhs)
+    add_type(node->lhs);
+  if (node->chs)
+    add_type(node->chs);
+  if (node->rhs)
+    add_type(node->rhs);
+  if (node->condition)
+    add_type(node->condition);
+  if (node->true_code)
+    add_type(node->true_code);
+  if (node->false_code)
+    add_type(node->false_code);
+  if (node->init)
+    add_type(node->init);
+  if (node->update)
+    add_type(node->update);
+  if (node->statement_child)
+    add_type(node->statement_child);
+  if (node->expr)
+    for (NDBlock *tmp = node->expr; tmp; tmp = tmp->next)
+      add_type(tmp->node);
+  if (node->stmt)
+    for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
+      add_type(tmp->node);
+  if (node->kind == ND_SWITCH)
+    switch_end();
+
+  add_type_internal(node);
 }
 
 void analyze_type(Node *node)

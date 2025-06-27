@@ -136,7 +136,17 @@ assignment-expression
         | conditional-expression, assignment-operator, assignment-expression;
 
 assignment-operator
-        = "=";
+        = "="
+        | "*="
+        | "/="
+        | "%="
+        | "+="
+        | "-="
+        | "<<="
+        | ">>="
+        | "&="
+        | "^="
+        | "|=";
 
 conditional-expression
         = logical-OR-expression, [ "?", expression, ":", expression ];

@@ -257,16 +257,27 @@ Token *tokenize_once(char *input, char **end)
       return cur;
     }
     cur = new_token(TK_RESERVED, input);
-    // "==", "<=", ">=", "!=", "&&", "||", "->", "++", "--" の場合
-    if ((*(input + 1) == '=' &&
-         (*input == '<' || *input == '>' || *input == '!' || *input == '=')) ||
-        (*(input + 1) == '>' && *input == '>') ||
-        (*(input + 1) == '<' && *input == '<') ||
-        (*(input + 1) == '&' && *input == '&') ||
-        (*(input + 1) == '|' && *input == '|') ||
-        (*(input + 1) == '+' && *input == '+') ||
-        (*(input + 1) == '-' && *input == '-') ||
-        (*(input + 1) == '>' && *input == '-'))
+    // "==", "<=", ">=", "!=", "&&", "||", "->", "++", "--", "*=", "/=", "%=",
+    // "+=", "-=", "<<=", ">>=", "&=", "^=", "|=" の場合
+    if ((*(input + 2) == '=' && ((*(input + 1) == '<' && *(input) == '<') ||
+                                 (*(input + 1) == '>' && *(input) == '>'))))
+    {
+      pr_debug2("find RESERVED token: %.3s", input);
+      cur->len = 3;
+      input += 3;
+    }
+    else if ((*(input + 1) == '=' &&
+              (*input == '<' || *input == '>' || *input == '!' ||
+               *input == '=' || *input == '*' || *input == '/' ||
+               *input == '%' || *input == '+' || *input == '-' ||
+               *input == '&' || *input == '^' || *input == '|')) ||
+             (*(input + 1) == '>' && *input == '>') ||
+             (*(input + 1) == '<' && *input == '<') ||
+             (*(input + 1) == '&' && *input == '&') ||
+             (*(input + 1) == '|' && *input == '|') ||
+             (*(input + 1) == '+' && *input == '+') ||
+             (*(input + 1) == '-' && *input == '-') ||
+             (*(input + 1) == '>' && *input == '-'))
     {
       pr_debug2("find RESERVED token: %.2s", input);
       cur->len = 2;

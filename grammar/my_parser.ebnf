@@ -185,7 +185,8 @@ additive-expression
 
 multiplicative-expression
         = cast-expression, { ( "*"
-        | "/" ), cast-expression };
+        | "/"
+        | "%" ), cast-expression };
 
 cast-expression
         = unary-expression;

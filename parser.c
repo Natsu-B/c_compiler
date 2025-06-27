@@ -717,6 +717,8 @@ Node *multiplicative_expression()
       node = new_node(ND_MUL, node, cast_expression(), get_old_token());
     else if (consume("/", TK_RESERVED))
       node = new_node(ND_DIV, node, cast_expression(), get_old_token());
+    else if (consume("%", TK_RESERVED))
+      node = new_node(ND_IDIV, node, cast_expression(), get_old_token());
     else
       return node;
   }

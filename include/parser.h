@@ -20,6 +20,7 @@ typedef enum
   ND_SUB,            // -
   ND_MUL,            // *
   ND_DIV,            // /
+  ND_IDIV,           // %
   ND_EQ,             // ==
   ND_NEQ,            // !=
   ND_LT,             // <
@@ -96,15 +97,16 @@ struct GTLabel
 
 // デバッグ時利用 NodeKindに追加したら必ず追加すること
 #define NodeKindTable                                                          \
-  "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_EQ", "ND_NEQ", "ND_LT",          \
-      "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF", "ND_PREINCREMENT",         \
-      "ND_PREDECREMENT", "ND_POSTINCREMENT", "ND_POSTDECREMENT", "ND_FUNCDEF", \
-      "ND_FUNCCALL", "ND_RETURN", "ND_SIZEOF", "ND_IF", "ND_ELIF", "ND_FOR",   \
-      "ND_WHILE", "ND_DO", "ND_TERNARY", "ND_LOGICAL_OR", "ND_LOGICAL_AND",    \
-      "ND_INCLUSIVE_OR", "ND_EXCLUSIVE_OR", "ND_AND", "ND_LEFT_SHIFT",         \
-      "ND_RIGHT_SHIFT", "ND_ASSIGNMENT", "ND_VAR", "ND_ARRAY", "ND_DOT",       \
-      "ND_ARROW", "ND_FIELD", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR",         \
-      "ND_STIRNG", "ND_GOTO", "ND_LABEL", "ND_CASE", "ND_SWITCH"
+  "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_IDIV", "ND_EQ", "ND_NEQ",        \
+      "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF",                   \
+      "ND_PREINCREMENT", "ND_PREDECREMENT", "ND_POSTINCREMENT",                \
+      "ND_POSTDECREMENT", "ND_FUNCDEF", "ND_FUNCCALL", "ND_RETURN",            \
+      "ND_SIZEOF", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE", "ND_DO",          \
+      "ND_TERNARY", "ND_LOGICAL_OR", "ND_LOGICAL_AND", "ND_INCLUSIVE_OR",      \
+      "ND_EXCLUSIVE_OR", "ND_AND", "ND_LEFT_SHIFT", "ND_RIGHT_SHIFT",          \
+      "ND_ASSIGNMENT", "ND_VAR", "ND_ARRAY", "ND_DOT", "ND_ARROW", "ND_FIELD", \
+      "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR", "ND_STIRNG", "ND_GOTO",         \
+      "ND_LABEL", "ND_CASE", "ND_SWITCH"
 extern const char *nodekindlist[];
 
 struct Node

@@ -557,8 +557,11 @@ void gen(Node *node)
     case ND_SUB: output_file("    sub rax, rdi"); break;
     case ND_MUL: output_file("    imul rax, rdi"); break;
     case ND_DIV:
+    case ND_IDIV:
       output_file("    cqo");
       output_file("    idiv rdi");
+      if (node->kind == ND_IDIV)
+        output_file("    mov rax, rdx");
       break;
     case ND_EQ:
     case ND_NEQ:

@@ -133,6 +133,7 @@ void add_type_internal(Node *node)
       return;
     case ND_MUL:
     case ND_DIV:
+    case ND_IDIV:
     {
       TypeKind kind =
           implicit_type_conversion_assign(node->lhs->type, node->rhs->type);

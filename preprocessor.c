@@ -21,6 +21,20 @@ size_t File_Line = 1;
 char *File_Start;
 long long include_level = -1;
 
+#ifdef __GNUC__
+__asm__(
+    "gcc_predef_start: \n"
+    " .incbin \"gcc_predef.h\" \n"
+    "gcc_predef_end: \n");
+extern char *gcc_predef_start;
+extern char *gcc_predef_end;
+#elif defined(__MYCC__)
+#pragma GCC_PREDEF
+char *gcc_predef_end;
+#else
+#error unsupported compiler
+#endif
+
 void line_count()
 {
   File_Line++;
@@ -273,7 +287,43 @@ Token *directive(Token *old)
       }
       if (!strncmp(token->str, "pragma", 6))
       {
-        unimplemented();
+        token_void(token);
+        token = token_next_not_ignorable_void(token);
+        if (token->len == 10 && !strncmp(token->str, "GCC_PREDEF", 10))
+        {
+          token_void(token);
+          Token *next = token->next;
+          token->kind = TK_IDENT;
+          token->str = "char";
+          token->len = 4;
+          token = token->next = malloc(sizeof(Token));
+          token->kind = TK_RESERVED;
+          token->str = "*";
+          token->len = 1;
+          token = token->next = malloc(sizeof(Token));
+          token->kind = TK_IDENT;
+          token->str = "gcc_predef_start";
+          token->len = 16;
+          token = token->next = malloc(sizeof(Token));
+          token->kind = TK_RESERVED;
+          token->str = "=";
+          token->len = 1;
+          token = token->next = malloc(sizeof(Token));
+          char *gcc_predef_str = malloc(gcc_predef_start - gcc_predef_end +
+                                        3 /* null terminator*/);
+          *(gcc_predef_str) = *(gcc_predef_str + (size_t)gcc_predef_start -
+                                (size_t)gcc_predef_end + 1) = '"';
+          *(gcc_predef_str + (size_t)gcc_predef_start - (size_t)gcc_predef_end +
+            2) = '\0';
+          strncpy(gcc_predef_str + 1, gcc_predef_start,
+                  gcc_predef_end - gcc_predef_start + 1);
+          token->kind = TK_STRING;
+          token->str = gcc_predef_str;
+          token->len = gcc_predef_end - gcc_predef_start + 3;
+          token->next = next;
+          return next;
+        }
+        error_at(token->str, token->len, "unknown pragma directive");
         return token_next_not_ignorable_void(token);
       }
       break;
@@ -429,22 +479,11 @@ Token *preprocess(char *input, char *end, char *file_name, Token *token)
   return token;
 }
 
-#ifdef __GNUC__
-__asm__(
-    "gcc_predef_start: \n"
-    " .incbin \"gcc_predef.h\" \n"
-    "gcc_predef_end: \n");
-extern char gcc_predef_start[];
-extern char gcc_predef_end[];
-#else
-#error this is only supported in gcc
-#endif
-
 void set_default_definition()
 {
   char *predef_start =
       "#define __FILE__ \n#define __LINE__ \n#define __DATE__ \n#define "
-      "__TIME__ \n #define __INCLUDE_LEVEL__\n";
+      "__TIME__ \n #define __INCLUDE_LEVEL__\n#define __MYCC__\n";
   char *predef_end = predef_start + strlen(predef_start);
 
   preprocess(predef_start, predef_end, NULL, NULL);

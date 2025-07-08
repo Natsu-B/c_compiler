@@ -44,12 +44,22 @@ void vector_push(Vector *vec, void *data)
 // lenは1始まり
 void vector_insert(Vector *vec, size_t len, void *data)
 {
-  if (vec->len + 1 < len)
+  if (len > vec->len + 1 || len == 0)
     error_exit("Invalid vector insertion");
-  size_t len_max = (vec->len < len ? len : vec->len);
-  if (vec->capacity < len_max)
-    vec->data = realloc(vec->data, vec->capacity + 8);
+
+  if (vec->capacity < vec->len + 1)
+  {
+    vec->capacity += 8;
+    vec->data = realloc(vec->data, sizeof(void *) * vec->capacity);
+  }
+
+  if (len <= vec->len)
+  {
+    memmove(&vec->data[len], &vec->data[len - 1], sizeof(void *) * (vec->len - (len - 1)));
+  }
+
   vec->data[len - 1] = data;
+  vec->len++;
 }
 
 void *vector_pop(Vector *vec)
@@ -96,21 +106,23 @@ void *vector_pop_at(Vector *vec, size_t location)
         "only %lu elements",
         location, vec->len);
   void *return_data = vec->data[location - 1];
-  if (vec->len > 1)
+  if (location < vec->len)
+  {
     memmove(&vec->data[location - 1], &vec->data[location],
-            vec->len-- - location);
-  else
-    vec->len--;
+            sizeof(void *) * (vec->len - location));
+  }
+  vec->len--;
   return return_data;
 }
 
 // 引数の2つのベクトルが等しければtrueを返す
 bool vector_compare(Vector *vec1, Vector *vec2)
 {
-  if (vector_size(vec1) == vector_size(vec2) &&
-      !memcmp(*vec1->data, *vec2->data, vec1->len))
+  if (vector_size(vec1) != vector_size(vec2))
+    return false;
+  if (vector_size(vec1) == 0)
     return true;
-  return false;
+  return memcmp(vec1->data, vec2->data, vector_size(vec1) * sizeof(void *)) == 0;
 }
 
 void vector_free(Vector *vec)

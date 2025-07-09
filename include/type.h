@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "vector.h"
+
 typedef struct Type Type;
 typedef struct Token Token;
 
@@ -21,6 +23,7 @@ typedef enum
   TYPE_STRUCT,    // struct、union で定義されている型
   TYPE_PTR,       // 型へのポインタ
   TYPE_ARRAY,     // 配列
+  TYPE_FUNC,      // 関数
   TYPE_TYPEDEF,   // typedef
   TYPE_ENUM,      // enum
   TYPE_NULL,      // 失敗時等に返す 実際の型ではない
@@ -33,9 +36,11 @@ struct Type
   Type *ptr_to;  // TYPE_PTR, TYPE_ARRAY, TYPE_TYPEDEFのとき利用
   union
   {
-    bool is_signed;   // TYPE_INT等の整数型のとき利用
-    size_t size;      // TYPE_ARRAYのとき利用
-    size_t type_num;  // TYPE_STRUCTのとき利用
+    bool is_signed;      // TYPE_INT等の整数型のとき利用
+    size_t size;         // TYPE_ARRAYのとき利用
+    size_t type_num;     // TYPE_STRUCTのとき利用
+    Vector *param_list;  // TYPE_FUNCのとき利用 1つ目の引数は返り値の型
+                         // その他は引数の型
   };
 };
 
@@ -43,6 +48,7 @@ typedef struct Node Node;  // parser.hをincludeできないため定義だけ�
 
 Type *alloc_type(TypeKind kind);
 Type *declaration_specifiers();
+bool add_function_name(Vector *function_list, Token *name);
 
 enum member_name
 {

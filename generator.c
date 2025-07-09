@@ -238,14 +238,12 @@ void gen(Node *node)
       output_debug2("FUNC CALL");
       output_debug("start calling %.*s", (int)node->func_len, node->func_name);
       {
-        NDBlock *pointer = node->expr;
-        int i = 0;
-        while (pointer)
+        for (size_t i = 1; i <= vector_size(node->expr); i++)
         {
-          gen(pointer->node);
+          gen(vector_peek_at(node->expr, i));
           output_file("    pop rax");
 
-          switch (++i)
+          switch (i)
           {
             case 1: output_file("    mov rdi, rax"); break;
             case 2: output_file("    mov rsi, rax"); break;
@@ -255,7 +253,6 @@ void gen(Node *node)
             case 6: output_file("    mov r9, rax"); break;
             default: error_exit_with_guard("too much arguments"); break;
           }
-          pointer = pointer->next;
         }
       }
       output_file("    mov rax, rsp");
@@ -630,35 +627,36 @@ void generator(FuncBlock *parsed, char *output_filename)
       output_file("    mov rbp, rsp");
       output_file("    sub rsp, %lu", pointer->stacksize);
       int j = 0;
-      for (NDBlock *pointer = node->expr; pointer; pointer = pointer->next)
+      for (size_t i = 1; i <= vector_size(node->expr); i++)
       {
-        if (pointer->node->kind != ND_VAR)
+        Node *param = vector_peek_at(node->expr, i);
+        if (param->kind != ND_VAR)
           error_exit_with_guard("invalid function arguments");
         switch (++j)
         {
           case 1:
-            output_file("    mov [rbp-%lu], %s", pointer->node->var->offset,
-                        chose_register(size_of(pointer->node->type), rdi));
+            output_file("    mov [rbp-%lu], %s", param->var->offset,
+                        chose_register(size_of(param->type), rdi));
             break;
           case 2:
-            output_file("    mov [rbp-%lu], %s", pointer->node->var->offset,
-                        chose_register(size_of(pointer->node->type), rsi));
+            output_file("    mov [rbp-%lu], %s", param->var->offset,
+                        chose_register(size_of(param->type), rsi));
             break;
           case 3:
-            output_file("    mov [rbp-%lu], %s", pointer->node->var->offset,
-                        chose_register(size_of(pointer->node->type), rdx));
+            output_file("    mov [rbp-%lu], %s", param->var->offset,
+                        chose_register(size_of(param->type), rdx));
             break;
           case 4:
-            output_file("    mov [rbp-%lu], %s", pointer->node->var->offset,
-                        chose_register(size_of(pointer->node->type), rcx));
+            output_file("    mov [rbp-%lu], %s", param->var->offset,
+                        chose_register(size_of(param->type), rcx));
             break;
           case 5:
-            output_file("    mov [rbp-%lu], %s", pointer->node->var->offset,
-                        chose_register(size_of(pointer->node->type), r8));
+            output_file("    mov [rbp-%lu], %s", param->var->offset,
+                        chose_register(size_of(param->type), r8));
             break;
           case 6:
-            output_file("    mov [rbp-%lu], %s", pointer->node->var->offset,
-                        chose_register(size_of(pointer->node->type), r9));
+            output_file("    mov [rbp-%lu], %s", param->var->offset,
+                        chose_register(size_of(param->type), r9));
             break;
           default: error_exit_with_guard("too much arguments"); break;
         }

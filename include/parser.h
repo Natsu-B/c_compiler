@@ -142,7 +142,7 @@ struct Node
   };
   struct
   {                   // ND_BLOCK ND_FUNCCALL ND_FUNCDEF
-    NDBlock *expr;    // expr ND_FUNCCALL ND_FUNCDEFで利用
+    Vector *expr;     // expr ND_FUNCCALL ND_FUNCDEFで利用
     NDBlock *stmt;    // stmt ND_BLOCK ND_FUNCDEFで利用
     char *func_name;  // ND_FUNCCALL ND_FUNCDEF で利用 関数名
     size_t func_len;  // ND_FUNCCALL ND_FUNCDEF のときのみ利用 関数名長さ

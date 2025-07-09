@@ -181,6 +181,9 @@ assert 'int main() { int x = 1; if (x | 0) x++; if (x&0) x--; if (x^1) x = x + 1
 assert 'int main() { int x = 10; x = x << 5; x = x >> 1; return x;}'
 assert 'int main() {int x= 1; x += 100; x -= 2; x/=3; x <<= 1; x >>= 2; x*= 10; return x;}'
 assert 'int main() {int x =111; x %= 5; int y = 199; x += y % 9; return x;}'
+assert 'int add(int a, int b); int main() {int i = 0; int j = 1; return add(i, j);} int add(int a, int b) {return a + b;}'
+assert 'int sub(int, int); int main() {int sub(int,int); int i = 100; int y = 90; return sub (i, y);} int sub(int a, int b) {return a - b;}'
+assert 'int foo(); int main() { return foo(); } int foo() { return 123; }'
 assert 'typedef int foo; int main(){ foo(i); i = 999; return i; }'
 
 (

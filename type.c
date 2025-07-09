@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "include/analyzer.h"
 #include "include/error.h"
 #include "include/eval_constant.h"
 #include "include/parser.h"
@@ -23,6 +24,7 @@ typedef struct
   {
     typedef_name,
     enum_member,
+    function_definition_name,
   } ordinary_kind;
   Token* name;
   Type* type;
@@ -381,6 +383,46 @@ void add_typedef(Token* token, Type* type)
   vector_push(vector_peek(OrdinaryNamespaceList), new);
 }
 
+bool add_function_name(Vector* function_list, Token* name)
+{
+  // 名前空間に以前から同じ名前で異なるものがないかを判別する
+  for (size_t i = 1; i <= vector_size(OrdinaryNamespaceList); i++)
+  {
+    Vector* typedef_nest = vector_peek_at(OrdinaryNamespaceList, i);
+    for (size_t j = 1; j <= vector_size(typedef_nest); j++)
+    {
+      ordinary_data_list* tmp = vector_peek_at(typedef_nest, j);
+      if (tmp->name->len == name->len &&
+          !strncmp(tmp->name->str, name->str, name->len))
+      {
+        bool is_same = false;
+        if (tmp->ordinary_kind == function_definition_name &&
+            vector_size(function_list) == vector_size(tmp->type->param_list))
+        {
+          for (size_t k = 1; k <= vector_size(tmp->type->param_list); k++)
+          {
+            if (!is_equal_type(vector_peek_at(function_list, k),
+                               vector_peek_at(tmp->type->param_list, k)))
+              goto end;
+          }
+          is_same = true;
+        end:
+        }
+        if (!is_same || tmp->ordinary_kind != function_definition_name)
+          return false;
+      }
+    }
+  }
+  // なければ追加する
+  ordinary_data_list* new = calloc(1, sizeof(ordinary_data_list));
+  new->ordinary_kind = function_definition_name;
+  new->name = name;
+  new->type = alloc_type(TYPE_FUNC);
+  new->type->param_list = function_list;
+  vector_push(vector_peek(OrdinaryNamespaceList), new);
+  return true;
+}
+
 enum member_name is_enum_or_function_name(Token* token, size_t* number)
 {
   for (size_t i = 1; i <= vector_size(OrdinaryNamespaceList); i++)
@@ -389,11 +431,18 @@ enum member_name is_enum_or_function_name(Token* token, size_t* number)
     for (size_t j = 1; j <= vector_size(typedef_nest); j++)
     {
       ordinary_data_list* tmp = vector_peek_at(typedef_nest, j);
-      if (tmp->ordinary_kind == enum_member && tmp->name->len == token->len &&
+      if (tmp->name->len == token->len &&
           !strncmp(tmp->name->str, token->str, token->len))
       {
-        *number = tmp->enum_number;
-        return enum_member_name;
+        if (tmp->ordinary_kind == enum_member)
+        {
+          *number = tmp->enum_number;
+          return enum_member_name;
+        }
+        else if (tmp->ordinary_kind == function_definition_name)
+          return function_name;
+        else
+          return none_of_them;
       }
     }
   }

@@ -8,7 +8,7 @@ external-declaration
         = function-definition
         | declaration;
 
-function-definition = declaration-specifiers, identifier, "(", parameter-type-list, ")", compound-statement;
+function-definition = declaration-specifiers, identifier, "(", [ parameter-type-list ], ")", compound-statement;
 
 (* STATEMENTS *)
 statement
@@ -107,13 +107,15 @@ declarator
         = direct-declarator;
 
 direct-declarator
-        = identifier, [ "[", constant, "]" ];
+        = identifier, [ "[", constant, "]" ]
+        | identifier, "(", [ parameter-type-list ], ")";
 
 pointer
         = { "*" };
 
 parameter-type-list
-        = parameter-declaration, { ",", parameter-declaration }, [ "," ];
+        = "void"
+        | parameter-declaration, { ",", parameter-declaration }, [ "," ];
 
 parameter-declaration
         = declaration-specifiers, declarator;

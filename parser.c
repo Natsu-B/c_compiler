@@ -16,6 +16,34 @@
 #include "include/variables.h"
 #include "include/vector.h"
 
+Node *external_declaration();
+Node *function_declaration();
+Node *declaration(Type *type);
+Node *init_declarator(Type *type);
+Node *declarator_no_side_effect();
+Node *declarator(Type *type);
+Node *initializer();
+Node *block_item();
+Node *statement();
+Node *expression();
+Node *assignment_expression();
+Node *constant_expression();
+Node *conditional_expression();
+Node *logical_OR_expression();
+Node *logical_AND_expression();
+Node *inclusive_OR_expression();
+Node *exclusive_OR_expression();
+Node *AND_expression();
+Node *equality_expression();
+Node *relational_expression();
+Node *shift_expression();
+Node *additive_expression();
+Node *multiplicative_expression();
+Node *cast_expression();
+Node *unary_expression();
+Node *postfix_expression();
+Node *primary_expression();
+
 const char *nodekindlist[] = {NodeKindTable};
 
 // 同じnestのGTLabelを保持しているvectorを保持するvector
@@ -160,32 +188,37 @@ void exit_nest()
   exit_nest_variables();
 }
 
-Node *external_declaration();
-Node *function_declaration();
-Node *declaration(Type *type);
-Node *init_declarator(Type *type);
-Node *declarator(Type *type);
-Node *initializer();
-Node *block_item();
-Node *statement();
-Node *expression();
-Node *assignment_expression();
-Node *constant_expression();
-Node *conditional_expression();
-Node *logical_OR_expression();
-Node *logical_AND_expression();
-Node *inclusive_OR_expression();
-Node *exclusive_OR_expression();
-Node *AND_expression();
-Node *equality_expression();
-Node *relational_expression();
-Node *shift_expression();
-Node *additive_expression();
-Node *multiplicative_expression();
-Node *cast_expression();
-Node *unary_expression();
-Node *postfix_expression();
-Node *primary_expression();
+Vector *parameter_type_list(Vector **type_list, Type *type)
+{  // 関数の引数のnode リストを作成 ")"をconsumeして終了する
+  if (type_list)
+    vector_push(*type_list, type);
+  Vector *list = vector_new();
+  if (consume("void", TK_IDENT))
+  {
+    expect(")", TK_RESERVED);
+    return list;
+  }
+  while (!consume(")", TK_RESERVED))
+  {
+    Type *type = declaration_specifiers();
+    Node *parameter = declarator_no_side_effect(type);
+    if (!parameter)
+      error_exit("invalid parameter");
+    vector_push(list, parameter);
+    if (type_list)
+      vector_push(*type_list, type);
+    if (!consume(",", TK_RESERVED))
+    {
+      expect(")", TK_RESERVED);
+      break;
+    }
+  }
+  return list;
+}
+
+// ------------------------------------------------------------------------------------
+// parser
+// ------------------------------------------------------------------------------------
 
 FuncBlock *parser()
 {
@@ -226,39 +259,44 @@ Node *external_declaration()
     node->kind = ND_FUNCDEF;
     node->func_name = token->str;
     node->func_len = token->len;
-    new_nest();
     node->type = type;
     program_name = token->str;
     program_name_len = token->len;
-    NDBlock head;
-    head.next = NULL;
-    NDBlock *pointer = &head;
-    bool is_comma = true;
-    while (!consume(")", TK_RESERVED))
-    {
-      if (!is_comma)
-        error_at(get_token()->str, get_token()->len, "invalid parameter");
-      is_comma = false;
-      NDBlock *next = calloc(1, sizeof(NDBlock));
-      pointer->next = next;
-      next->node = declarator(declaration_specifiers());
-      pointer = next;
-      is_comma = consume(",", TK_RESERVED);
-    }
+    Vector *type_list = vector_new();
+    node->expr = parameter_type_list(&type_list, type);
+    Type *func_type = alloc_type(TYPE_FUNC);
+    func_type->param_list = type_list;
 
-    node->expr = head.next;
-    head.next = NULL;
-    pointer = &head;
-    expect("{", TK_RESERVED);
-    while (!consume("}", TK_RESERVED))
+    if (!add_function_name(type_list, token))
+      error_at(token->str, token->len, "invalid name");
+    if (consume("{", TK_RESERVED))
     {
-      NDBlock *next = calloc(1, sizeof(NDBlock));
-      pointer->next = next;
-      next->node = block_item();
-      pointer = next;
+      new_nest();
+      for (size_t i = 1; i <= vector_size(node->expr); i++)
+      {
+        Node *param = vector_peek_at(node->expr, i);
+        param->var = add_variables(param->token, param->type);
+        param->is_new = true;
+      }
+      NDBlock head;
+      head.next = NULL;
+      NDBlock *pointer = &head;
+
+      while (!consume("}", TK_RESERVED))
+      {
+        NDBlock *next = calloc(1, sizeof(NDBlock));
+        pointer->next = next;
+        next->node = block_item();
+        pointer = next;
+      }
+      node->stmt = head.next;
+      exit_nest();
     }
-    node->stmt = head.next;
-    exit_nest();
+    else
+    {
+      expect(";", TK_RESERVED);
+      return NULL;
+    }
     return node;
   }
   // グローバル変数宣言
@@ -276,32 +314,66 @@ Node *declaration(Type *type)
 Node *init_declarator(Type *type)
 {
   Node *node = declarator(type);
+  if (!node)
+    return NULL;
   Token *old = get_token();
   if (consume("=", TK_RESERVED))
     node = new_node(ND_ASSIGN, node, assignment_expression(), old);
   return node;
 }
 
-Node *declarator(Type *type)
+Node *declarator_internal(Type **type, Token *token)
 {
-  Token *token = consume_ident();
   if (consume("[", TK_RESERVED))
   {
     Type *new = alloc_type(TYPE_ARRAY);
-    new->ptr_to = type;
-    new->size = expect_number();
-    type = new;
+    new->ptr_to = *type;
+    new->size = eval_constant_expression();
+    *type = new;
     expect("]", TK_RESERVED);
   }
-  Var *var = add_variables(token, type);
-  Node *node = NULL;
-  if (var)
+  else if (consume("(", TK_RESERVED))
   {
-    node = calloc(1, sizeof(Node));
-    node->token = token;
-    node->kind = ND_VAR;
-    node->is_new = true;
+    Type *new = alloc_type(TYPE_FUNC);
+    new->param_list = vector_new();
+    parameter_type_list(&new->param_list, *type);
+    if (!add_function_name(new->param_list, token))
+      error_at(token->str, token->len, "invalid name");
+    *type = new;
+    return NULL;
+  }
+  // Type *_type = *type;
+  // while (_type)
+  // {
+  //   if (_type->type == TYPE_TYPEDEF)
+  //     return NULL;
+  //   _type = _type->ptr_to;
+  // }
+  Node *node = calloc(1, sizeof(Node));
+  node->token = token;
+  node->kind = ND_VAR;
+  node->type = *type;
+  return node;
+}
+
+Node *declarator_no_side_effect(Type *type)
+{
+  Token *token = consume_ident();
+  return declarator_internal(&type, token);
+}
+
+Node *declarator(Type *type)
+{
+  Token *token = consume_ident();
+  Node *node = declarator_internal(&type, token);
+  if (node)
+  {
+    Var *var = add_variables(token, type);
+    if (!var)
+      return NULL;
     node->var = var;
+    if (type)
+      node->is_new = true;
   }
   return node;
 }
@@ -794,31 +866,28 @@ Node *primary_expression()
   }
 
   Token *token = consume_token_if_next_matches(TK_IDENT, '(');
-  // 関数
+  // 関数呼び出し
   if (token)
   {
     expect("(", TK_RESERVED);
     Node *node = calloc(1, sizeof(Node));
     node->token = token;
-    NDBlock head;
-    head.next = NULL;
-    NDBlock *pointer = &head;
     node->kind = ND_FUNCCALL;
     node->func_name = token->str;
     node->func_len = token->len;
+    node->expr = vector_new();
     while (!consume(")", TK_RESERVED))
     {
-      NDBlock *next = calloc(1, sizeof(NDBlock));
-      pointer->next = next;
-      next->node = expression();
-      pointer = next;
+      Node *child_node = expression();
+      if (!child_node)
+        error_exit("invalid node");
+      vector_push(node->expr, child_node);
       if (!consume(",", TK_RESERVED))
       {
         expect(")", TK_RESERVED);
         break;
       }
     }
-    node->expr = head.next;
     return node;
   }
 

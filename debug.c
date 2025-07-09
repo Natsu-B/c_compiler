@@ -175,9 +175,9 @@ void _print_parse_result(Node *node, int nest)
       fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);
       make_space(nest);
       fprintf(stdout, "|   [arguments]\n");
-      for (NDBlock *pointer = node->expr; pointer; pointer = pointer->next)
+      for (size_t i = 1; i <= vector_size(node->expr); i++)
       {
-        _print_parse_result(pointer->node, nest + 1);
+        _print_parse_result(vector_peek_at(node->expr, i), nest + 1);
       }
       break;
     }
@@ -186,9 +186,9 @@ void _print_parse_result(Node *node, int nest)
       fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);
       make_space(nest);
       fprintf(stdout, "|   [arguments]\n");
-      for (NDBlock *pointer = node->expr; pointer; pointer = pointer->next)
+      for (size_t i = 1; i <= vector_size(node->expr); i++)
       {
-        _print_parse_result(pointer->node, nest + 1);
+        _print_parse_result(vector_peek_at(node->expr, i), nest + 1);
       }
       fprintf(stdout, "|   [body]\n");
       for (NDBlock *pointer = node->stmt; pointer; pointer = pointer->next)

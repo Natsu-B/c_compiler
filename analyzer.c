@@ -279,8 +279,8 @@ void add_type(Node *node)
   if (node->statement_child)
     add_type(node->statement_child);
   if (node->expr)
-    for (NDBlock *tmp = node->expr; tmp; tmp = tmp->next)
-      add_type(tmp->node);
+    for (size_t i = 1; i <= vector_size(node->expr); i++)
+      add_type(vector_peek_at(node->expr, i));
   if (node->stmt)
     for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
       add_type(tmp->node);
@@ -315,8 +315,8 @@ void analyze_type(Node *node)
   if (node->statement_child)
     analyze_type(node->statement_child);
   if (node->expr)
-    for (NDBlock *tmp = node->expr; tmp; tmp = tmp->next)
-      analyze_type(tmp->node);
+    for (size_t i = 1; i <= vector_size(node->expr); i++)
+      analyze_type(vector_peek_at(node->expr, i));
   if (node->stmt)
   {  // ND_BLOCKのとき
     offset_enter_nest();
@@ -384,14 +384,10 @@ FuncBlock *analyzer(FuncBlock *funcblock)
       continue;
     if (node->kind == ND_FUNCDEF)
     {
-      for (NDBlock *tmp = node->expr; tmp; tmp = tmp->next)
-      {
-        add_type(tmp->node);
-      }
+      for (size_t i = 1; i <= vector_size(node->expr); i++)
+        add_type(vector_peek_at(node->expr, i));
       for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
-      {
         add_type(tmp->node);
-      }
     }
     else if (node->kind == ND_VAR)
     {
@@ -414,14 +410,10 @@ FuncBlock *analyzer(FuncBlock *funcblock)
     if (node->kind == ND_FUNCDEF)
     {
       init_nest();
-      for (NDBlock *tmp = node->expr; tmp; tmp = tmp->next)
-      {
-        analyze_type(tmp->node);
-      }
+      for (size_t i = 1; i <= vector_size(node->expr); i++)
+        analyze_type(vector_peek_at(node->expr, i));
       for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
-      {
         analyze_type(tmp->node);
-      }
       // stacksizeは8byte単位で揃える
       size_t max_stacksize = get_max_offset();
       pointer->stacksize =

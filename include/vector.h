@@ -1,8 +1,12 @@
 #ifndef VECTOR_C_COMPILER
 #define VECTOR_C_COMPILER
 
+#ifdef SELF_HOST
+#include "../test/compiler_header.h"
+#else
 #include <stdbool.h>
 #include <stdlib.h>
+#endif
 
 typedef struct Vector Vector;
 

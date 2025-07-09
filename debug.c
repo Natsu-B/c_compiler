@@ -1,7 +1,11 @@
 #include "include/debug.h"
 
+#ifdef SELF_HOST
+#include "test/compiler_header.h"
+#else
 #include <assert.h>
 #include <stdio.h>
+#endif
 
 #include "include/analyzer.h"
 #include "include/conditional_inclusion.h"

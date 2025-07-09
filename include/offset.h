@@ -1,7 +1,11 @@
 #ifndef OFFSET_C_COMPILER
 #define OFFSET_C_COMPILER
 
+#ifdef SELF_HOST
+#include "../test/compiler_header.h"
+#else
 #include <stdlib.h>
+#endif
 
 void init_nest();
 void offset_enter_nest();

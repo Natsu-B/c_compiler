@@ -3,11 +3,15 @@
 // ------------------------------------------------------------------------------------
 #include "include/tokenizer.h"
 
+#ifdef SELF_HOST
+#include "test/compiler_header.h"
+#else
 #include <ctype.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#endif
 
 #include "include/debug.h"
 #include "include/error.h"

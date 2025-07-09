@@ -1,10 +1,14 @@
 #ifndef ERROR_C_COMPILER
 #define ERROR_C_COMPILER
 
+#ifdef SELF_HOST
+#include "../test/compiler_header.h"
+#else
 // sigactionを有効にしたい
 // #define _GNU_SOURCE
 #include <signal.h>
 #include <stddef.h>
+#endif
 
 #define DEBUG 0
 
@@ -52,6 +56,8 @@ void _error_at(char *error_location, size_t error_len, char *file, int line,
 void _info_at(size_t log_level, char *location, size_t len, char *file,
               int line, const char *func, char *fmt, ...);
 
+#ifndef SELF_HOST
 void handle_signal(int signum, siginfo_t *info, void *ucontext);
+#endif
 
 #endif  // ERROR_C_COMPILER

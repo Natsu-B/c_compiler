@@ -1,8 +1,12 @@
 #ifndef TOKENIZER_C_COMPILER
 #define TOKENIZER_C_COMPILER
 
+#ifdef SELF_HOST
+#include "../test/compiler_header.h"
+#else
 #include <stdbool.h>
 #include <stdlib.h>
+#endif
 
 typedef enum
 {

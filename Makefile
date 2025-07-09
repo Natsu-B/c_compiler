@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-std=c11 -g -static -Wall -Wextra -Werror -D_GNU_SOURCE
+CFLAGS=-std=c11 -g -static -Wall -Wextra -Werror -Wno-builtin-declaration-mismatch -D_GNU_SOURCE -DSELF_HOST
 
 SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)

@@ -5,6 +5,6 @@
 #include "parser.h"
 #include "type.h"
 
-extern void generator(FuncBlock *parsed, char *output_filename);
+void generator(FuncBlock *parsed, char *output_filename);
 
 #endif  // GENERATOR_C_COMPILER

@@ -4,8 +4,12 @@
 
 #include "include/type.h"
 
+#ifdef SELF_HOST
+#include "test/compiler_header.h"
+#else
 #include <stdio.h>
 #include <string.h>
+#endif
 
 #include "include/analyzer.h"
 #include "include/error.h"
@@ -127,7 +131,7 @@ Type* _declaration_specifiers(bool* is_typedef)
         for (size_t j = 1; j <= vector_size(tag_nest); j++)
         {
           tag_list* tmp = vector_peek_at(tag_nest, j);
-          if (tmp->name->len == token->len &&
+          if (tmp->name && tmp->name->len == token->len &&
               !strncmp(tmp->name->str, token->str, token->len))
           {
             if (tmp->tagkind == is_enum ||
@@ -209,7 +213,7 @@ Type* _declaration_specifiers(bool* is_typedef)
         for (size_t j = 1; j <= vector_size(tag_nest); j++)
         {
           tag_list* tmp = vector_peek_at(tag_nest, j);
-          if (tmp->name->len == enum_name->len &&
+          if (tmp->name && tmp->name->len == enum_name->len &&
               !strncmp(tmp->name->str, enum_name->str, enum_name->len))
           {
             if (tmp->tagkind == is_struct || tmp->tagkind == is_union)
@@ -245,7 +249,8 @@ Type* _declaration_specifiers(bool* is_typedef)
         tag_data_list* child = calloc(1, sizeof(tag_data_list));
         child->name = identifier;
         child->type = alloc_type(TYPE_INT);
-        ordinary_data_list* new_enum_member = calloc(1, sizeof(ordinary_data_list));
+        ordinary_data_list* new_enum_member =
+            calloc(1, sizeof(ordinary_data_list));
         if (consume("=", TK_RESERVED))
         {
           long num = eval_constant_expression();
@@ -290,7 +295,7 @@ Type* _declaration_specifiers(bool* is_typedef)
         for (size_t j = 1; j <= vector_size(typedef_nest); j++)
         {
           ordinary_data_list* tmp = vector_peek_at(typedef_nest, j);
-          if (tmp->ordinary_kind == typedef_name &&
+          if (tmp->ordinary_kind == typedef_name && tmp->name &&
               tmp->name->len == token->len &&
               !strncmp(tmp->name->str, token->str, token->len))
           {

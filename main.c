@@ -1,5 +1,9 @@
+#ifdef SELF_HOST
+#include "test/compiler_header.h"
+#else
 #include <stdio.h>
 #include <string.h>
+#endif
 
 #include "include/analyzer.h"
 #include "include/error.h"
@@ -24,6 +28,7 @@ int main(int argc, char **argv)
   if (argc < 3)
     error_exit("invalid arguments");
 
+#ifndef SELF_HOST
   // abortのハンドル
   struct sigaction sa;
   sa.sa_handler = (__sighandler_t)(void *)handle_signal;
@@ -31,6 +36,7 @@ int main(int argc, char **argv)
   sa.sa_flags = 0;
   if (sigaction(SIGSEGV, &sa, NULL) == -1)
     fprintf(stderr, "failed to set signal handler\n");
+#endif
 
   char *input_file_name = NULL;
   char *output_file_name = NULL;

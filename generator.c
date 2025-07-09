@@ -4,9 +4,13 @@
 
 #include "include/generator.h"
 
+#ifdef SELF_HOST
+#include "test/compiler_header.h"
+#else
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#endif
 
 #include "include/error.h"
 #include "include/type.h"

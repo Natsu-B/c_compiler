@@ -4,7 +4,11 @@
 
 #include "include/analyzer.h"
 
+#ifdef SELF_HOST
+#include "test/compiler_header.h"
+#else
 #include <stdlib.h>
+#endif
 
 #include "include/debug.h"
 #include "include/error.h"
@@ -23,7 +27,7 @@ bool is_equal_type(Type *lhs, Type *rhs)
       if (lhs->ptr_to && rhs->ptr_to)
         return is_equal_type(lhs->ptr_to, rhs->ptr_to);
       else
-        false;
+        return false;
     }
     return true;
   }

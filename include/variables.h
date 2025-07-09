@@ -13,18 +13,18 @@ struct Var
   Type *type;     // 型
   Token *token;   // 変数に対応するトークン
   bool is_local;  // ローカル変数かグローバル変数か
-  union
-  {
-    enum
-    {                // global変数のとき 初期化をどうするか
-      reserved,      // 0を使わないように
-      init_zero,     // ゼロクリア
-      init_val,      // 数字での初期値
-      init_pointer,  // ポインタでの初期化
-      init_string,   // 文字列での初期化
-    } how2_init;
-    size_t offset;  // ローカル変数の場合 RBP - offsetの位置に変数がある
-  };
+                  // union
+                  // {
+  enum
+  {                // global変数のとき 初期化をどうするか
+    reserved,      // 0を使わないように
+    init_zero,     // ゼロクリア
+    init_val,      // 数字での初期値
+    init_pointer,  // ポインタでの初期化
+    init_string,   // 文字列での初期化
+  } how2_init;
+  size_t offset;  // ローカル変数の場合 RBP - offsetの位置に変数がある
+  // };
 };
 
 void init_variables();

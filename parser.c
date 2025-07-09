@@ -4,9 +4,13 @@
 
 #include "include/parser.h"
 
+#ifdef SELF_HOST
+#include "test/compiler_header.h"
+#else
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#endif
 
 #include "include/debug.h"
 #include "include/error.h"
@@ -44,7 +48,7 @@ Node *unary_expression();
 Node *postfix_expression();
 Node *primary_expression();
 
-const char *nodekindlist[] = {NodeKindTable};
+const char *nodekindlist[ND_END] = {NodeKindTable};
 
 // 同じnestのGTLabelを保持しているvectorを保持するvector
 // nestが深くなるとき新たなvectorがpushされ浅くなるときpopされる

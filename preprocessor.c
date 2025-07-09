@@ -4,8 +4,12 @@
 
 #include "include/preprocessor.h"
 
+#ifdef SELF_HOST
+#include "test/compiler_header.h"
+#else
 #include <stdio.h>
 #include <string.h>
+#endif
 
 #include "include/conditional_inclusion.h"
 #include "include/debug.h"
@@ -483,7 +487,7 @@ void set_default_definition()
 {
   char *predef_start =
       "#define __FILE__ \n#define __LINE__ \n#define __DATE__ \n#define "
-      "__TIME__ \n #define __INCLUDE_LEVEL__\n#define __MYCC__\n";
+      "__TIME__ \n #define __INCLUDE_LEVEL__\n#define __MYCC__\n#define SELF_HOST\n";
   char *predef_end = predef_start + strlen(predef_start);
 
   preprocess(predef_start, predef_end, NULL, NULL);

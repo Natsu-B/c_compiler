@@ -1,8 +1,12 @@
 #ifndef TYPE_C_COMPILER
 #define TYPE_C_COMPILER
 
+#ifdef SELF_HOST
+#include "../test/compiler_header.h"
+#else
 #include <stdbool.h>
 #include <stddef.h>
+#endif
 
 #include "vector.h"
 
@@ -34,14 +38,14 @@ struct Type
 {
   TypeKind type;
   Type *ptr_to;  // TYPE_PTR, TYPE_ARRAY, TYPE_TYPEDEFのとき利用
-  union
-  {
+  // union
+  // {
     bool is_signed;      // TYPE_INT等の整数型のとき利用
     size_t size;         // TYPE_ARRAYのとき利用
     size_t type_num;     // TYPE_STRUCTのとき利用
     Vector *param_list;  // TYPE_FUNCのとき利用 1つ目の引数は返り値の型
                          // その他は引数の型
-  };
+  // };
 };
 
 typedef struct Node Node;  // parser.hをincludeできないため定義だけしておく

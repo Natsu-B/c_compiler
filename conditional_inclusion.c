@@ -1,8 +1,12 @@
 #include "include/conditional_inclusion.h"
 
+#ifdef SELF_HOST
+#include "test/compiler_header.h"
+#else
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#endif
 
 #include "include/debug.h"
 #include "include/define.h"

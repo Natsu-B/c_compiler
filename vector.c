@@ -4,8 +4,12 @@
 
 #include "include/vector.h"
 
+#ifdef SELF_HOST
+#include "test/compiler_header.h"
+#else
 #include <stdbool.h>
 #include <string.h>
+#endif
 
 #include "include/error.h"
 

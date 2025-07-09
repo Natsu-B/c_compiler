@@ -1,7 +1,11 @@
 #ifndef PARSER_C_COMPILER
 #define PARSER_C_COMPILER
 
+#ifdef SELF_HOST
+#include "../test/compiler_header.h"
+#else
 #include <stddef.h>
+#endif
 
 #include "tokenizer.h"
 #include "type.h"
@@ -107,7 +111,7 @@ struct GTLabel
       "ND_ASSIGNMENT", "ND_VAR", "ND_ARRAY", "ND_DOT", "ND_ARROW", "ND_FIELD", \
       "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR", "ND_STIRNG", "ND_GOTO",         \
       "ND_LABEL", "ND_CASE", "ND_SWITCH"
-extern const char *nodekindlist[];
+extern const char *nodekindlist[ND_END];
 
 struct Node
 {
@@ -118,55 +122,55 @@ struct Node
   // 以下は Nodeの種類によってそれぞれ1つしか使わないが、
   // あるNodeを起点にしてそれ以下のNodeを検索するプログラムを
   // 簡略化するため一時的にunionを使わないことにする
-  struct
-  {
-    Node *lhs;            // 左辺 left-hand side
-    Node *rhs;            // 右辺 right-hand side
-    Node *chs;            // 三項演算子のときのみ利用
-    size_t child_offset;  // ND_DOT, ND_ARROWのとき利用 そのchildのoffset
-  };
+  // struct
+  // {
+  Node *lhs;            // 左辺 left-hand side
+  Node *rhs;            // 右辺 right-hand side
+  Node *chs;            // 三項演算子のときのみ利用
+  size_t child_offset;  // ND_DOT, ND_ARROWのとき利用 そのchildのoffset
+                        // };
 
-  struct
-  {                                  // if for while switch の場合
-    GTLabel *name;                   // ラベルの名前 goto でも利用
-    Node *condition;                 // 判定条件
-    Node *true_code;                 // trueの際に実行されるコード
-    NestedBlockVariables *nest_var;  // 一行のときも使う
-    Node *false_code;                // if else文 falseの際に実行されるコード
-    struct
-    {                // for文
-      Node *init;    // 初期化時のコード e.g. int i = 0
-      Node *update;  // 毎ステップごとに実行されるコード e.g. i++
-    };
-    Vector *case_list;  // switch文 case の Node*が入っている
-  };
-  struct
-  {                   // ND_BLOCK ND_FUNCCALL ND_FUNCDEF
-    Vector *expr;     // expr ND_FUNCCALL ND_FUNCDEFで利用
-    NDBlock *stmt;    // stmt ND_BLOCK ND_FUNCDEFで利用
-    char *func_name;  // ND_FUNCCALL ND_FUNCDEF で利用 関数名
-    size_t func_len;  // ND_FUNCCALL ND_FUNCDEF のときのみ利用 関数名長さ
-  };
-  long val;  // ND_NUMの場合数値 ND_POST/PRE INCREMENT/DECREMENT の場合
-             // その型がptrのときその大きさ、数値のとき0
-  struct
-  {               // 変数(ND_VAR)の場合
-    bool is_new;  // 初めて定義された変数か否か
-    Var *var;     // 変数の情報
-  };
-  struct
-  {                      // string型 ND_STRINGの場合
-    char *literal_name;  // stirng literal にアクセスする名前
-  };
-  struct
-  {                            // ND_GOTO ND_LABEL ND_CASE ND_DEFAULTの場合
-    Node *statement_child;     // statement
-    char *label_name;          // ラベルの名前 ND_CASE ND_DEFAULTでは使われない
-    bool is_case;              // 以下ND_CASE ND_DEFAULT の場合
-    size_t case_num;           // switch文の中で何番目のcaseか 0始まり
-    GTLabel *switch_name;      // switch文のlabelの名前
-    long constant_expression;  // case n: のn部分
-  };
+  // struct
+  // {                                  // if for while switch の場合
+  GTLabel *name;                   // ラベルの名前 goto でも利用
+  Node *condition;                 // 判定条件
+  Node *true_code;                 // trueの際に実行されるコード
+  NestedBlockVariables *nest_var;  // 一行のときも使う
+  Node *false_code;                // if else文 falseの際に実行されるコード
+                                   // struct
+                                   // {                // for文
+  Node *init;                      // 初期化時のコード e.g. int i = 0
+  Node *update;                    // 毎ステップごとに実行されるコード e.g. i++
+  // };
+  Vector *case_list;  // switch文 case の Node*が入っている
+                      // };
+                      // struct
+                      // {                   // ND_BLOCK ND_FUNCCALL ND_FUNCDEF
+  Vector *expr;       // expr ND_FUNCCALL ND_FUNCDEFで利用
+  NDBlock *stmt;      // stmt ND_BLOCK ND_FUNCDEFで利用
+  char *func_name;    // ND_FUNCCALL ND_FUNCDEF で利用 関数名
+  size_t func_len;    // ND_FUNCCALL ND_FUNCDEF のときのみ利用 関数名長さ
+  // };
+  long val;     // ND_NUMの場合数値 ND_POST/PRE INCREMENT/DECREMENT の場合
+                // その型がptrのときその大きさ、数値のとき0
+                // struct
+                // {               // 変数(ND_VAR)の場合
+  bool is_new;  // 初めて定義された変数か否か
+  Var *var;     // 変数の情報
+                // };
+                // struct
+                // {                      // string型 ND_STRINGの場合
+  char *literal_name;  // stirng literal にアクセスする名前
+                       // };
+                       // struct
+  // {                            // ND_GOTO ND_LABEL ND_CASE ND_DEFAULTの場合
+  Node *statement_child;     // statement
+  char *label_name;          // ラベルの名前 ND_CASE ND_DEFAULTでは使われない
+  bool is_case;              // 以下ND_CASE ND_DEFAULT の場合
+  size_t case_num;           // switch文の中で何番目のcaseか 0始まり
+  GTLabel *switch_name;      // switch文のlabelの名前
+  long constant_expression;  // case n: のn部分
+  // };
 };
 
 // グローバル変数やローカル変数を調べるstruct

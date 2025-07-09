@@ -4,10 +4,14 @@
 
 #include "include/file.h"
 
+#ifdef SELF_HOST
+#include "test/compiler_header.h"
+#else
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#endif
 
 #include "include/error.h"
 

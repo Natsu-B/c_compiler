@@ -4,6 +4,9 @@
 
 #include "include/error.h"
 
+#ifdef SELF_HOST
+#include "test/compiler_header.h"
+#else
 #include <error.h>
 #include <execinfo.h>
 #include <signal.h>
@@ -12,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>  // signalのwriteのために利用
+#endif
 
 #ifndef __GNUC__
 #define __attribute__(x) /*NOTHING*/
@@ -139,6 +143,7 @@ void _info_at(size_t log_level, char *location, size_t len, char *file,
   _info_at_(log_level, location, len, file, line, func, fmt, args);
 }
 
+#ifndef SELF_HOST
 #include "include/tokenizer.h"
 
 // signal が発生したときにバックトレースを出す
@@ -216,3 +221,4 @@ void handle_signal(int signum, siginfo_t *info, void *ucontext)
   // 割り込みではリエントラントでないのでexitが使えない
   _exit(EXIT_FAILURE);
 }
+#endif

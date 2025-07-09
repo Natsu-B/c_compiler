@@ -183,6 +183,7 @@ assert 'int main() {int x= 1; x += 100; x -= 2; x/=3; x <<= 1; x >>= 2; x*= 10; 
 assert 'int main() {int x =111; x %= 5; int y = 199; x += y % 9; return x;}'
 assert 'int add(int a, int b); int main() {int i = 0; int j = 1; return add(i, j);} int add(int a, int b) {return a + b;}'
 assert 'int sub(int, int); int main() {int sub(int,int); int i = 100; int y = 90; return sub (i, y);} int sub(int a, int b) {return a - b;}'
+assert 'enum tmp {tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8, tmp9, tmp10 }; int main() {return tmp8;}'
 assert 'int foo(); int main() { return foo(); } int foo() { return 123; }'
 assert 'typedef int foo; int main(){ foo(i); i = 999; return i; }'
 

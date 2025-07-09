@@ -245,7 +245,7 @@ Type* _declaration_specifiers(bool* is_typedef)
         tag_data_list* child = calloc(1, sizeof(tag_data_list));
         child->name = identifier;
         child->type = alloc_type(TYPE_INT);
-        ordinary_data_list* new_enum_member = malloc(sizeof(new_enum_member));
+        ordinary_data_list* new_enum_member = calloc(1, sizeof(ordinary_data_list));
         if (consume("=", TK_RESERVED))
         {
           long num = eval_constant_expression();

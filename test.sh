@@ -185,6 +185,10 @@ assert 'int add(int a, int b); int main() {int i = 0; int j = 1; return add(i, j
 assert 'int sub(int, int); int main() {int sub(int,int); int i = 100; int y = 90; return sub (i, y);} int sub(int a, int b) {return a - b;}'
 assert 'enum tmp {tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8, tmp9, tmp10 }; int main() {return tmp8;}'
 assert 'int foo(); int main() { return foo(); } int foo() { return 123; }'
+assert_with_outer_code 7 'int main() { int x = piyo(1, 2, 3, 4, 5, 6, 7, 8); return x; }' './test/piyo.o'
+assert_with_outer_code 7 'int main() { int g = 7; int x = piyo(1, 2, 3, 4, 5, 6, g, 8); return x; }' './test/piyo.o'
+assert 'int hoge(int a, int b, int c, int d, int e, int f, int g, int h){return h;} int main() { int g = 7; int x = hoge(1, 2, 3, 4, 5, 6, g, 8); return x; }'
+assert 'int hoge(int a, int b, int c, int d, int e, int f, int g, int h){return g;} int main() { int g = 7; int x = hoge(1, 2, 3, 4, 5, 6, g, 8); return x; }'
 assert 'typedef int foo; int main(){ foo(i); i = 999; return i; }'
 
 (

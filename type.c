@@ -71,6 +71,7 @@ Type* _declaration_specifiers(bool* is_typedef)
   size_t struct_count = 0;
   size_t union_count = 0;
   size_t enum_count = 0;
+  size_t const_count = 0;  // 読み飛ばす
   Token* old = get_token();
 
   for (;;)
@@ -99,6 +100,8 @@ Type* _declaration_specifiers(bool* is_typedef)
       union_count++;
     else if (consume("enum", TK_IDENT))
       enum_count++;
+    else if (consume("const", TK_IDENT))
+      const_count++;
     else
       break;
   }

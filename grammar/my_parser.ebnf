@@ -91,7 +91,7 @@ struct-declaration
         = specifier-qualifier-list, struct-declarator, ";";
 
 specifier-qualifier-list
-        = { type-specifier }, {pointer};
+        = { type-specifier | type-qualifier }, {pointer};
 
 struct-declarator
         = declarator;
@@ -102,6 +102,9 @@ enum-specifier
 
 enumerator
         = identifier, [ "=", constant-expression ];
+
+type-qualifier
+        = "const";
 
 declarator
         = direct-declarator;

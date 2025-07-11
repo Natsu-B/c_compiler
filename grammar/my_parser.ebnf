@@ -123,6 +123,18 @@ parameter-type-list
 parameter-declaration
         = declaration-specifiers, declarator;
 
+type-name
+        = specifier-qualifier-list, abstract-declarator;
+
+abstract-declarator
+        = [ pointer ], [ direct-abstract-declarator ];
+
+direct-abstract-declarator
+        = "(", abstract-declarator, ")"
+        | [ direct-abstract-declarator ], ( "[", ( { type-qualifier }, [ assignment-expression ]
+        | "*" ), "]"
+        | "(", [ parameter-type-list ], ")" );
+
 typedef-name
         = identifier;
 
@@ -201,7 +213,8 @@ unary-expression
         | ( "++"
         | "--" ), unary-expression
         | unary-operator, cast-expression
-        | "sizeof", unary-expression;
+        | "sizeof", unary-expression
+        | "sizeof", "(", type-name, ")";
 
 unary-operator
         = "&"

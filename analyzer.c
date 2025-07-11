@@ -239,6 +239,7 @@ void add_type_internal(Node *node)
       return;
     }
     case ND_FIELD: node->type = alloc_type(TYPE_VOID); return;
+    case ND_TYPE_NAME: return;
     case ND_NUM: node->type = alloc_type(TYPE_INT); return;
     case ND_BLOCK: node->type = alloc_type(TYPE_VOID); return;
     case ND_DISCARD_EXPR: node->type = alloc_type(TYPE_VOID); return;
@@ -367,7 +368,9 @@ void analyze_type(Node *node)
 
     case ND_SIZEOF:
       node->kind = ND_NUM;
-      if (node->lhs->type->type == TYPE_ARRAY)
+      if (node->lhs->kind == ND_TYPE_NAME)
+        node->val = size_of(node->lhs->type);
+      else if (node->lhs->type->type == TYPE_ARRAY)
         node->val = size_of(node->lhs->type) * node->lhs->val;
       else
         node->val = size_of(node->lhs->type);

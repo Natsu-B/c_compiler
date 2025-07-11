@@ -20,12 +20,16 @@
 #include "include/variables.h"
 #include "include/vector.h"
 
+Type *abstract_declarator(Type *type);
+Type *direct_abstract_declarator(Type *type);
 Node *external_declaration();
 Node *function_declaration();
 Node *declaration(Type *type);
 Node *init_declarator(Type *type);
 Node *declarator_no_side_effect();
 Node *declarator(Type *type);
+Type *pointer(Type *type);
+Node *type_name();
 Node *initializer();
 Node *block_item();
 Node *statement();
@@ -198,7 +202,7 @@ Vector *parameter_type_list(Vector **type_list, Type *type)
     vector_push(*type_list, type);
   Vector *list = vector_new();
   if (consume("void", TK_IDENT))
-  {
+  {  // TODO void *のサポートができていない
     expect(")", TK_RESERVED);
     return list;
   }
@@ -380,6 +384,109 @@ Node *declarator(Type *type)
       node->is_new = true;
   }
   return node;
+}
+
+Type *pointer(Type *type)
+{
+  while (consume("*", TK_RESERVED))
+  {
+    Type *new = alloc_type(TYPE_PTR);
+    new->ptr_to = type;
+    type = new;
+  }
+  return type;
+}
+
+Node *type_name()
+{
+  Type *type = declaration_specifiers();
+  if (!type)
+    return NULL;
+  type = abstract_declarator(type);
+  Node *node = calloc(1, sizeof(Node));
+  node->kind = ND_TYPE_NAME;
+  node->type = type;
+  return node;
+}
+
+Type *abstract_declarator(Type *type)
+{
+  type = pointer(type);
+  return direct_abstract_declarator(type);
+}
+
+// direct_abstract_declaratorに当てはまらなくても許容する
+Type *direct_abstract_declarator(Type *type)
+{
+  bool was_grouped = false;
+  Token *old = get_token();
+  if (consume("(", TK_RESERVED))
+  {
+    if (!is_type_specifier(get_token()) && !peek(")", TK_RESERVED))
+    {
+      type = abstract_declarator(type);
+      expect(")", TK_RESERVED);
+      was_grouped = true;
+    }
+    else
+      set_token(old);
+  }
+
+  for (;;)
+  {
+    if (consume("[", TK_RESERVED))
+    {
+      Type *new = alloc_type(TYPE_ARRAY);
+      new->ptr_to = type;
+      if (peek("]", TK_RESERVED))
+      {
+        new->size = 0;
+      }
+      else
+      {
+        new->size = eval_constant_expression();
+      }
+      expect("]", TK_RESERVED);
+      type = new;
+      continue;
+    }
+
+    if (consume("(", TK_RESERVED))
+    {
+      if (was_grouped)
+      {
+        Type *tail = type;
+        Type *parent_of_tail = NULL;
+        while (tail->type == TYPE_ARRAY || tail->type == TYPE_PTR)
+        {
+          parent_of_tail = tail;
+          tail = tail->ptr_to;
+        }
+
+        Type *func_type = alloc_type(TYPE_FUNC);
+        func_type->param_list = vector_new();
+        parameter_type_list(&func_type->param_list, tail);
+
+        if (parent_of_tail)
+        {
+          parent_of_tail->ptr_to = func_type;
+        }
+        else
+        {
+          type = func_type;
+        }
+      }
+      else
+      {
+        Type *new = alloc_type(TYPE_FUNC);
+        new->param_list = vector_new();
+        parameter_type_list(&new->param_list, type);
+        type = new;
+      }
+    }
+    break;
+  }
+  return type;
 }
 
 Node *initializer()
@@ -813,7 +920,18 @@ Node *unary_expression()
   if (consume("--", TK_RESERVED))
     return new_node(ND_PREDECREMENT, unary_expression(), NULL, get_old_token());
   if (consume("sizeof", TK_IDENT))
-    return new_node(ND_SIZEOF, cast_expression(), NULL, get_old_token());
+  {
+    Token *old = get_old_token();
+    Token *token = get_token();
+    if (consume("(", TK_RESERVED) && is_type_specifier(get_token()))
+    {
+      Node *node = type_name();
+      expect(")", TK_RESERVED);
+      return new_node(ND_SIZEOF, node, NULL, old);
+    }
+    set_token(token);
+    return new_node(ND_SIZEOF, unary_expression(), NULL, old);
+  }
   if (consume("+", TK_RESERVED))
     return cast_expression();
   if (consume("-", TK_RESERVED))

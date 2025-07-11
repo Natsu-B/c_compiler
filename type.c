@@ -21,6 +21,7 @@
 static Vector* OrdinaryNamespaceList;  // 変数名 関数名 列挙体のメンバ名
 static Vector* TagNamespaceList;       // 構造体 共用体 列挙体のタグ名
 static size_t tag_id;                  // 構造体 共用体 列挙体につけられる番号
+static Vector* EnumStructList;  // 構造体、共用体、列挙体のリスト tag_idの順番
 
 typedef struct
 {
@@ -57,6 +58,33 @@ typedef struct
   size_t struct_size;       // structのサイズ
   size_t struct_alignment;  // structのアライメント
 } tag_list;
+
+bool is_type_specifier(Token* token)
+{
+  if (peek("void", TK_IDENT) || peek("char", TK_IDENT) ||
+      peek("short", TK_IDENT) || peek("int", TK_IDENT) ||
+      peek("long", TK_IDENT) || peek("signed", TK_IDENT) ||
+      peek("unsigned", TK_IDENT) || peek("bool", TK_IDENT) ||
+      peek("_Bool", TK_IDENT) || peek("const", TK_IDENT) ||
+      peek("struct", TK_IDENT) || peek("union", TK_IDENT) ||
+      peek("enum", TK_IDENT))
+    return true;
+
+  // typedefにないか調べる
+  for (size_t i = 1; i <= vector_size(OrdinaryNamespaceList); i++)
+  {
+    Vector* namespace_list = vector_peek_at(OrdinaryNamespaceList, i);
+    for (size_t j = 1; j <= vector_size(namespace_list); j++)
+    {
+      ordinary_data_list* name = vector_peek_at(namespace_list, j);
+      if (name->ordinary_kind == typedef_name && name->name &&
+          name->name->len == token->len &&
+          !strncmp(name->name->str, token->str, token->len))
+        return true;
+    }
+  }
+  return false;
+}
 
 Type* _declaration_specifiers(bool* is_typedef)
 {
@@ -159,6 +187,7 @@ Type* _declaration_specifiers(bool* is_typedef)
       Type* type = alloc_type(TYPE_STRUCT);
       type->type_num = ++tag_id;
       new->type = type;
+      vector_push(EnumStructList, new);
     }
     if (is_definition)
     {
@@ -190,10 +219,8 @@ Type* _declaration_specifiers(bool* is_typedef)
         if (consume("}", TK_RESERVED))
           break;
       }
-      struct_size =
-          struct_size % struct_alignment
-              ? (struct_size / struct_alignment + 1) * struct_alignment
-              : struct_size;
+      struct_size = (struct_size + struct_alignment - 1) / struct_alignment *
+                    struct_alignment;
       new->struct_size = struct_size;
       new->struct_alignment = struct_alignment;
     }
@@ -237,6 +264,7 @@ Type* _declaration_specifiers(bool* is_typedef)
       new->name = enum_name;
       new->type = alloc_type(TYPE_ENUM);
       new->type->type_num = ++tag_id;
+      vector_push(EnumStructList, new);
     }
     if (is_definition)
     {
@@ -478,28 +506,16 @@ size_t size_of(Type* type)
     case TYPE_STR:
     case TYPE_LONG:
     case TYPE_LONGLONG:
-    case TYPE_PTR:
-    case TYPE_ARRAY: return 8;
+    case TYPE_PTR: return 8;
+    case TYPE_ARRAY: return size_of(type->ptr_to) * type->size;
     case TYPE_VOID: error_exit("void"); break;
     case TYPE_STRUCT:
     {
-      for (size_t i = 1; i <= vector_size(TagNamespaceList); i++)
-      {
-        Vector* struct_nest = vector_peek_at(TagNamespaceList, i);
-        for (size_t j = 1; j <= vector_size(struct_nest); j++)
-        {
-          tag_list* tmp = vector_peek_at(struct_nest, j);
-          if (tmp->type == type)
-          {
-            if (tmp->struct_size)
-              return tmp->struct_size;
-            error_at(tmp->name->str, tmp->name->len, "struct not defined");
-          }
-        }
-      }
-      error_exit("struct not found");
+      tag_list* peek_type = vector_peek_at(EnumStructList, type->type_num);
+      if (type->type_num != peek_type->type->type_num)
+        unreachable();
+      return peek_type->struct_size;
     }
-    break;
     default: break;
   }
   unreachable();
@@ -582,6 +598,7 @@ void init_types()
   Vector* root_struct = vector_new();
   TagNamespaceList = vector_new();
   vector_push(TagNamespaceList, root_struct);
+  EnumStructList = vector_new();
 }
 
 void new_nest_type()

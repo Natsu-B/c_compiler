@@ -320,7 +320,7 @@ Type* _declaration_specifiers(bool* is_typedef)
     Token* token = peek_ident();
     if (token)
     {
-      for (size_t i = 1; i <= vector_size(OrdinaryNamespaceList); i++)
+      for (size_t i = vector_size(OrdinaryNamespaceList); i >= 1; i--)
       {
         Vector* typedef_nest = vector_peek_at(OrdinaryNamespaceList, i);
         for (size_t j = 1; j <= vector_size(typedef_nest); j++)

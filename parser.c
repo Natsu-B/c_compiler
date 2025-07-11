@@ -201,11 +201,10 @@ Vector *parameter_type_list(Vector **type_list, Type *type)
   if (type_list)
     vector_push(*type_list, type);
   Vector *list = vector_new();
-  if (consume("void", TK_IDENT))
-  {  // TODO void *のサポートができていない
-    expect(")", TK_RESERVED);
+  Token *old = get_token();
+  if (consume("void", TK_IDENT) && consume(")", TK_RESERVED))
     return list;
-  }
+  set_token(old);
   while (!consume(")", TK_RESERVED))
   {
     Type *type = declaration_specifiers();

@@ -201,6 +201,7 @@ assert 'int main() { return sizeof(int[2]) + 2; }'
 assert 'int main() { struct HOGE {int x; int y;}; return sizeof(struct HOGE); }'
 assert 'int main() { return sizeof(int (*[10])(int, int)); }'
 assert 'typedef long hoge; hoge x;int main() { typedef int hoge; return sizeof(hoge) + sizeof(x); }'
+assert 'typedef long hoge; hoge x;int main() { typedef hoge fuga; return sizeof(fuga) + sizeof(x); }'
 assert 'int main() { return sizeof(int[2][3]); }'
 assert 'typedef int foo; int main(){ foo(i); i = 999; return i; }'
 

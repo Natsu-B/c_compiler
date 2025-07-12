@@ -140,10 +140,6 @@ Type* _declaration_specifiers(bool* is_typedef)
               struct_count + union_count >
           1 ||
       (signed_count | unsigned_count) & (void_count | bool_count) ||
-      !(long_count | signed_count | unsigned_count | int_count | bool_count |
-        short_count | char_count | void_count | struct_count | union_count |
-        enum_count) &
-          *is_typedef ||
       (long_count | signed_count | unsigned_count | int_count | bool_count |
        short_count | char_count | void_count) &
           (struct_count | union_count | enum_count))
@@ -330,7 +326,9 @@ Type* _declaration_specifiers(bool* is_typedef)
               tmp->name->len == token->len &&
               !strncmp(tmp->name->str, token->str, token->len))
           {
-            consume_ident(token);
+            consume_ident();
+            if (consume("typedef", TK_IDENT))
+              *is_typedef = true;
             return tmp->type;
           }
         }

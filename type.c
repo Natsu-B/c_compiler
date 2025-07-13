@@ -27,7 +27,7 @@ typedef struct
 {
   enum
   {
-    typedef_name,
+    typedef_definition_name,
     enum_member,
     function_definition_name,
   } ordinary_kind;
@@ -77,7 +77,7 @@ bool is_type_specifier(Token* token)
     for (size_t j = 1; j <= vector_size(namespace_list); j++)
     {
       ordinary_data_list* name = vector_peek_at(namespace_list, j);
-      if (name->ordinary_kind == typedef_name && name->name &&
+      if (name->ordinary_kind == typedef_definition_name && name->name &&
           name->name->len == token->len &&
           !strncmp(name->name->str, token->str, token->len))
         return true;
@@ -86,7 +86,16 @@ bool is_type_specifier(Token* token)
   return false;
 }
 
-Type* _declaration_specifiers(bool* is_typedef)
+bool is_typedef(Type* type)
+{
+  while (type->type == TYPE_ARRAY || type->type == TYPE_PTR)
+    type = type->ptr_to;
+  if (type->type == TYPE_TYPEDEF)
+    return true;
+  return false;
+}
+
+Type* _declaration_specifiers(bool* find_typedef)
 {
   size_t long_count = 0;
   size_t signed_count = 0;
@@ -105,7 +114,7 @@ Type* _declaration_specifiers(bool* is_typedef)
   for (;;)
   {
     if (consume("typedef", TK_IDENT))
-      *is_typedef = true;
+      *find_typedef = true;
     if (consume("long", TK_IDENT))
       long_count++;
     else if (consume("signed", TK_IDENT))
@@ -193,22 +202,22 @@ Type* _declaration_specifiers(bool* is_typedef)
       for (;;)
       {
         Type* type = declaration_specifiers();
-        Token* token = consume_ident();
-        if (!type || type->type == TYPE_TYPEDEF || !token)
+        Node* node = declarator_no_side_effect(type);
+        if (!node || !node->type || is_typedef(node->type))
           error_at(get_token()->str, get_token()->len,
                    "invalid struct definition");
         tag_data_list* new_data = malloc(sizeof(tag_data_list));
-        new_data->name = token;
-        new_data->type = type;
+        new_data->name = node->token;
+        new_data->type = node->type;
         vector_push(new->data_list, new_data);
-        size_t alignment = align_of(type);
+        size_t alignment = align_of(node->type);
         if (new->tagkind == is_struct)
           struct_size = (struct_size % alignment
                              ? (struct_size / alignment + 1) * alignment
                              : struct_size) +
-                        size_of(type);
-        else if (struct_size < size_of(type))
-          struct_size = size_of(type);
+                        size_of(node->type);
+        else if (struct_size < size_of(node->type))
+          struct_size = size_of(node->type);
         if (struct_alignment < alignment)
           struct_alignment = alignment;
         expect(";", TK_RESERVED);
@@ -222,7 +231,7 @@ Type* _declaration_specifiers(bool* is_typedef)
     }
     vector_push(vector_peek(TagNamespaceList), new);
     if (consume("typedef", TK_IDENT))
-      *is_typedef = true;
+      *find_typedef = true;
     return new->type;
   }
 
@@ -305,7 +314,7 @@ Type* _declaration_specifiers(bool* is_typedef)
     }
     vector_push(vector_peek(TagNamespaceList), new);
     if (consume("typedef", TK_IDENT))
-      *is_typedef = true;
+      *find_typedef = true;
     return new->type;
   }
 
@@ -322,13 +331,13 @@ Type* _declaration_specifiers(bool* is_typedef)
         for (size_t j = 1; j <= vector_size(typedef_nest); j++)
         {
           ordinary_data_list* tmp = vector_peek_at(typedef_nest, j);
-          if (tmp->ordinary_kind == typedef_name && tmp->name &&
+          if (tmp->ordinary_kind == typedef_definition_name && tmp->name &&
               tmp->name->len == token->len &&
               !strncmp(tmp->name->str, token->str, token->len))
           {
             consume_ident();
             if (consume("typedef", TK_IDENT))
-              *is_typedef = true;
+              *find_typedef = true;
             return tmp->type;
           }
         }
@@ -362,41 +371,23 @@ Type* _declaration_specifiers(bool* is_typedef)
 
 Type* declaration_specifiers()
 {
-  bool is_typedef = false;
-  Type* type = _declaration_specifiers(&is_typedef);
-  if (type)
+  bool find_typedef = false;
+  Type* type = _declaration_specifiers(&find_typedef);
+  if (type && find_typedef)
   {
-    size_t ref_count = 0;
-    for (;;)
-    {
-      if (consume("*", TK_RESERVED))
-        ref_count++;
-      else
-        break;
-    }
-    while (ref_count--)
-    {
-      Type* new = alloc_type(TYPE_PTR);
-      new->ptr_to = type;
-      type = new;
-    }
-
-    if (is_typedef)
-    {
-      Type* new = alloc_type(TYPE_TYPEDEF);
-      new->ptr_to = type;
-      type = new;
-    }
+    Type* new = alloc_type(TYPE_TYPEDEF);
+    new->ptr_to = type;
+    type = new;
   }
   return type;
 }
 
 void add_typedef(Token* token, Type* type)
 {
-  // TYPE_ARRRAYの場合 TYPE_ARRAYがTYPE_DEFより上にくるのを修正
+  // TYPE_ARRRAY TYPE_PTR の場合 TYPE_ARRAYがTYPE_DEFより上にくるのを修正
   Type* tmp = type;
   Type* old = NULL;
-  while (tmp->type == TYPE_ARRAY)
+  while (tmp->type == TYPE_ARRAY || tmp->type == TYPE_PTR)
   {
     old = tmp;
     tmp = tmp->ptr_to;
@@ -411,7 +402,7 @@ void add_typedef(Token* token, Type* type)
 
   // 名前とTypeを関連付ける
   ordinary_data_list* new = malloc(sizeof(ordinary_data_list));
-  new->ordinary_kind = typedef_name;
+  new->ordinary_kind = typedef_definition_name;
   new->name = token;
   new->type = type;
   vector_push(vector_peek(OrdinaryNamespaceList), new);
@@ -457,7 +448,8 @@ bool add_function_name(Vector* function_list, Token* name)
   return true;
 }
 
-enum member_name is_enum_or_function_name(Token* token, size_t* number)
+enum member_name is_enum_or_function_or_typedef_name(Token* token,
+                                                     size_t* number)
 {
   for (size_t i = 1; i <= vector_size(OrdinaryNamespaceList); i++)
   {
@@ -470,9 +462,12 @@ enum member_name is_enum_or_function_name(Token* token, size_t* number)
       {
         if (tmp->ordinary_kind == enum_member)
         {
-          *number = tmp->enum_number;
+          if (number)
+            *number = tmp->enum_number;
           return enum_member_name;
         }
+        else if (tmp->ordinary_kind == typedef_definition_name)
+          return typedef_name;
         else if (tmp->ordinary_kind == function_definition_name)
           return function_name;
         else

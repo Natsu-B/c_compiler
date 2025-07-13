@@ -85,7 +85,7 @@ char *access_size_specifier(int size)
     case 2: tmp = "WORD PTR"; break;
     case 4: tmp = "DWORD PTR"; break;
     case 8: tmp = "QWORD PTR"; break;
-    default: error_exit("unknown access size specifier"); break;
+    default: error_exit("unknown access size specifier: %d", size); break;
   }
   return tmp;
 }
@@ -238,6 +238,7 @@ void gen(Node *node)
 
   switch (node->kind)
   {
+    case ND_NOP: return;
     case ND_FUNCCALL:
     {
       output_debug2("FUNC CALL");
@@ -385,15 +386,21 @@ void gen(Node *node)
 
     case ND_STRING:
     case ND_VAR:
-      output_debug2("ND_STIRNG ND_VAR");
-      gen_lval(node);
-      if (node->type->type != TYPE_ARRAY && node->type->type != TYPE_STR)
+    case ND_DOT:
+    case ND_ARROW:
+      output_debug2("ND_STIRNG ND_VAR ND_DOT ND_ARROW");
+      if (node->kind == ND_DOT || node->kind == ND_ARROW ||
+          node->type->type != TYPE_STRUCT)
       {
-        output_file("    pop rax");
-        output_file("    %s rax, %s [rax]",
-                    mv_instruction_specifier(size_of(node->type), true),
-                    access_size_specifier(size_of(node->type)));
-        output_file("    push rax");
+        gen_lval(node);
+        if (node->type->type != TYPE_ARRAY && node->type->type != TYPE_STR)
+        {
+          output_file("    pop rax");
+          output_file("    %s rax, %s [rax]",
+                      mv_instruction_specifier(size_of(node->type), true),
+                      access_size_specifier(size_of(node->type)));
+          output_file("    push rax");
+        }
       }
       return;
 
@@ -701,7 +708,7 @@ void generator(FuncBlock *parsed, char *output_filename)
       output_file("    ret");
       continue;
     }
-    if (node->kind != ND_VAR)
+    if (node->kind != ND_VAR && node->kind != ND_NOP)
       error_exit_with_guard("unreachable");
   }
 

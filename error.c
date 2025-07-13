@@ -4,6 +4,9 @@
 
 #include "include/error.h"
 
+#include "include/debug.h"
+#include "include/parser.h"
+
 #ifdef SELF_HOST
 #include "test/compiler_header.h"
 #else
@@ -130,6 +133,9 @@ void _error_at(char *error_location, size_t error_len, char *file, int line,
   va_list args;
   va_start(args, fmt);
   _info_at_(0, error_location, error_len, file, line, func, fmt, args);
+
+  printf("\n\n--- BackTrace ---\n\n\n");
+  print_parse_result(get_funcblock_head());
   exit(1);
 }
 

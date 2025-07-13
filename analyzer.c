@@ -96,6 +96,7 @@ void add_type_internal(Node *node)
 {
   switch (node->kind)
   {
+    case ND_NOP: return;
     case ND_ADD:
     {
       int flag = 0;
@@ -402,7 +403,7 @@ FuncBlock *analyzer(FuncBlock *funcblock)
         error_exit("failed to parse correctly");
       add_type(node);
     }
-    else
+    else if (node->kind != ND_NOP)
       error_exit("unreachable");
   }
 #ifdef DEBUG
@@ -428,7 +429,7 @@ FuncBlock *analyzer(FuncBlock *funcblock)
     }
     else if (node->kind == ND_VAR)
       analyze_type(node);
-    else
+    else if (node->kind != ND_NOP)
       error_exit("unreachable");
   }
 #ifdef DEBUG

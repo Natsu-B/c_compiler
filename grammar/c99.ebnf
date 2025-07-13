@@ -5,10 +5,10 @@ translation-unit
         = { external-declaration };
 
 external-declaration
-        = function_definition
+        = function-definition
         | declaration;
 
-function_definition
+function-definition
         = declaration-specifiers, declarator, { declaration }, compound-statement;
 
 (* STATEMENTS *)
@@ -132,7 +132,7 @@ direct-declarator
         | direct-declarator, "[", { type-qualifier }, [ assignment-expression ], "]"
         | direct-declarator, "[", "static", type-qualifier, { type-qualifier }, assignment-expression, "]"
         | direct-declarator, "[", { type-qualifier }, "*", "]"
-        | direct-declarator, "(", parameter-type-list, ")"
+        | direct-declarator, "(", parameter-type-list, ")"constant
         | direct-declarator, "(", [ identifier, { ",", identifier } ], ")";
 
 pointer

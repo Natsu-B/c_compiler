@@ -52,6 +52,13 @@ Node *unary_expression();
 Node *postfix_expression();
 Node *primary_expression();
 
+FuncBlock head;
+
+FuncBlock *get_funcblock_head()
+{
+  return head.next;
+}
+
 const char *nodekindlist[ND_END] = {NodeKindTable};
 
 // 同じnestのGTLabelを保持しているvectorを保持するvector
@@ -209,8 +216,6 @@ Vector *parameter_type_list(Vector **type_list, Type *type)
   {
     Type *type = declaration_specifiers();
     Node *parameter = declarator_no_side_effect(type);
-    if (!parameter)
-      error_exit("invalid parameter");
     vector_push(list, parameter);
     if (type_list)
       vector_push(*type_list, type);
@@ -230,7 +235,6 @@ Vector *parameter_type_list(Vector **type_list, Type *type)
 FuncBlock *parser()
 {
   pr_debug("start parser...");
-  FuncBlock head;
   head.next = NULL;
   FuncBlock *pointer = &head;
   init_variables();
@@ -302,7 +306,7 @@ Node *external_declaration()
     else
     {
       expect(";", TK_RESERVED);
-      return NULL;
+      return new_node(ND_NOP, NULL, NULL, NULL);
     }
     return node;
   }
@@ -331,6 +335,16 @@ Node *init_declarator(Type *type)
 
 Node *declarator_internal(Type **type, Token *token)
 {
+  if (!token)
+  {
+    if (consume("(", TK_RESERVED))
+    {
+      Node *result = declarator(*type);
+      expect(")", TK_RESERVED);
+      return result;
+    }
+    return NULL;
+  }
   if (consume("[", TK_RESERVED))
   {
     Type *new = alloc_type(TYPE_ARRAY);
@@ -347,7 +361,7 @@ Node *declarator_internal(Type **type, Token *token)
     if (!add_function_name(new->param_list, token))
       error_at(token->str, token->len, "invalid name");
     *type = new;
-    return NULL;
+    return new_node(ND_NOP, NULL, NULL, NULL);
   }
   // Type *_type = *type;
   // while (_type)
@@ -365,19 +379,21 @@ Node *declarator_internal(Type **type, Token *token)
 
 Node *declarator_no_side_effect(Type *type)
 {
+  type = pointer(type);
   Token *token = consume_ident();
   return declarator_internal(&type, token);
 }
 
 Node *declarator(Type *type)
 {
+  type = pointer(type);
   Token *token = consume_ident();
   Node *node = declarator_internal(&type, token);
   if (node)
   {
     Var *var = add_variables(token, type);
     if (!var)
-      return NULL;
+      return new_node(ND_NOP, NULL, NULL, NULL);
     node->var = var;
     if (type)
       node->is_new = true;
@@ -987,29 +1003,35 @@ Node *primary_expression()
   }
 
   Token *token = consume_token_if_next_matches(TK_IDENT, '(');
-  // 関数呼び出し
   if (token)
   {
-    expect("(", TK_RESERVED);
-    Node *node = calloc(1, sizeof(Node));
-    node->token = token;
-    node->kind = ND_FUNCCALL;
-    node->func_name = token->str;
-    node->func_len = token->len;
-    node->expr = vector_new();
-    while (!consume(")", TK_RESERVED))
+    enum member_name result = is_enum_or_function_or_typedef_name(token, NULL);
+    if (result == none_of_them)
+      warn_at(token->str, token->len, "undefined function");
+    if (result == function_name || result == none_of_them)
     {
-      Node *child_node = expression();
-      if (!child_node)
-        error_exit("invalid node");
-      vector_push(node->expr, child_node);
-      if (!consume(",", TK_RESERVED))
+      // 関数呼び出し
+      expect("(", TK_RESERVED);
+      Node *node = calloc(1, sizeof(Node));
+      node->token = token;
+      node->kind = ND_FUNCCALL;
+      node->func_name = token->str;
+      node->func_len = token->len;
+      node->expr = vector_new();
+      while (!consume(")", TK_RESERVED))
       {
-        expect(")", TK_RESERVED);
-        break;
+        Node *child_node = expression();
+        if (!child_node)
+          error_exit("invalid node");
+        vector_push(node->expr, child_node);
+        if (!consume(",", TK_RESERVED))
+        {
+          expect(")", TK_RESERVED);
+          break;
+        }
       }
+      return node;
     }
-    return node;
   }
 
   // 変数
@@ -1017,7 +1039,7 @@ Node *primary_expression()
   if (token)
   {
     size_t enum_number;
-    switch (is_enum_or_function_name(token, &enum_number))
+    switch (is_enum_or_function_or_typedef_name(token, &enum_number))
     {
       case enum_member_name: return new_node_num(enum_number);
       case function_name: unimplemented(); break;

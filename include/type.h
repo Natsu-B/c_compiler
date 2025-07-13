@@ -51,6 +51,7 @@ struct Type
 typedef struct Node Node;  // parser.hをincludeできないため定義だけしておく
 
 bool is_type_specifier(Token *token);
+bool is_typedef(Type *type);
 Type *alloc_type(TypeKind kind);
 Type *declaration_specifiers();
 bool add_function_name(Vector *function_list, Token *name);
@@ -59,9 +60,11 @@ enum member_name
 {
   enum_member_name,
   function_name,
+  typedef_name,
   none_of_them
 };
-enum member_name is_enum_or_function_name(Token *token, size_t *number);
+enum member_name is_enum_or_function_or_typedef_name(Token *token,
+                                                     size_t *number);
 
 size_t size_of(Type *type);
 size_t align_of(Type *type);

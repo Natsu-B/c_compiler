@@ -14,6 +14,7 @@
 
 #include "include/error.h"
 #include "include/parser.h"
+#include "include/type.h"
 #include "include/vector.h"
 
 static NestedBlockVariables *top;   // 現在のネストの変数
@@ -94,16 +95,10 @@ Var *add_variables(Token *token, Type *type)
 {
   if (!token)
     return NULL;
-  if (type)
+  if (type && is_typedef(type))
   {
-    Type *tmp = type;
-    while (tmp->type == TYPE_ARRAY)
-      tmp = tmp->ptr_to;
-    if (tmp->type == TYPE_TYPEDEF)
-    {
-      add_typedef(token, type);
-      return NULL;
-    }
+    add_typedef(token, type);
+    return NULL;
   }
   // 変数名が同じものが以前あったかどうかを調査
   Var *same = find_local_var_in_current_nested_block(token);

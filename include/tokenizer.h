@@ -48,6 +48,7 @@ Token *peek(char *op, TokenKind kind);
 Token *consume(char *op, TokenKind kind);
 Token *expect(char *op, TokenKind kind);
 Token *get_old_token();
+Token *get_token_head();
 Token *get_token();
 Token *peek_ident();
 Token *consume_ident();

@@ -18,6 +18,7 @@
 #include "include/preprocessor.h"
 #include "include/vector.h"
 
+Token *token_head;
 Token *token;      // トークンの実体
 Token *token_old;  // tokenの一つあとのトークン
 
@@ -32,6 +33,12 @@ void fix_token_head()
     if (!token->next)
       break;
   }
+  token_head = token;
+}
+
+Token *get_token_head()
+{
+  return token_head;
 }
 
 // TK_IGNORABLE、 TK_LIB と TK_LINEBREAKを無視してトークンを進める

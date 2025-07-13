@@ -21,19 +21,25 @@ struct tm
   int tm_yday;
   int tm_isdst;
   long int tm_gmtoff;
-  const char *tm_zone;
+  char *tm_zone;
 };
 
-typedef __builtin_va_list va_list;
-#define va_start __builtin_va_start
+typedef __builtin_va_list __gnuc_va_list;
+typedef __gnuc_va_list va_list;
+#define va_start(v, l) __builtin_va_start(v, l)
+#define va_end(v) __builtin_va_end(v)
+#define va_copy(d, s) __builtin_va_copy(d, s)
+#define va_arg(ap, x) __builtin_va_arg(ap, x)
 int *__errno_location();
 #define errno (*__errno_location())
 
 struct _IO_FILE;
 typedef struct _IO_FILE FILE;
+#ifndef __MYCC__
 extern FILE *stdin;
 extern FILE *stdout;
 extern FILE *stderr;
+#endif
 #define SEEK_SET 0
 #define SEEK_CUR 1
 #define SEEK_END 2

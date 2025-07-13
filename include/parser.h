@@ -20,6 +20,7 @@ typedef struct NestedBlockVariables NestedBlockVariables;
 
 typedef enum
 {
+  ND_NOP,            // 読み飛ばされることが期待される
   ND_ADD,            // +
   ND_SUB,            // -
   ND_MUL,            // *
@@ -102,8 +103,8 @@ struct GTLabel
 
 // デバッグ時利用 NodeKindに追加したら必ず追加すること
 #define NodeKindTable                                                        \
-  "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_IDIV", "ND_EQ", "ND_NEQ",      \
-      "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF",                 \
+  "ND_NOP", "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_IDIV", "ND_EQ",      \
+      "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF",       \
       "ND_PREINCREMENT", "ND_PREDECREMENT", "ND_POSTINCREMENT",              \
       "ND_POSTDECREMENT", "ND_FUNCDEF", "ND_FUNCCALL", "ND_RETURN",          \
       "ND_SIZEOF", "ND_TYPE_NAME", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE", \
@@ -197,8 +198,10 @@ struct FuncBlock
   size_t stacksize;  // スタックのサイズ byte単位
 };
 
+FuncBlock *get_funcblock_head();
 Node *new_node(NodeKind kind, Node *lhs, Node *rhs, Token *token);
 Node *constant_expression();
 FuncBlock *parser();
+Node *declarator_no_side_effect(Type *type);
 
 #endif  // PARSER_C_COMPILER

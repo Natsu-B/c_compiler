@@ -19,7 +19,7 @@ statement
         | jump-statement;
 
 labeled-statement
-        = identifier, ":" statement
+        = identifier, ":", statement
         | "case", constant-expression, ":", statement
         | "default", ":", statement;
 
@@ -55,7 +55,7 @@ declaration
         = declaration-specifiers, init-declarator, ";";
 
 declaration-specifiers
-        = { storage-class-specifier | type-specifier }, [pointer];
+        = { storage-class-specifier | type-specifier };
 
 init-declarator
         = declarator
@@ -91,7 +91,7 @@ struct-declaration
         = specifier-qualifier-list, struct-declarator, ";";
 
 specifier-qualifier-list
-        = { type-specifier | type-qualifier }, {pointer};
+        = { type-specifier | type-qualifier };
 
 struct-declarator
         = declarator;
@@ -107,10 +107,12 @@ type-qualifier
         = "const";
 
 declarator
-        = direct-declarator;
+        = [ pointer ], direct-declarator;
 
 direct-declarator
-        = identifier, [ "[", constant, "]" ]
+        = "(", declarator, ")"
+        | identifier, [ "[", constant-expression, "]" ]
+        | identifier, [ "[", assignment-expression, "]" ]
         | identifier, "(", [ parameter-type-list ], ")";
 
 pointer
@@ -225,7 +227,6 @@ unary-operator
 postfix-expression
         = primary-expression
         | postfix-expression, ( "[", expression, "]"
-        | "(", { assignment-expression }, ")"
         | ".", identifier
         | "++"
         | "--"

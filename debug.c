@@ -260,6 +260,11 @@ void _print_parse_result(Node *node, int nest)
       _print_parse_result(node->lhs, nest + 1);
     }
     break;
+    case ND_FIELD:
+      fprintf(stdout, "NodeKind: %s child_name: %.*s offset: %lu\n",
+              nodekindlist[node->kind], (int)node->token->len, node->token->str,
+              node->child_offset);
+      break;
     default:
     {
       fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);

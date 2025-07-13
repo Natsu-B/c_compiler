@@ -204,6 +204,11 @@ assert 'typedef long hoge; hoge x;int main() { typedef int hoge; return sizeof(h
 assert 'typedef long hoge; hoge x;int main() { typedef hoge fuga; return sizeof(fuga) + sizeof(x); }'
 assert 'int main() { return sizeof(int[2][3]); }'
 assert 'typedef int foo; int main(){ foo(i); i = 999; return i; }'
+assert 'struct tmp {int hoge; long piyo; long x; long y; long z; long a; long b; long c;}; int main() { struct tmp x; x.hoge = 199; x.piyo = 100; return x.hoge; }'
+assert 'struct tmp {int hoge; long piyo; long x; long y; long z; long a; long b; long c;}; int main() { struct tmp x; x.hoge = 199; x.piyo = 100; return x.hoge - x.piyo + sizeof(struct tmp); }'
+assert 'struct tmp {int *hoge; long* piyo;}; int main() { struct tmp x; *x.hoge = 199; *x.piyo = 100; return *x.hoge - *x.piyo + sizeof(struct tmp); }'
+assert '#include "../test/compiler_header.h"
+int foo(int x, ...);int main(){ return foo(1, 2, 4, 7, 8, 9, 11, 15, 18, 20, 19, 0); } int foo(int x, ...){ va_list ap; va_start(ap, x); int tmp = x; int result; while (tmp) { result = tmp; tmp = va_arg(ap, int); } va_end(ap); return result; }'
 
 (
   cd test

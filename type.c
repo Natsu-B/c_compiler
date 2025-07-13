@@ -209,6 +209,7 @@ Type* _declaration_specifiers(bool* find_typedef)
         tag_data_list* new_data = malloc(sizeof(tag_data_list));
         new_data->name = node->token;
         new_data->type = node->type;
+        new_data->offset = struct_size;
         vector_push(new->data_list, new_data);
         size_t alignment = align_of(node->type);
         if (new->tagkind == is_struct)

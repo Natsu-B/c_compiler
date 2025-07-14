@@ -181,7 +181,7 @@ Node *new_node(NodeKind kind, Node *lhs, Node *rhs, Token *token)
   return node;
 }
 
-Node *new_node_num(int val)
+Node *new_node_num(long long val)
 {
   Node *node = calloc(1, sizeof(Node));
   node->kind = ND_NUM;
@@ -704,10 +704,14 @@ Node *statement()
   return node;
 }
 
-Node *expression()
-{
+Node *expression() {
   pr_debug2("expression");
-  return assignment_expression();
+  Node *node = assignment_expression();
+  while (consume(",", TK_RESERVED)) {
+    Token *old = get_old_token();
+    node = new_node(ND_COMMA, node, assignment_expression(), old);
+  }
+  return node;
 }
 
 Node *assignment_expression()
@@ -922,8 +926,15 @@ Node *multiplicative_expression()
   }
 }
 
-Node *cast_expression()
-{
+Node *cast_expression() {
+  Token *tok = get_token();
+  if (consume("(", TK_RESERVED) && is_type_specifier(get_token())) {
+    Node *node = type_name();
+    expect(")", TK_RESERVED);
+    node = new_node(ND_CAST, node, cast_expression(), tok);
+    return node;
+  }
+  set_token(tok);
   return unary_expression();
 }
 
@@ -1020,7 +1031,7 @@ Node *primary_expression()
       node->expr = vector_new();
       while (!consume(")", TK_RESERVED))
       {
-        Node *child_node = expression();
+        Node *child_node = assignment_expression();
         if (!child_node)
           error_exit("invalid node");
         vector_push(node->expr, child_node);

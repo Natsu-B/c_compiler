@@ -54,7 +54,7 @@ Token *peek_ident();
 Token *consume_ident();
 Token *expect_ident();
 Token *consume_string();
-bool is_number(long *result);
-long expect_number();
+bool is_number(long long *result);
+long long expect_number();
 
 #endif  // TOKENIZER_C_COMPILER

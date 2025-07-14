@@ -86,7 +86,7 @@ void _print_parse_result(Node *node, int nest)
         type_name = pointer->type;
         pointer = pointer->ptr_to;
       }
-      fprintf(stdout, "NodeKind: %s value: %ld type: %.*s%d\n",
+      fprintf(stdout, "NodeKind: %s value: %lld type: %.*s%d\n",
               nodekindlist[node->kind], node->val, reference_counter,
               "****************************************************************"
               "*************************************************",
@@ -105,12 +105,16 @@ void _print_parse_result(Node *node, int nest)
         pointer = pointer->ptr_to;
       }
       fprintf(stdout,
-              "NodeKind: %s type: %.*s%d offset: %lu is_new: %s is_local: %s\n",
+              "NodeKind: %s type: %.*s%d offset: %lu is_new: %s is_local: %s "
+              "is_signed: %s\n",
               nodekindlist[node->kind], reference_counter,
               "****************************************************************"
               "*************************************************",
               type_name, node->var->offset, node->is_new ? "true" : "false",
-              node->var->is_local ? "true" : "false");
+              node->var->is_local ? "true" : "false",
+              (node->type ? node->type->is_signed : node->var->type->is_signed)
+                  ? "true"
+                  : "false");
       break;
     }
     case ND_IF:

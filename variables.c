@@ -192,3 +192,10 @@ Var *get_global_var()
 {
   return root->var;
 }
+
+Var *find_var(Token *token) {
+  Var *v = find_local_var_all(token);
+  if (v)
+    return v;
+  return find_global_var(token);
+}

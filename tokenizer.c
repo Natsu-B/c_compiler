@@ -117,7 +117,7 @@ Token *get_old_token()
 
 Token *peek_ident()
 {
-  long tmp;
+  long long tmp;
   if (token->kind != TK_IDENT || is_number(&tmp))
     return NULL;
   return token;
@@ -145,21 +145,21 @@ Token *consume_string()
   return token_next();
 }
 
-bool is_number(long *result)
+bool is_number(long long *result)
 {
   if (token->kind != TK_IDENT || !isdigit(token->str[0]))
     return false;
   char *ptr;
-  *result = strtol(token->str, &ptr, 10);
+  *result = strtoll(token->str, &ptr, 10);
   if (ptr - token->str != (int)token->len)
     return false;
   return true;
 }
 
 // 次のトークンが整数だった場合読み進め、それ以外だったらエラーを返す関数
-long expect_number()
+long long expect_number()
 {
-  long result;
+  long long result;
   if (!is_number(&result))
     error_at(token->str, token->len, "トークンが整数ではありません");
   token_next();

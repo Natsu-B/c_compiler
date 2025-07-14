@@ -46,35 +46,6 @@ static FILE *fout;
     fprintf(fout, fmt "\n", ##__VA_ARGS__); \
   } while (0)
 
-// 移すサイズによってmv命令を変更する
-char *mv_instruction_specifier(int size, bool is_sighed)
-{
-  char *tmp;
-  if (is_sighed)
-  {
-    switch (size)
-    {
-      case 1:
-      case 2: tmp = "movsx"; break;
-      case 4: tmp = "movsxd"; break;
-      case 8: tmp = "mov"; break;
-      default: error_exit("unknown access size specifier"); break;
-    }
-  }
-  else
-  {
-    switch (size)
-    {
-      case 1:
-      case 2: tmp = "movzx"; break;
-      case 4:
-      case 8: tmp = "mov"; break;
-      default: error_exit("unknown access size specifier"); break;
-    }
-  }
-  return tmp;
-}
-
 // アクセスサイズの指定子を作成する
 char *access_size_specifier(int size)
 {
@@ -122,74 +93,71 @@ char *chose_register(int size, register_type reg_type)
   }
   char *tmp;
   int type = reg_type * 4 + size;
-  switch (type)
+  char *register_names[64] = {
+      "al",   "ax",   "eax",  "rax", "cl",   "cx",   "ecx",  "rcx",
+      "dl",   "dx",   "edx",  "rdx", "bl",   "bx",   "ebx",  "rbx",
+      "spl",  "sp",   "esp",  "rsp", "bpl",  "bp",   "ebp",  "rbp",
+      "sil",  "si",   "esi",  "rsi", "dil",  "di",   "edi",  "rdi",
+      "r8b",  "r8w",  "r8d",  "r8",  "r9b",  "r9w",  "r9d",  "r9",
+      "r10b", "r10w", "r10d", "r10", "r11b", "r11w", "r11d", "r11",
+      "r12b", "r12w", "r12d", "r12", "r13b", "r13w", "r13d", "r13",
+      "r14b", "r14w", "r14d", "r14", "r15b", "r15w", "r15d", "r15"};
+  if (type <= 64)
+    tmp = register_names[type - 1];
+  else
+    error_exit_with_guard("unknown register type");
+
+  return tmp;
+}
+
+// 移すサイズによってmv命令を変更する
+// mv rax まで出力する
+char *mv_instruction_specifier(int size, bool is_sighed, register_type reg)
+{
+  char *tmp = calloc(1, 11 /* movsxd rax */);
+  size_t copied = 0;
+  if (is_sighed)
   {
-    case 1: tmp = "al"; break;
-    case 2: tmp = "ax"; break;
-    case 3: tmp = "eax"; break;
-    case 4: tmp = "rax"; break;
-    case 5: tmp = "cl"; break;
-    case 6: tmp = "cx"; break;
-    case 7: tmp = "ecx"; break;
-    case 8: tmp = "rcx"; break;
-    case 9: tmp = "dl"; break;
-    case 10: tmp = "dx"; break;
-    case 11: tmp = "edx"; break;
-    case 12: tmp = "rdx"; break;
-    case 13: tmp = "bl"; break;
-    case 14: tmp = "bx"; break;
-    case 15: tmp = "ebx"; break;
-    case 16: tmp = "rbx"; break;
-    case 17: tmp = "spl"; break;
-    case 18: tmp = "sp"; break;
-    case 19: tmp = "esp"; break;
-    case 20: tmp = "rsp"; break;
-    case 21: tmp = "bpl"; break;
-    case 22: tmp = "bp"; break;
-    case 23: tmp = "ebp"; break;
-    case 24: tmp = "rbp"; break;
-    case 25: tmp = "sil"; break;
-    case 26: tmp = "si"; break;
-    case 27: tmp = "esi"; break;
-    case 28: tmp = "rsi"; break;
-    case 29: tmp = "dil"; break;
-    case 30: tmp = "di"; break;
-    case 31: tmp = "edi"; break;
-    case 32: tmp = "rdi"; break;
-    case 33: tmp = "r8b"; break;
-    case 34: tmp = "r8w"; break;
-    case 35: tmp = "r8d"; break;
-    case 36: tmp = "r8"; break;
-    case 37: tmp = "r9b"; break;
-    case 38: tmp = "r9w"; break;
-    case 39: tmp = "r9d"; break;
-    case 40: tmp = "r9"; break;
-    case 41: tmp = "r10b"; break;
-    case 42: tmp = "r10w"; break;
-    case 43: tmp = "r10d"; break;
-    case 44: tmp = "r10"; break;
-    case 45: tmp = "r11b"; break;
-    case 46: tmp = "r11w"; break;
-    case 47: tmp = "r11d"; break;
-    case 48: tmp = "r11"; break;
-    case 49: tmp = "r12b"; break;
-    case 50: tmp = "r12w"; break;
-    case 51: tmp = "r12d"; break;
-    case 52: tmp = "r12"; break;
-    case 53: tmp = "r13b"; break;
-    case 54: tmp = "r13w"; break;
-    case 55: tmp = "r13d"; break;
-    case 56: tmp = "r13"; break;
-    case 57: tmp = "r14b"; break;
-    case 58: tmp = "r14w"; break;
-    case 59: tmp = "r14d"; break;
-    case 60: tmp = "r14"; break;
-    case 61: tmp = "r15b"; break;
-    case 62: tmp = "r15w"; break;
-    case 63: tmp = "r15d"; break;
-    case 64: tmp = "r15"; break;
-    default: error_exit_with_guard("unknown register type"); break;
+    switch (size)
+    {
+      case 1:
+      case 2:
+        strcpy(tmp, "movsx");
+        copied += 5;
+        break;
+      case 4:
+        strcpy(tmp, "movsxd");
+        copied += 6;
+        break;
+      case 8:
+        strcpy(tmp, "mov");
+        copied += 3;
+        break;
+      default: error_exit("unknown access size specifier"); break;
+    }
   }
+  else
+  {
+    switch (size)
+    {
+      case 1:
+      case 2:
+        strcpy(tmp, "movzx");
+        copied += 5;
+        break;
+      case 4:
+      case 8:
+        strcpy(tmp, "mov");
+        copied += 3;
+        break;
+      default: error_exit("unknown access size specifier"); break;
+    }
+  }
+  tmp[copied] = ' ';
+  if (!is_sighed && size == 4)
+    strcpy(tmp + copied + 1, chose_register(size, reg));
+  else
+    strcpy(tmp + copied + 1, chose_register(8, reg));
   return tmp;
 }
 
@@ -381,7 +349,7 @@ void gen(Node *node)
 
     case ND_NUM:
       output_debug2("ND_NUM");
-      output_file("    push %ld", node->val);
+      output_file("    push %lld", node->val);
       return;
 
     case ND_STRING:
@@ -396,8 +364,9 @@ void gen(Node *node)
         if (node->type->type != TYPE_ARRAY && node->type->type != TYPE_STR)
         {
           output_file("    pop rax");
-          output_file("    %s rax, %s [rax]",
-                      mv_instruction_specifier(size_of(node->type), true),
+          output_file("    %s, %s [rax]",
+                      mv_instruction_specifier(size_of(node->type),
+                                               node->type->is_signed, rax),
                       access_size_specifier(size_of(node->type)));
           output_file("    push rax");
         }
@@ -425,8 +394,9 @@ void gen(Node *node)
       output_debug2("ND_DEREF");
       gen(node->lhs);
       output_file("    pop rax");
-      output_file("    %s rax, %s [rax]",
-                  mv_instruction_specifier(size_of(node->type), true),
+      output_file("    %s, %s [rax]",
+                  mv_instruction_specifier(size_of(node->type),
+                                           node->type->is_signed, rax),
                   access_size_specifier(size_of(node->type)));
       output_file("    push rax");
       return;
@@ -447,18 +417,18 @@ void gen(Node *node)
       output_debug2("ND '++' or '--'");
       gen_lval(node->lhs);
       output_file("    pop rax");
-      output_file("    %s rdi, %s [rax]",
+      output_file("    %s, %s [rax]",
                   mv_instruction_specifier(size_of(node->lhs->type),
-                                           node->lhs->type->is_signed),
+                                           node->lhs->type->is_signed, rdi),
                   access_size_specifier(size_of(node->lhs->type)));
       if (node->kind == ND_POSTINCREMENT || node->kind == ND_POSTDECREMENT)
         output_file("    mov rsi, rdi");
       if (node->val)
       {
         if (node->kind == ND_PREINCREMENT || node->kind == ND_POSTINCREMENT)
-          output_file("    add rdi, %ld", node->val);
+          output_file("    add rdi, %lld", node->val);
         else
-          output_file("    sub rdi, %ld", node->val);
+          output_file("    sub rdi, %lld", node->val);
       }
       else
       {
@@ -466,6 +436,13 @@ void gen(Node *node)
           output_file("    inc rdi");
         else
           output_file("    dec rdi");
+
+        if (node->type->type == TYPE_BOOL)
+        {
+          output_file("    cmp rdi, 0");
+          output_file("    setne dil");
+          output_file("    movzx rdi, dil");
+        }
       }
       output_file("    mov %s [rax], %s",
                   access_size_specifier(size_of(node->type)),
@@ -569,9 +546,20 @@ void gen(Node *node)
       output_file("    pop rcx");
       output_file("    pop rax");
       output_file("    %s rax, cl",
-                  node->kind == ND_LEFT_SHIFT ? "sal" : "sar");
+                  node->lhs->type->is_signed
+                      ? node->kind == ND_LEFT_SHIFT ? "sal" : "sar"
+                  : node->kind == ND_LEFT_SHIFT ? "shl"
+                                                : "shr");
       output_file("    push rax");
     }
+      return;
+    case ND_EVAL:
+      gen(node->lhs);
+      output_file("    pop rax");
+      output_file("    cmp rax, 0");
+      output_file("    setne al");
+      output_file("    movzx rax, al");
+      output_file("    push rax");
       return;
     default: break;
   }

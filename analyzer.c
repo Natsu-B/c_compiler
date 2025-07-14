@@ -18,42 +18,68 @@
 #include "include/type.h"
 #include "include/variables.h"
 
-bool is_equal_type(Type *lhs, Type *rhs)
+bool is_pointer_type(Type *t)
 {
-  if (lhs->type == rhs->type)
-  {
-    if (lhs->type == TYPE_PTR || lhs->type == TYPE_ARRAY)
-    {
-      if (lhs->ptr_to && rhs->ptr_to)
-        return is_equal_type(lhs->ptr_to, rhs->ptr_to);
-      else
-        return false;
-    }
-    return true;
-  }
-  return false;
+  return t->type == TYPE_PTR || t->type == TYPE_ARRAY;
 }
 
-TypeKind implicit_type_conversion_assign(Type *lhs, Type *rhs)
+bool is_integer_type(Type *t)
 {
-  if (rhs->type == TYPE_PTR || rhs->type == TYPE_ARRAY)
+  return t->type == TYPE_BOOL || t->type == TYPE_CHAR ||
+         t->type == TYPE_SHORT || t->type == TYPE_INT || t->type == TYPE_LONG ||
+         t->type == TYPE_LONGLONG || t->type == TYPE_ENUM;
+}
+
+bool is_equal_type(Type *lhs, Type *rhs)
+{
+  if (is_pointer_type(lhs) && is_pointer_type(rhs))
+    return is_equal_type(lhs->ptr_to, rhs->ptr_to);
+
+  if (lhs->type != rhs->type)
+    return false;
+
+  if (is_integer_type(lhs))
+    return lhs->is_signed == rhs->is_signed;
+
+  return true;
+}
+
+Type *implicit_type_conversion(Type *lhs, Type *rhs)
+{
+  // long long > long >  int
+  // bool, short, and char are promoted to int through integer promotion
+
+  // long long
+  if (lhs->type == TYPE_LONGLONG || rhs->type == TYPE_LONGLONG)
   {
-    if (lhs->type == TYPE_PTR || lhs->type == TYPE_ARRAY)
-      return TYPE_PTR;
+    Type *t = alloc_type(TYPE_LONGLONG);
+    t->is_signed = lhs->is_signed && rhs->is_signed;
+    return t;
   }
-  else
+
+  // long
+  if (lhs->type == TYPE_LONG || rhs->type == TYPE_LONG)
   {
-    switch (lhs->type)
-    {
-      case TYPE_STR:
-      case TYPE_STRUCT:
-      case TYPE_PTR:
-      case TYPE_ARRAY:
-      case TYPE_NULL: break;
-      default: return lhs->type;
-    }
+    Type *t = alloc_type(TYPE_LONG);
+    t->is_signed = lhs->is_signed && rhs->is_signed;
+    return t;
   }
-  return TYPE_NULL;
+
+  // int
+  if (lhs->type == TYPE_INT || rhs->type == TYPE_INT)
+  {
+    Type *t = alloc_type(TYPE_INT);
+    t->is_signed = lhs->is_signed && rhs->is_signed;
+    return t;
+  }
+
+  if (!is_integer_type(lhs) || !is_integer_type(rhs))
+    unreachable();
+
+  // integer promotion
+  Type *t = alloc_type(TYPE_INT);
+  t->is_signed = true;
+  return t;
 }
 
 struct
@@ -99,55 +125,76 @@ void add_type_internal(Node *node)
     case ND_NOP: return;
     case ND_ADD:
     {
-      int flag = 0;
-      Type *type = alloc_type(TYPE_INT);
-      if (node->lhs->type->type != TYPE_INT)
-      {
-        type = node->lhs->type;
-        flag++;
+      if (is_pointer_type(node->lhs->type) && is_pointer_type(node->rhs->type))
+        error_at(node->token->str, node->token->len,
+                 "invalid operands to binary +");
+
+      if (is_pointer_type(node->lhs->type))
+      {  // ptr + int
+        node->rhs = new_node(ND_MUL, node->rhs,
+                             new_node_num(size_of(node->lhs->type->ptr_to)),
+                             node->token);
+        add_type(node->rhs);
+        node->type = node->lhs->type;
+        return;
       }
-      if (node->rhs->type->type != TYPE_INT)
-      {
-        type = node->rhs->type;
-        flag++;
+      if (is_pointer_type(node->rhs->type))
+      {  // int + ptr
+        node->lhs = new_node(ND_MUL, node->lhs,
+                             new_node_num(size_of(node->rhs->type->ptr_to)),
+                             node->token);
+        add_type(node->lhs);
+        node->type = node->rhs->type;
+        return;
       }
-      if (flag >= 2)
-        if (node->lhs->type->type == TYPE_PTR ||
-            node->lhs->type->type == TYPE_ARRAY ||
-            node->rhs->type->type == TYPE_PTR ||
-            node->rhs->type->type == TYPE_ARRAY)
-          error_at(node->token->str, node->token->len,
-                   "invalid use of the '+' operator");
-      node->lhs->type = type;
-      node->rhs->type = type;
-      node->type = type;
+
+      node->type = implicit_type_conversion(node->lhs->type, node->rhs->type);
       return;
     }
 
     case ND_SUB:
-      if (node->rhs->type->type == TYPE_PTR)
-        error_at(node->token->str, node->token->len,
-                 "invalid use of the '-' operator");
-      if (node->lhs->type->type == TYPE_PTR)
+      if (is_pointer_type(node->lhs->type) && is_pointer_type(node->rhs->type))
       {
-        node->rhs->type = node->lhs->type;
-        node->type = node->lhs->type;
+        // ptr - ptr
+        Node *n = new_node(ND_SUB, node->lhs, node->rhs, node->token);
+        n->lhs->type = n->rhs->type = alloc_type(TYPE_LONG);
+        node->lhs =
+            new_node(ND_DIV, n, new_node_num(size_of(node->lhs->type->ptr_to)),
+                     node->token);
+        add_type(node->lhs);
+        node->kind = node->lhs->kind;
+        node->rhs = node->lhs->rhs;
+        node->type = alloc_type(TYPE_LONG);
+        node->type->is_signed = true;
+        return;
       }
-      else
-        node->type = alloc_type(TYPE_INT);
+      if (is_pointer_type(node->lhs->type))
+      {  // ptr - int
+        node->rhs = new_node(ND_MUL, node->rhs,
+                             new_node_num(size_of(node->lhs->type->ptr_to)),
+                             node->token);
+        add_type(node->rhs);
+        node->type = node->lhs->type;
+        return;
+      }
+      if (is_pointer_type(node->rhs->type))
+      {
+        error_at(node->token->str, node->token->len,
+                 "invalid operands to binary -");
+      }
+
+      node->type = implicit_type_conversion(node->lhs->type, node->rhs->type);
       return;
     case ND_MUL:
     case ND_DIV:
     case ND_IDIV:
     {
-      TypeKind kind =
-          implicit_type_conversion_assign(node->lhs->type, node->rhs->type);
-      if (kind == TYPE_PTR)
+      if (!is_integer_type(node->lhs->type) ||
+          !is_integer_type(node->rhs->type))
         error_at(node->token->str, node->token->len,
                  "operands for '%s' must be integer types",
                  (node->kind == ND_MUL ? "*" : "/"));
-      // todo
-      node->type = alloc_type(TYPE_INT);
+      node->type = implicit_type_conversion(node->lhs->type, node->rhs->type);
       return;
     }
     case ND_EQ:
@@ -155,19 +202,60 @@ void add_type_internal(Node *node)
     case ND_LT:
     case ND_LTE: node->type = alloc_type(TYPE_BOOL); return;
     case ND_ASSIGN:
-      if (!is_equal_type(node->lhs->type, node->rhs->type) &&
-          node->rhs->kind != ND_STRING)
+    {
+      Type *lhs_type = node->lhs->type;
+      Type *rhs_type = node->rhs->type;
+
+      if (is_equal_type(lhs_type, rhs_type))
       {
-        TypeKind converted_type =
-            implicit_type_conversion_assign(node->lhs->type, node->rhs->type);
-        if (converted_type == TYPE_NULL)
-          error_at(node->token->str, node->token->len,
-                   "cannot convert both sides of '=' types");
-        node->type = alloc_type(converted_type);
+        node->type = lhs_type;
+        return;
       }
-      else
-        node->type = node->lhs->type;
+
+      // when lhs type is bool, we should eval rhs value before assigned
+      if (lhs_type->type == TYPE_BOOL)
+      {
+        Node *new = new_node(ND_EVAL, node->rhs, NULL, NULL);
+        node->rhs = new;
+        rhs_type = lhs_type;
+        node->type = lhs_type;
+        return;
+      }
+
+      if (is_pointer_type(lhs_type) && is_pointer_type(rhs_type))
+      {
+        if ((lhs_type->ptr_to && lhs_type->ptr_to->type == TYPE_VOID) ||
+            (rhs_type->ptr_to && rhs_type->ptr_to->type == TYPE_VOID))
+        {
+          node->type = lhs_type;
+          return;
+        }
+      }
+
+      // T* = 0
+      if (is_pointer_type(lhs_type) && rhs_type->type == TYPE_INT &&
+          node->rhs->kind == ND_NUM && node->rhs->val == 0)
+      {
+        node->type = lhs_type;
+        return;
+      }
+
+      if (is_integer_type(lhs_type) && is_integer_type(rhs_type))
+      {
+        node->type = lhs_type;
+        return;
+      }
+
+      if (node->rhs->kind == ND_STRING)
+      {
+        node->type = lhs_type;
+        return;
+      }
+
+      error_at(node->token->str, node->token->len,
+               "cannot convert both sides of '=' types");
       return;
+    }
     case ND_ADDR:
     {
       Type *ptr = alloc_type(TYPE_PTR);
@@ -176,41 +264,111 @@ void add_type_internal(Node *node)
       return;
     }
     case ND_DEREF:
-      if (node->lhs->type->type != TYPE_PTR &&
-          node->lhs->type->type != TYPE_ARRAY)
+      if (!is_pointer_type(node->lhs->type))
         error_at(node->token->str, node->token->len, "invalid dereference");
+      if (!node->lhs->type->ptr_to)
+        error_at(node->token->str, node->token->len,
+                 "cannot dereference a void pointer");
       node->type = node->lhs->type->ptr_to;
-      size_of(node->type);  // 正しい型かを判定
+      size_of(node->type);  // check if it's a valid type
       return;
     case ND_PREINCREMENT:
     case ND_PREDECREMENT:
     case ND_POSTINCREMENT:
     case ND_POSTDECREMENT:
+      if (!is_integer_type(node->lhs->type) &&
+          !is_pointer_type(node->lhs->type))
+        error_at(node->token->str, node->token->len,
+                 "operand must be integer or pointer for inc/dec");
       node->type = node->lhs->type;
       if (node->lhs->type->ptr_to)
         node->val = size_of(node->lhs->type->ptr_to);
       return;
     case ND_FUNCDEF: node->type = alloc_type(TYPE_VOID); return;
-    case ND_FUNCCALL: node->type = alloc_type(TYPE_INT); return;
-    case ND_RETURN: alloc_type(TYPE_VOID); return;
-    case ND_SIZEOF: node->type = alloc_type(TYPE_LONG); return;
+    case ND_FUNCCALL:
+    {
+      Var *fn = find_var(node->token);
+      if (fn && fn->type->param_list)
+        node->type = vector_peek_at(fn->type->param_list, 1);
+      else
+        node->type = alloc_type(TYPE_INT);
+      return;
+    }
+    case ND_RETURN: node->type = alloc_type(TYPE_VOID); return;
+    case ND_SIZEOF:
+    {
+      Type *t = alloc_type(TYPE_LONG);
+      t->is_signed = false;
+      node->type = t;
+      return;
+    }
     case ND_IF:
     case ND_ELIF:
     case ND_FOR:
     case ND_WHILE:
     case ND_DO: node->type = alloc_type(TYPE_VOID); return;
-    case ND_TERNARY: node->type = node->lhs->type; return;
+    case ND_TERNARY:
+    {
+      Type *lhs_type = node->chs->type;
+      Type *rhs_type = node->rhs->type;
+
+      if (is_equal_type(lhs_type, rhs_type))
+      {
+        node->type = lhs_type;
+        return;
+      }
+
+      if (is_pointer_type(lhs_type) && is_pointer_type(rhs_type))
+      {
+        // T* and void* -> void*
+        if (!lhs_type->ptr_to || !rhs_type->ptr_to)
+        {
+          Type *t = alloc_type(TYPE_PTR);
+          t->ptr_to = NULL;
+          node->type = t;
+          return;
+        }
+      }
+
+      if (is_integer_type(lhs_type) && is_integer_type(rhs_type))
+      {
+        node->type = implicit_type_conversion(lhs_type, rhs_type);
+        return;
+      }
+
+      error_at(node->token->str, node->token->len,
+               "mismatched types in ternary operator");
+      return;
+    }
     case ND_LOGICAL_OR:
-    case ND_LOGICAL_AND: alloc_type(TYPE_BOOL); return;
+    case ND_LOGICAL_AND:
+    {
+      Type *lhs = node->lhs->type;
+      Type *rhs = node->rhs->type;
+      if (!is_integer_type(lhs) && !is_pointer_type(lhs))
+        error_at(node->lhs->token->str, node->lhs->token->len,
+                 "scalar type required");
+      if (!is_integer_type(rhs) && !is_pointer_type(rhs))
+        error_at(node->rhs->token->str, node->rhs->token->len,
+                 "scalar type required");
+      node->type = alloc_type(TYPE_BOOL);
+      return;
+    }
     case ND_INCLUSIVE_OR:
     case ND_EXCLUSIVE_OR:
     case ND_AND:
-      // todo
-      node->type = alloc_type(TYPE_INT);
+      if (!is_integer_type(node->lhs->type) ||
+          !is_integer_type(node->rhs->type))
+        error_at(node->token->str, node->token->len,
+                 "operands for bitwise op must be integer types");
+      node->type = implicit_type_conversion(node->lhs->type, node->rhs->type);
       return;
     case ND_LEFT_SHIFT:
     case ND_RIGHT_SHIFT:
-      // TODO node->rhs->typeが整数型であるかの検証
+      if (!is_integer_type(node->lhs->type) ||
+          !is_integer_type(node->rhs->type))
+        error_at(node->token->str, node->token->len,
+                 "operands for shift op must be integer types");
       node->type = node->lhs->type;
       return;
     case ND_ASSIGNMENT:
@@ -222,14 +380,11 @@ void add_type_internal(Node *node)
       return;
     case ND_VAR: node->type = node->var->type; return;
     case ND_ARRAY:
-      // char *i = "hoge"; i[3]; 等が使えなくなるためコメントアウト
-      // if (node->rhs->val < 0 || node->rhs->val >= node->lhs->type->size)
-      //     error_at(node->token->str, "index out of bounds for type array");
       node->kind = ND_DEREF;
       node->lhs = new_node(ND_ADD, node->lhs, node->rhs, node->token);
       node->rhs = NULL;
-      node->lhs->type = node->lhs->lhs->type;
       add_type(node);
+      add_type_internal(node);
       return;
     case ND_DOT:
     case ND_ARROW:
@@ -256,6 +411,8 @@ void add_type_internal(Node *node)
       node->type = alloc_type(TYPE_VOID);
       return;
     }
+    case ND_COMMA: node->type = node->rhs->type; return;
+    case ND_CAST: node->type = node->lhs->type; return;
     default: unreachable();
   }
 }

@@ -69,6 +69,9 @@ typedef enum
   ND_LABEL,          // goto label
   ND_CASE,           // case
   ND_SWITCH,         // switch
+  ND_COMMA,          // ,
+  ND_CAST,           // (type)
+  ND_EVAL,           // boolへのキャスト
   ND_END,            // デバッグ時利用
 } NodeKind;
 
@@ -102,17 +105,18 @@ struct GTLabel
 };
 
 // デバッグ時利用 NodeKindに追加したら必ず追加すること
-#define NodeKindTable                                                        \
-  "ND_NOP", "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_IDIV", "ND_EQ",      \
-      "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF",       \
-      "ND_PREINCREMENT", "ND_PREDECREMENT", "ND_POSTINCREMENT",              \
-      "ND_POSTDECREMENT", "ND_FUNCDEF", "ND_FUNCCALL", "ND_RETURN",          \
-      "ND_SIZEOF", "ND_TYPE_NAME", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE", \
-      "ND_DO", "ND_TERNARY", "ND_LOGICAL_OR", "ND_LOGICAL_AND",              \
-      "ND_INCLUSIVE_OR", "ND_EXCLUSIVE_OR", "ND_AND", "ND_LEFT_SHIFT",       \
-      "ND_RIGHT_SHIFT", "ND_ASSIGNMENT", "ND_VAR", "ND_ARRAY", "ND_DOT",     \
-      "ND_ARROW", "ND_FIELD", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR",       \
-      "ND_STIRNG", "ND_GOTO", "ND_LABEL", "ND_CASE", "ND_SWITCH"
+#define NodeKindTable                                                         \
+  "ND_NOP", "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_IDIV", "ND_EQ",       \
+      "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF",        \
+      "ND_PREINCREMENT", "ND_PREDECREMENT", "ND_POSTINCREMENT",               \
+      "ND_POSTDECREMENT", "ND_FUNCDEF", "ND_FUNCCALL", "ND_RETURN",           \
+      "ND_SIZEOF", "ND_TYPE_NAME", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE",  \
+      "ND_DO", "ND_TERNARY", "ND_LOGICAL_OR", "ND_LOGICAL_AND",               \
+      "ND_INCLUSIVE_OR", "ND_EXCLUSIVE_OR", "ND_AND", "ND_LEFT_SHIFT",        \
+      "ND_RIGHT_SHIFT", "ND_ASSIGNMENT", "ND_VAR", "ND_ARRAY", "ND_DOT",      \
+      "ND_ARROW", "ND_FIELD", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR",        \
+      "ND_STIRNG", "ND_GOTO", "ND_LABEL", "ND_CASE", "ND_SWITCH", "ND_COMMA", \
+      "ND_CAST", "ND_EVAL"
 extern const char *nodekindlist[ND_END];
 
 struct Node
@@ -153,15 +157,15 @@ struct Node
   char *func_name;    // ND_FUNCCALL ND_FUNCDEF で利用 関数名
   size_t func_len;    // ND_FUNCCALL ND_FUNCDEF のときのみ利用 関数名長さ
   // };
-  long val;     // ND_NUMの場合数値 ND_POST/PRE INCREMENT/DECREMENT の場合
-                // その型がptrのときその大きさ、数値のとき0
-                // struct
-                // {               // 変数(ND_VAR)の場合
-  bool is_new;  // 初めて定義された変数か否か
-  Var *var;     // 変数の情報
-                // };
-                // struct
-                // {                      // string型 ND_STRINGの場合
+  long long val;  // ND_NUMの場合数値 ND_POST/PRE INCREMENT/DECREMENT の場合
+                  // その型がptrのときその大きさ、数値のとき0
+                  // struct
+                  // {               // 変数(ND_VAR)の場合
+  bool is_new;    // 初めて定義された変数か否か
+  Var *var;       // 変数の情報
+                  // };
+                  // struct
+                  // {                      // string型 ND_STRINGの場合
   char *literal_name;  // stirng literal にアクセスする名前
                        // };
                        // struct
@@ -200,6 +204,7 @@ struct FuncBlock
 
 FuncBlock *get_funcblock_head();
 Node *new_node(NodeKind kind, Node *lhs, Node *rhs, Token *token);
+Node *new_node_num(long long val);
 Node *constant_expression();
 FuncBlock *parser();
 Node *declarator_no_side_effect(Type *type);

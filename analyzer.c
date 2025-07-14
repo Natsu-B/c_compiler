@@ -412,7 +412,7 @@ void add_type_internal(Node *node)
       return;
     }
     case ND_COMMA: node->type = node->rhs->type; return;
-    case ND_CAST: node->type = node->lhs->type; return;
+    case ND_CAST: node->type = node->rhs->type; return;
     default: unreachable();
   }
 }

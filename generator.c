@@ -557,6 +557,7 @@ void gen(Node *node)
       output_file("    add rsp, 8");
       gen(node->rhs);
       return;
+    case ND_CAST: gen(node->lhs); return;
     case ND_EVAL:
       gen(node->lhs);
       output_file("    pop rax");

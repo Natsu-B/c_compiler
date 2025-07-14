@@ -704,10 +704,12 @@ Node *statement()
   return node;
 }
 
-Node *expression() {
+Node *expression()
+{
   pr_debug2("expression");
   Node *node = assignment_expression();
-  while (consume(",", TK_RESERVED)) {
+  while (consume(",", TK_RESERVED))
+  {
     Token *old = get_old_token();
     node = new_node(ND_COMMA, node, assignment_expression(), old);
   }
@@ -926,12 +928,14 @@ Node *multiplicative_expression()
   }
 }
 
-Node *cast_expression() {
+Node *cast_expression()
+{
   Token *tok = get_token();
-  if (consume("(", TK_RESERVED) && is_type_specifier(get_token())) {
+  if (consume("(", TK_RESERVED) && is_type_specifier(get_token()))
+  {
     Node *node = type_name();
     expect(")", TK_RESERVED);
-    node = new_node(ND_CAST, node, cast_expression(), tok);
+    node = new_node(ND_CAST, cast_expression(), node, tok);
     return node;
   }
   set_token(tok);

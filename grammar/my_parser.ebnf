@@ -8,7 +8,7 @@ external-declaration
         = function-definition
         | declaration;
 
-function-definition = declaration-specifiers, identifier, "(", [ parameter-type-list ], ")", compound-statement;
+function-definition = declaration-specifiers, declarator, compound-statement;
 
 (* STATEMENTS *)
 statement

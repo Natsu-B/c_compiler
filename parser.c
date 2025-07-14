@@ -24,7 +24,7 @@ Type *abstract_declarator(Type *type);
 Type *direct_abstract_declarator(Type *type);
 Node *external_declaration();
 Node *function_declaration();
-Node *declaration(Type *type);
+Node *declaration(Type *type, bool is_external_declaration);
 Node *init_declarator(Type *type);
 Node *declarator_no_side_effect();
 Node *declarator(Type *type);
@@ -220,19 +220,23 @@ Vector *parameter_type_list(Vector **type_list, Type *type)
                   new_node(ND_VARIABLE_ARGS, NULL, NULL, get_old_token()));
       if (type_list)
         vector_push(*type_list, alloc_type(TYPE_VARIABLES));
+      expect(")", TK_RESERVED);
+      break;
     }
     else
     {
       Type *type = declaration_specifiers();
+      if (!type)
+        error_at(get_token()->str, get_token()->len, "invalid type");
       Node *parameter = declarator_no_side_effect(type);
       vector_push(list, parameter);
       if (type_list)
         vector_push(*type_list, type);
-    }
-    if (!consume(",", TK_RESERVED))
-    {
-      expect(")", TK_RESERVED);
-      break;
+      if (!consume(",", TK_RESERVED))
+      {
+        expect(")", TK_RESERVED);
+        break;
+      }
     }
   }
   return list;
@@ -266,68 +270,44 @@ FuncBlock *parser()
 Node *external_declaration()
 {
   pr_debug2("program");
-  Token *token_before = get_token();
   Type *type = declaration_specifiers();
   if (!type)
-    error_at(token_before->str, token_before->len, "型が指定されていません");
-
-  // 関数宣言かどうか function-definition
-  Token *token = consume_token_if_next_matches(TK_IDENT, '(');
-  if (token)
-  {
-    expect("(", TK_RESERVED);
-    Node *node = calloc(1, sizeof(Node));
-    node->kind = ND_FUNCDEF;
-    node->func_name = token->str;
-    node->func_len = token->len;
-    node->type = type;
-    program_name = token->str;
-    program_name_len = token->len;
-    Vector *type_list = vector_new();
-    node->expr = parameter_type_list(&type_list, type);
-    Type *func_type = alloc_type(TYPE_FUNC);
-    func_type->param_list = type_list;
-
-    if (!add_function_name(type_list, token))
-      error_at(token->str, token->len, "invalid name");
-    if (consume("{", TK_RESERVED))
-    {
-      new_nest();
-      for (size_t i = 1; i <= vector_size(node->expr); i++)
-      {
-        Node *param = vector_peek_at(node->expr, i);
-        param->var = add_variables(param->token, param->type);
-        param->is_new = true;
-      }
-      NDBlock head;
-      head.next = NULL;
-      NDBlock *pointer = &head;
-
-      while (!consume("}", TK_RESERVED))
-      {
-        NDBlock *next = calloc(1, sizeof(NDBlock));
-        pointer->next = next;
-        next->node = block_item();
-        pointer = next;
-      }
-      node->stmt = head.next;
-      exit_nest();
-    }
-    else
-    {
-      expect(";", TK_RESERVED);
-      return new_node(ND_NOP, NULL, NULL, NULL);
-    }
-    return node;
-  }
-  // グローバル変数宣言
-  Node *node = declaration(type);
-  return node;
+    error_at(get_token()->str, get_token()->len, "failed to parse");
+  return declaration(type, true);
 }
 
-Node *declaration(Type *type)
+Node *declaration(Type *type, bool is_external_declaration)
 {
   Node *node = init_declarator(type);
+  // funcdef
+  if (is_external_declaration && consume("{", TK_RESERVED))
+  {
+    program_name = node->token->str;
+    program_name_len = node->token->len;
+    new_nest();
+    for (size_t i = 1; i <= vector_size(node->expr); i++)
+    {
+      Node *param = vector_peek_at(node->expr, i);
+      param->var = add_variables(param->token, param->type);
+      param->is_new = true;
+    }
+    NDBlock head;
+    head.next = NULL;
+    NDBlock *pointer = &head;
+
+    while (!consume("}", TK_RESERVED))
+    {
+      NDBlock *next = calloc(1, sizeof(NDBlock));
+      pointer->next = next;
+      next->node = block_item();
+      pointer = next;
+    }
+    node->stmt = head.next;
+    exit_nest();
+    return node;
+  }
+  else if (node && node->kind == ND_FUNCDEF)
+    memset(node, 0, sizeof(Node));
   expect(";", TK_RESERVED);
   return node;
 }
@@ -365,21 +345,20 @@ Node *declarator_internal(Type **type, Token *token)
   }
   else if (consume("(", TK_RESERVED))
   {
+    Node *node = calloc(1, sizeof(Node));
+    node->kind = ND_FUNCDEF;
+    node->func_name = token->str;
+    node->func_len = token->len;
+    node->type = *type;
+    node->token = token;
     Type *new = alloc_type(TYPE_FUNC);
     new->param_list = vector_new();
-    parameter_type_list(&new->param_list, *type);
+    node->expr = parameter_type_list(&new->param_list, *type);
     if (!add_function_name(new->param_list, token))
       error_at(token->str, token->len, "invalid name");
     *type = new;
-    return new_node(ND_NOP, NULL, NULL, NULL);
+    return node;
   }
-  // Type *_type = *type;
-  // while (_type)
-  // {
-  //   if (_type->type == TYPE_TYPEDEF)
-  //     return NULL;
-  //   _type = _type->ptr_to;
-  // }
   Node *node = calloc(1, sizeof(Node));
   node->token = token;
   node->kind = ND_VAR;
@@ -399,7 +378,7 @@ Node *declarator(Type *type)
   type = pointer(type);
   Token *token = consume_ident();
   Node *node = declarator_internal(&type, token);
-  if (node)
+  if (node && type->type != TYPE_FUNC)
   {
     Var *var = add_variables(token, type);
     if (!var)
@@ -523,7 +502,7 @@ Node *block_item()
 {
   Type *type = declaration_specifiers();
   if (type)
-    return declaration(type);
+    return declaration(type, false);
   return statement();
 }
 
@@ -661,7 +640,7 @@ Node *statement()
     // declarationかどうか
     Type *type = declaration_specifiers();
     if (type)
-      node->init = declaration(type);
+      node->init = declaration(type, false);
     else if (!consume(";", TK_RESERVED))
     {
       Node *new = calloc(1, sizeof(Node));

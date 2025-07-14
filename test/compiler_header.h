@@ -53,6 +53,7 @@ extern FILE *stderr;
 int memcmp(void *s1, void *s2, size_t n);
 void *memcpy(void *dest, void *src, size_t n);
 void *memmove(void *dest, void *src, size_t n);
+void *memset(void *destt, int size, size_t n);
 int strcmp(char *s1, char *s2);
 int strncmp(char *s1, char *s2, size_t n);
 size_t strlen(char *s);

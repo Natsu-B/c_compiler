@@ -75,6 +75,7 @@ void _print_parse_result(Node *node, int nest)
   make_space(nest);
   switch (node->kind)
   {
+    case ND_NOP: return;
     case ND_NUM:
     {
       int type_name = __INT_MAX__;

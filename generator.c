@@ -272,8 +272,7 @@ void gen(Node *node)
     case ND_DISCARD_EXPR:
       output_debug2("ND_ARRAY ND_DISCARD_EXPR");
       gen(node->lhs);
-      if (node->kind == ND_DISCARD_EXPR)
-        output_file("    add rsp, 8");
+      output_file("    add rsp, 8");
       return;
 
     case ND_BLOCK:
@@ -552,6 +551,11 @@ void gen(Node *node)
                                                 : "shr");
       output_file("    push rax");
     }
+      return;
+    case ND_COMMA:
+      gen(node->lhs);
+      output_file("    add rsp, 8");
+      gen(node->rhs);
       return;
     case ND_EVAL:
       gen(node->lhs);

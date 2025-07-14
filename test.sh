@@ -211,6 +211,7 @@ assert 'int main() {int x = -1; x >>= 9; x <<=8; return x;}'
 assert 'int main() {unsigned y = -1/* 4294967295 */; y >>= 30; y <<= 1; return y;}'
 assert 'int main() {int x = -1; x >>= 9; x <<=8; unsigned y = -1; y >>= 30; y <<= 1; return x + y;}'
 assert 'int main() {_Bool x = 1; _Bool tmp; _Bool *y = &tmp; *y = 10; if (memcmp(&x, y, 1)) return 100; return 89;}'
+assert 'int main() {int a= 0; int b = 3; b += (a++, b); b += a++, b; b++, b++; return (a, b);}'
 # assert '#include "../test/compiler_header.h"
 # int foo(int x, ...);int main(){ return foo(1, 2, 4, 7, 8, 9, 11, 15, 18, 20, 19, 0); } int foo(int x, ...){ va_list ap; va_start(ap, x); int tmp = x; int result; while (tmp) { result = tmp; tmp = va_arg(ap, int); } va_end(ap); return result; }'
 

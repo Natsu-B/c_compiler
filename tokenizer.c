@@ -271,7 +271,8 @@ Token *tokenize_once(char *input, char **end)
     // "==", "<=", ">=", "!=", "&&", "||", "->", "++", "--", "*=", "/=", "%=",
     // "+=", "-=", "<<=", ">>=", "&=", "^=", "|=" の場合
     if ((*(input + 2) == '=' && ((*(input + 1) == '<' && *(input) == '<') ||
-                                 (*(input + 1) == '>' && *(input) == '>'))))
+                                 (*(input + 1) == '>' && *(input) == '>'))) ||
+        (*(input + 2) == '.' && *(input + 1) == '.' && *input == '.'))
     {
       pr_debug2("find RESERVED token: %.3s", input);
       cur->len = 3;

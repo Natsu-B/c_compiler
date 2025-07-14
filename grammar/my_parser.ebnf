@@ -120,7 +120,7 @@ pointer
 
 parameter-type-list
         = "void"
-        | parameter-declaration, { ",", parameter-declaration }, [ "," ];
+        | parameter-declaration, { ",", parameter-declaration }, [ ",", "..." ];
 
 parameter-declaration
         = declaration-specifiers, declarator;

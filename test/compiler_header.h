@@ -23,7 +23,13 @@ struct tm
   long int tm_gmtoff;
   char *tm_zone;
 };
-
+// typedef struct
+// {
+//   unsigned int gp_offset;
+//   unsigned int fp_offset;
+//   void *overflow_arg_area;
+//   void *reg_save_area;
+// } __builtin_va_list *(pointer);
 typedef __builtin_va_list __gnuc_va_list;
 typedef __gnuc_va_list va_list;
 #define va_start(v, l) __builtin_va_start(v, l)

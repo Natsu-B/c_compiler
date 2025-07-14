@@ -214,11 +214,21 @@ Vector *parameter_type_list(Vector **type_list, Type *type)
   set_token(old);
   while (!consume(")", TK_RESERVED))
   {
-    Type *type = declaration_specifiers();
-    Node *parameter = declarator_no_side_effect(type);
-    vector_push(list, parameter);
-    if (type_list)
-      vector_push(*type_list, type);
+    if (consume("...", TK_RESERVED))
+    {
+      vector_push(list,
+                  new_node(ND_VARIABLE_ARGS, NULL, NULL, get_old_token()));
+      if (type_list)
+        vector_push(*type_list, alloc_type(TYPE_VARIABLES));
+    }
+    else
+    {
+      Type *type = declaration_specifiers();
+      Node *parameter = declarator_no_side_effect(type);
+      vector_push(list, parameter);
+      if (type_list)
+        vector_push(*type_list, type);
+    }
     if (!consume(",", TK_RESERVED))
     {
       expect(")", TK_RESERVED);

@@ -212,15 +212,10 @@ Token *directive(Token *old)
             }
             else if (ptr->kind == TK_RESERVED && ptr->str[0] == '.')
             {
-              if (strncmp(ptr->str, "...", 3) ||
-                  ptr->next->kind != TK_RESERVED || ptr->next->str[0] != '.' ||
-                  ptr->next->next->kind != TK_RESERVED ||
-                  ptr->next->next->str[0] != '.')
+              if (strncmp(ptr->str, "...", 3))
                 error_at(ptr->str, 1, "invalid identifier");
               token_void(ptr);
-              token_void(ptr->next);
-              token_void(ptr->next->next);
-              ptr = token_next_not_ignorable_void(ptr->next->next);
+              ptr = token_next_not_ignorable_void(ptr);
               if (ptr->str[0] != ')')
                 error_at(ptr->str, 1, "invalid identifier");
               token_void(ptr);

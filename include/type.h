@@ -16,21 +16,22 @@ typedef struct Token Token;
 // サポートしている変数の型
 typedef enum
 {
-  TYPE_INT,       // int型 signed 32bit
-  TYPE_BOOL,      // bool型 8 bit
-  TYPE_CHAR,      // char型 8bit
-  TYPE_LONG,      // long型 64bit
-  TYPE_LONGLONG,  // long long型 signed 64bit
-  TYPE_SHORT,     // short型 16bit
-  TYPE_VOID,      // void型
-  TYPE_STR,       // char文字列
-  TYPE_STRUCT,    // struct、union で定義されている型
-  TYPE_PTR,       // 型へのポインタ
-  TYPE_ARRAY,     // 配列
-  TYPE_FUNC,      // 関数
-  TYPE_TYPEDEF,   // typedef
-  TYPE_ENUM,      // enum
-  TYPE_NULL,      // 失敗時等に返す 実際の型ではない
+  TYPE_INT,        // int型 signed 32bit
+  TYPE_BOOL,       // bool型 8 bit
+  TYPE_CHAR,       // char型 8bit
+  TYPE_LONG,       // long型 64bit
+  TYPE_LONGLONG,   // long long型 signed 64bit
+  TYPE_SHORT,      // short型 16bit
+  TYPE_VOID,       // void型
+  TYPE_STR,        // char文字列
+  TYPE_STRUCT,     // struct、union で定義されている型
+  TYPE_PTR,        // 型へのポインタ
+  TYPE_ARRAY,      // 配列
+  TYPE_FUNC,       // 関数
+  TYPE_TYPEDEF,    // typedef
+  TYPE_ENUM,       // enum
+  TYPE_VARIABLES,  // 可変長引数
+  TYPE_NULL,       // 失敗時等に返す 実際の型ではない
 } TypeKind;
 
 // 変数の型を管理するstruct

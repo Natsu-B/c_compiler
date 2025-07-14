@@ -76,6 +76,7 @@ typedef enum
   ND_COMMA,          // ,
   ND_CAST,           // (type)
   ND_EVAL,           // boolへのキャスト
+  ND_VARIABLE_ARGS,  // 可変長引数 ...
   ND_END,            // デバッグ時利用
 } NodeKind;
 

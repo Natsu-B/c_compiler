@@ -222,7 +222,9 @@ unary-operator
         = "&"
         | "*"
         | "+"
-        | "-";
+        | "-"
+        | "~"
+        | "!";
 
 postfix-expression
         = primary-expression

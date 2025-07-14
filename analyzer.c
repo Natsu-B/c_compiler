@@ -66,7 +66,8 @@ Type *implicit_type_conversion(Type *lhs, Type *rhs)
   }
 
   // int
-  if (lhs->type == TYPE_INT || rhs->type == TYPE_INT)
+  if (lhs->type == TYPE_INT || lhs->type == TYPE_ENUM ||
+      rhs->type == TYPE_INT || rhs->type == TYPE_ENUM)
   {
     Type *t = alloc_type(TYPE_INT);
     t->is_signed = lhs->is_signed && rhs->is_signed;
@@ -80,6 +81,21 @@ Type *implicit_type_conversion(Type *lhs, Type *rhs)
   Type *t = alloc_type(TYPE_INT);
   t->is_signed = true;
   return t;
+}
+
+Type *promote_integer(Type *type, Token *token)
+{
+  if (!is_integer_type(type))
+    error_at(token->str, token->len, "operand must be a integer type");
+
+  if (type->type == TYPE_BOOL || type->type == TYPE_CHAR ||
+      type->type == TYPE_SHORT)
+  {
+    Type *promoted_type = alloc_type(TYPE_INT);
+    promoted_type->is_signed = true;
+    return promoted_type;
+  }
+  return type;
 }
 
 struct
@@ -272,6 +288,12 @@ void add_type_internal(Node *node)
       node->type = node->lhs->type->ptr_to;
       size_of(node->type);  // check if it's a valid type
       return;
+    case ND_UNARY_PLUS:
+    case ND_UNARY_MINUS:
+    case ND_LOGICAL_NOT:
+    case ND_NOT:
+      node->type = promote_integer(node->lhs->type, node->token);
+      return;
     case ND_PREINCREMENT:
     case ND_PREDECREMENT:
     case ND_POSTINCREMENT:
@@ -396,7 +418,13 @@ void add_type_internal(Node *node)
     }
     case ND_FIELD: node->type = alloc_type(TYPE_VOID); return;
     case ND_TYPE_NAME: return;
-    case ND_NUM: node->type = alloc_type(TYPE_INT); return;
+    case ND_NUM:
+    {
+      Type *t = alloc_type(TYPE_INT);
+      t->is_signed = true;
+      node->type = t;
+      return;
+    }
     case ND_BLOCK: node->type = alloc_type(TYPE_VOID); return;
     case ND_DISCARD_EXPR: node->type = alloc_type(TYPE_VOID); return;
     case ND_STRING: node->type = alloc_type(TYPE_STR); return;

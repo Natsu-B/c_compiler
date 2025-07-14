@@ -399,7 +399,25 @@ void gen(Node *node)
                   access_size_specifier(size_of(node->type)));
       output_file("    push rax");
       return;
-
+    case ND_UNARY_PLUS: gen(node->lhs); return;
+    case ND_UNARY_MINUS:
+      gen(node->lhs);
+      output_file("    pop rax");
+      output_file("    neg rax");
+      output_file("    push rax");
+      return;
+    case ND_LOGICAL_NOT:
+      output_file("    pop rax");
+      output_file("    cmp rax, 0");
+      output_file("    sete al");
+      output_file("    movzx rax, al");
+      output_file("    push rax");
+      return;
+    case ND_NOT:
+      output_file("    pop rax");
+      output_file("    not rax");
+      output_file("    push rax");
+      return;
     case ND_GOTO:
       output_debug2("ND_GOTO");
       output_file("    jmp %s", node->label_name);

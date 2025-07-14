@@ -33,6 +33,10 @@ typedef enum
   ND_ASSIGN,         // =
   ND_ADDR,           // &
   ND_DEREF,          // *
+  ND_LOGICAL_NOT,    // !
+  ND_NOT,            // ~
+  ND_UNARY_PLUS,     // + (unary)
+  ND_UNARY_MINUS,    // - (unary)
   ND_PREINCREMENT,   // ++ ident
   ND_PREDECREMENT,   // -- ident
   ND_POSTINCREMENT,  // ident ++
@@ -108,6 +112,7 @@ struct GTLabel
 #define NodeKindTable                                                         \
   "ND_NOP", "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_IDIV", "ND_EQ",       \
       "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF",        \
+      "ND_LOGICAL_NOT", "ND_NOT", "ND_UNARY_PLUS", "ND_UNARY_MINUS",          \
       "ND_PREINCREMENT", "ND_PREDECREMENT", "ND_POSTINCREMENT",               \
       "ND_POSTDECREMENT", "ND_FUNCDEF", "ND_FUNCCALL", "ND_RETURN",           \
       "ND_SIZEOF", "ND_TYPE_NAME", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE",  \

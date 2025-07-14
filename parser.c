@@ -963,14 +963,17 @@ Node *unary_expression()
     return new_node(ND_SIZEOF, unary_expression(), NULL, old);
   }
   if (consume("+", TK_RESERVED))
-    return cast_expression();
+    return new_node(ND_UNARY_PLUS, cast_expression(), NULL, get_old_token());
   if (consume("-", TK_RESERVED))
-    return new_node(ND_SUB, new_node_num(0), cast_expression(),
-                    get_old_token());
+    return new_node(ND_UNARY_MINUS, cast_expression(), NULL, get_old_token());
   if (consume("*", TK_RESERVED))
     return new_node(ND_DEREF, cast_expression(), NULL, get_old_token());
   if (consume("&", TK_RESERVED))
     return new_node(ND_ADDR, cast_expression(), NULL, get_old_token());
+  if (consume("!", TK_RESERVED))
+    return new_node(ND_LOGICAL_NOT, cast_expression(), NULL, get_old_token());
+  if (consume("~", TK_RESERVED))
+    return new_node(ND_NOT, cast_expression(), NULL, get_old_token());
   return postfix_expression();
 }
 

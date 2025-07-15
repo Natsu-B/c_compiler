@@ -202,7 +202,7 @@ Type* _declaration_specifiers(bool* find_typedef)
       for (;;)
       {
         Type* type = declaration_specifiers();
-        Node* node = declarator_no_side_effect(type);
+        Node* node = declarator_no_side_effect(&type);
         if (!node || !node->type || is_typedef(node->type))
           error_at(get_token()->str, get_token()->len,
                    "invalid struct definition");
@@ -450,7 +450,8 @@ bool add_function_name(Vector* function_list, Token* name)
 }
 
 enum member_name is_enum_or_function_or_typedef_name(Token* token,
-                                                     size_t* number)
+                                                     size_t* number,
+                                                     Type** type)
 {
   for (size_t i = 1; i <= vector_size(OrdinaryNamespaceList); i++)
   {
@@ -461,6 +462,8 @@ enum member_name is_enum_or_function_or_typedef_name(Token* token,
       if (tmp->name->len == token->len &&
           !strncmp(tmp->name->str, token->str, token->len))
       {
+        if (type)
+          *type = tmp->type;
         if (tmp->ordinary_kind == enum_member)
         {
           if (number)
@@ -550,13 +553,16 @@ size_t align_of(Type* type)
 Type* find_struct_child(Node* parent, Node* child, size_t* offset)
 {  // structのchildを探してその型を返す
   // また、そのchildのオフセットについても返す
+  Type* type = parent->type;
+  if (type->type == TYPE_PTR || type->type == TYPE_ARRAY)
+    type = type->ptr_to;
   for (size_t i = 1; i <= vector_size(TagNamespaceList); i++)
   {
     Vector* struct_nest = vector_peek_at(TagNamespaceList, i);
     for (size_t j = 1; j <= vector_size(struct_nest); j++)
     {
       tag_list* tmp = vector_peek_at(struct_nest, j);
-      if (tmp->type == parent->type)
+      if (tmp->type == type)
       {
         if (tmp->struct_size)
         {

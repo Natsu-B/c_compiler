@@ -228,7 +228,7 @@ Vector *parameter_type_list(Vector **type_list, Type *type)
       Type *type = declaration_specifiers();
       if (!type)
         error_at(get_token()->str, get_token()->len, "invalid type");
-      Node *parameter = declarator_no_side_effect(type);
+      Node *parameter = declarator_no_side_effect(&type);
       vector_push(list, parameter);
       if (type_list)
         vector_push(*type_list, type);
@@ -366,11 +366,11 @@ Node *declarator_internal(Type **type, Token *token)
   return node;
 }
 
-Node *declarator_no_side_effect(Type *type)
+Node *declarator_no_side_effect(Type **type)
 {
-  type = pointer(type);
+  *type = pointer(*type);
   Token *token = consume_ident();
-  return declarator_internal(&type, token);
+  return declarator_internal(type, token);
 }
 
 Node *declarator(Type *type)
@@ -1012,14 +1012,19 @@ Node *primary_expression()
   Token *token = consume_token_if_next_matches(TK_IDENT, '(');
   if (token)
   {
-    enum member_name result = is_enum_or_function_or_typedef_name(token, NULL);
+    Node *node = calloc(1, sizeof(Node));
+    Type *type = NULL;
+    enum member_name result =
+        is_enum_or_function_or_typedef_name(token, NULL, &type);
     if (result == none_of_them)
       warn_at(token->str, token->len, "undefined function");
+    else if (result == function_name)
+      node->type = type;
+
     if (result == function_name || result == none_of_them)
     {
       // 関数呼び出し
       expect("(", TK_RESERVED);
-      Node *node = calloc(1, sizeof(Node));
       node->token = token;
       node->kind = ND_FUNCCALL;
       node->func_name = token->str;
@@ -1046,7 +1051,7 @@ Node *primary_expression()
   if (token)
   {
     size_t enum_number;
-    switch (is_enum_or_function_or_typedef_name(token, &enum_number))
+    switch (is_enum_or_function_or_typedef_name(token, &enum_number, NULL))
     {  // enumの場合を除外
       case enum_member_name: return new_node_num(enum_number);
       case function_name: unreachable(); break;

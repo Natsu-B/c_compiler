@@ -59,7 +59,8 @@ void vector_insert(Vector *vec, size_t len, void *data)
 
   if (len <= vec->len)
   {
-    memmove(&vec->data[len], &vec->data[len - 1], sizeof(void *) * (vec->len - (len - 1)));
+    memmove(&vec->data[len], &vec->data[len - 1],
+            sizeof(void *) * (vec->len - (len - 1)));
   }
 
   vec->data[len - 1] = data;
@@ -119,6 +120,19 @@ void *vector_pop_at(Vector *vec, size_t location)
   return return_data;
 }
 
+void *vector_replace_at(Vector *vec, size_t location, void *data)
+{
+  if (vec->len < location || location == 0)
+    error_exit(
+        "vector_replace_at() tried to access index %lu, but the vector "
+        "contains "
+        "only %lu elements",
+        location, vec->len);
+  void *return_data = vec->data[location - 1];
+  vec->data[location - 1] = data;
+  return return_data;
+}
+
 // 引数の2つのベクトルが等しければtrueを返す
 bool vector_compare(Vector *vec1, Vector *vec2)
 {
@@ -126,7 +140,8 @@ bool vector_compare(Vector *vec1, Vector *vec2)
     return false;
   if (vector_size(vec1) == 0)
     return true;
-  return memcmp(vec1->data, vec2->data, vector_size(vec1) * sizeof(void *)) == 0;
+  return memcmp(vec1->data, vec2->data, vector_size(vec1) * sizeof(void *)) ==
+         0;
 }
 
 void vector_free(Vector *vec)

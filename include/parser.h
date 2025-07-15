@@ -213,6 +213,6 @@ Node *new_node(NodeKind kind, Node *lhs, Node *rhs, Token *token);
 Node *new_node_num(long long val);
 Node *constant_expression();
 FuncBlock *parser();
-Node *declarator_no_side_effect(Type *type);
+Node *declarator_no_side_effect(Type **type);
 
 #endif  // PARSER_C_COMPILER

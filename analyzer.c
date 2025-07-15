@@ -134,6 +134,61 @@ void switch_end()
 
 void add_type(Node *node);
 
+void add_type_for_assignment(Node *node)
+{
+  Type *lhs_type = node->lhs->type;
+  Type *rhs_type = node->rhs->type;
+
+  if (is_equal_type(lhs_type, rhs_type))
+  {
+    node->type = lhs_type;
+    return;
+  }
+
+  // when lhs type is bool, we should eval rhs value before assigned
+  if (lhs_type->type == TYPE_BOOL)
+  {
+    Node *new = new_node(ND_EVAL, node->rhs, NULL, NULL);
+    node->rhs = new;
+    rhs_type = lhs_type;
+    node->type = lhs_type;
+    return;
+  }
+
+  if (is_pointer_type(lhs_type) && is_pointer_type(rhs_type))
+  {
+    if ((lhs_type->type == TYPE_PTR && lhs_type->ptr_to->type == TYPE_VOID) ||
+        (rhs_type->type == TYPE_PTR && rhs_type->ptr_to->type == TYPE_VOID))
+    {
+      node->type = lhs_type;
+      return;
+    }
+  }
+
+  // T* = 0
+  if (is_pointer_type(lhs_type) && rhs_type->type == TYPE_INT &&
+      node->rhs->kind == ND_NUM && node->rhs->val == 0)
+  {
+    node->type = lhs_type;
+    return;
+  }
+
+  if (is_integer_type(lhs_type) && is_integer_type(rhs_type))
+  {
+    node->type = lhs_type;
+    return;
+  }
+
+  if (node->rhs->kind == ND_STRING)
+  {
+    node->type = lhs_type;
+    return;
+  }
+
+  error_at(node->token->str, node->token->len,
+           "cannot convert both sides of '=' types");
+}
+
 void add_type_internal(Node *node)
 {
   switch (node->kind)
@@ -217,61 +272,7 @@ void add_type_internal(Node *node)
     case ND_NEQ:
     case ND_LT:
     case ND_LTE: node->type = alloc_type(TYPE_BOOL); return;
-    case ND_ASSIGN:
-    {
-      Type *lhs_type = node->lhs->type;
-      Type *rhs_type = node->rhs->type;
-
-      if (is_equal_type(lhs_type, rhs_type))
-      {
-        node->type = lhs_type;
-        return;
-      }
-
-      // when lhs type is bool, we should eval rhs value before assigned
-      if (lhs_type->type == TYPE_BOOL)
-      {
-        Node *new = new_node(ND_EVAL, node->rhs, NULL, NULL);
-        node->rhs = new;
-        rhs_type = lhs_type;
-        node->type = lhs_type;
-        return;
-      }
-
-      if (is_pointer_type(lhs_type) && is_pointer_type(rhs_type))
-      {
-        if ((lhs_type->ptr_to && lhs_type->ptr_to->type == TYPE_VOID) ||
-            (rhs_type->ptr_to && rhs_type->ptr_to->type == TYPE_VOID))
-        {
-          node->type = lhs_type;
-          return;
-        }
-      }
-
-      // T* = 0
-      if (is_pointer_type(lhs_type) && rhs_type->type == TYPE_INT &&
-          node->rhs->kind == ND_NUM && node->rhs->val == 0)
-      {
-        node->type = lhs_type;
-        return;
-      }
-
-      if (is_integer_type(lhs_type) && is_integer_type(rhs_type))
-      {
-        node->type = lhs_type;
-        return;
-      }
-
-      if (node->rhs->kind == ND_STRING)
-      {
-        node->type = lhs_type;
-        return;
-      }
-
-      error_at(node->token->str, node->token->len,
-               "cannot convert both sides of '=' types");
-      return;
-    }
+    case ND_ASSIGN: add_type_for_assignment(node); return;
     case ND_ADDR:
     {
       Type *ptr = alloc_type(TYPE_PTR);
@@ -292,7 +293,16 @@ void add_type_internal(Node *node)
     case ND_UNARY_MINUS:
     case ND_LOGICAL_NOT:
     case ND_NOT:
-      node->type = promote_integer(node->lhs->type, node->token);
+      if (node->lhs->type->type == TYPE_ARRAY ||
+          node->lhs->type->type == TYPE_PTR)
+      {
+        if (node->kind == ND_UNARY_MINUS || node->kind == ND_NOT)
+          error_at(node->token->str, node->token->len,
+                   "ND_UNARY_MINUS or ND_NOT must be a integer type");
+        node->type = alloc_type(TYPE_INT);
+      }
+      else
+        node->type = promote_integer(node->lhs->type, node->token);
       return;
     case ND_PREINCREMENT:
     case ND_PREDECREMENT:
@@ -309,11 +319,55 @@ void add_type_internal(Node *node)
     case ND_FUNCDEF: node->type = alloc_type(TYPE_VOID); return;
     case ND_FUNCCALL:
     {
-      Var *fn = find_var(node->token);
-      if (fn && fn->type->param_list)
-        node->type = vector_peek_at(fn->type->param_list, 1);
-      else
+      if (!node->type)  // unknown function
         node->type = alloc_type(TYPE_INT);
+      else
+      {
+        Type *last_param = vector_peek(node->type->param_list);
+        bool is_variadic = last_param->type == TYPE_VARIABLES;
+
+        size_t num_declared_params = vector_size(node->type->param_list) - 1;
+        size_t num_args = vector_size(node->expr);
+
+        if (is_variadic)
+        {
+          if (num_args < num_declared_params - 1)
+          {
+            error_at(node->token->str, node->token->len,
+                     "too few arguments to function call");
+          }
+        }
+        else
+        {
+          if (num_args != num_declared_params)
+          {
+            error_at(node->token->str, node->token->len,
+                     "invalid number of arguments to function call");
+          }
+        }
+
+        size_t fixed_param_count =
+            is_variadic ? num_declared_params - 1 : num_declared_params;
+
+        for (size_t i = 1; i <= fixed_param_count; i++)
+        {
+          Node *arg_node = vector_peek_at(node->expr, i);
+          Node *param_node = calloc(1, sizeof(Node));
+          param_node->type = vector_peek_at(node->type->param_list, i + 1);
+
+          Node *assign_node =
+              new_node(ND_ASSIGN, param_node, arg_node, arg_node->token);
+          add_type_for_assignment(assign_node);
+
+          if (assign_node->rhs != arg_node)
+            vector_replace_at(node->expr, i, assign_node->rhs);
+
+          free(param_node);
+          free(assign_node);
+        }
+
+        node->type = vector_peek_at(node->type->param_list, 1);
+      }
       return;
     }
     case ND_RETURN: node->type = alloc_type(TYPE_VOID); return;
@@ -395,8 +449,6 @@ void add_type_internal(Node *node)
       return;
     case ND_ASSIGNMENT:
       node->kind = ND_ASSIGN;
-      if (!node->rhs->lhs || node->rhs->lhs->kind != ND_VAR)
-        error_at(node->token->str, node->token->len, "invalid token");
       node->lhs = node->rhs->lhs;
       add_type_internal(node);
       return;

@@ -27,7 +27,8 @@ long _eval_constant_expression(Node* node)
     {
       Token* token = peek_ident();
       size_t enum_num = 0;
-      if (is_enum_or_function_or_typedef_name(token, &enum_num) == enum_member_name)
+      if (is_enum_or_function_or_typedef_name(token, &enum_num, NULL) ==
+          enum_member_name)
       {
         consume_ident();
         return enum_num;

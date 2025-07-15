@@ -7,7 +7,7 @@
 #define NULL ((void *)0)
 
 typedef unsigned long size_t;
-
+typedef unsigned char uint8_t;
 typedef long time_t;
 struct tm
 {
@@ -30,8 +30,10 @@ struct tm
 //   void *overflow_arg_area;
 //   void *reg_save_area;
 // } __builtin_va_list *(pointer);
+#ifndef __MYCC__
 typedef __builtin_va_list __gnuc_va_list;
 typedef __gnuc_va_list va_list;
+#endif
 #define va_start(v, l) __builtin_va_start(v, l)
 #define va_end(v) __builtin_va_end(v)
 #define va_copy(d, s) __builtin_va_copy(d, s)
@@ -67,7 +69,9 @@ void *calloc(size_t n, size_t size);
 void *realloc(void *ptr, size_t size);
 int printf(char *fmt, ...);
 int fprintf(FILE *stream, char *fmt, ...);
+#ifndef __MYCC__
 int vfprintf(FILE *stream, char *format, va_list ap);
+#endif
 int snprintf(char *str, size_t size, char *fmt, ...);
 long strtol(char *nptr, char **endptr, int base);
 long long strtoll(char *nptr, char **endptr, int base);

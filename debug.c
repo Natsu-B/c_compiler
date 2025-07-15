@@ -192,7 +192,8 @@ void _print_parse_result(Node *node, int nest)
     }
     case ND_FUNCDEF:
     {
-      fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);
+      fprintf(stdout, "NodeKind: %s funcname: %.*s\n", nodekindlist[node->kind],
+              (int)node->func_len, node->func_name);
       make_space(nest);
       fprintf(stdout, "|   [arguments]\n");
       for (size_t i = 1; i <= vector_size(node->expr); i++)
@@ -296,8 +297,11 @@ void print_parse_result(FuncBlock *node)
   int i = 0;
   for (FuncBlock *pointer = node; pointer; pointer = pointer->next)
   {
-    fprintf(stdout, "node[%d]\n", i++);
-    _print_parse_result(pointer->node, 0);
+    if (pointer->node && pointer->node->kind != ND_NOP)
+    {
+      fprintf(stdout, "node[%d]\n", i++);
+      _print_parse_result(pointer->node, 0);
+    }
   }
 }
 

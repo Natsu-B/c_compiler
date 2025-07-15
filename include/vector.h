@@ -20,6 +20,7 @@ void *vector_shift(Vector *vec);
 void *vector_peek(Vector *vec);
 void *vector_peek_at(Vector *vec, size_t location);
 void *vector_pop_at(Vector *vec, size_t location);
+void *vector_replace_at(Vector *vec, size_t location, void *data);
 bool vector_compare(Vector *vec1, Vector *vec2);
 void vector_free(Vector *vec);
 

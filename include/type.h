@@ -65,7 +65,8 @@ enum member_name
   none_of_them
 };
 enum member_name is_enum_or_function_or_typedef_name(Token *token,
-                                                     size_t *number);
+                                                     size_t *number,
+                                                     Type **type);
 
 size_t size_of(Type *type);
 size_t align_of(Type *type);

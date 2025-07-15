@@ -44,11 +44,12 @@ Token *get_token_head()
 // TK_IGNORABLE、 TK_LIB と TK_LINEBREAKを無視してトークンを進める
 Token *token_next()
 {
+  token_old = token;
   do
   {
-    if (token->kind != TK_IGNORABLE && token->kind != TK_ILB &&
-        token->kind != TK_LINEBREAK)
-      token_old = token;
+    // if (token->kind != TK_IGNORABLE && token->kind != TK_ILB &&
+    //     token->kind != TK_LINEBREAK)
+    //   token_old = token;
     token = token->next;
   } while (token->kind == TK_IGNORABLE || token->kind == TK_ILB ||
            token->kind == TK_LINEBREAK);
@@ -140,9 +141,24 @@ Token *expect_ident()
 
 Token *consume_string()
 {
-  if (token->kind != TK_STRING)
-    return NULL;
-  return token_next();
+  Token *return_token = NULL;
+  while (token->kind == TK_STRING)
+  {
+    if (!return_token)
+      return_token = token_next();
+    else
+    {
+      Token *string = token_next();
+      return_token->next = token;
+      char *tmp =
+          malloc(return_token->len + string->len - 2 /* "が重複している */);
+      strncpy(tmp, return_token->str, return_token->len);
+      strncpy(tmp + return_token->len - 1, string->str + 1, string->len - 1);
+      return_token->str = tmp;
+      return_token->len += (string->len - 2);
+    }
+  }
+  return return_token;
 }
 
 bool is_number(long long *result)

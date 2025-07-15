@@ -13,8 +13,7 @@ assert_print() {
 
   if [ "$actual" = "$expected" ]; then
     echo "$input => $actual"
-    cmp -s "out/out.txt" "out/gcc.txt"
-    if [$? -neq 0]; then
+    if ! cmp -s "out/out.txt" "out/gcc.txt"; then
       echo "ERROR: Compiler output does not match GCC output"
       exit 1
     fi
@@ -214,6 +213,9 @@ assert 'int main() {int a= 0; int b = 3; b += (a++, b); b += a++, b; b++, b++; r
 assert 'int main() {int x = 100; void* a = &x; return *(int*)a;}'
 assert_print 'int printf(char *str, ...); int main() {for (int i = 0; i < 10; i++) printf("Hello World!!! %d\n", i); return 0;}'
 assert 'int main() {int k[3]; for (int i = 0; i < 3; i++) k[i] = i; int *ptr = k; int t = *++ptr; int s = *ptr++; return t + s;}'
+assert_print 'int printf(char*tmp, ...); int main() {printf(__func__); return foo();} int foo() {return printf(__func__); }'
+assert_print '#define HOGE "world!!!\n"
+int printf(char*tmp, ...); int main() {printf("hello" "world!!!"); return foo();} int foo() {return printf("hello" HOGE); }'
 # assert '#include "../test/compiler_header.h"
 # int foo(int x, ...);int main(){ return foo(1, 2, 4, 7, 8, 9, 11, 15, 18, 20, 19, 0); } int foo(int x, ...){ va_list ap; va_start(ap, x); int tmp = x; int result; while (tmp) { result = tmp; tmp = va_arg(ap, int); } va_end(ap); return result; }'
 

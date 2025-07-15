@@ -1047,28 +1047,43 @@ Node *primary_expression()
   {
     size_t enum_number;
     switch (is_enum_or_function_or_typedef_name(token, &enum_number))
-    {
+    {  // enumの場合を除外
       case enum_member_name: return new_node_num(enum_number);
-      case function_name: unimplemented(); break;
+      case function_name: unreachable(); break;
       case none_of_them:
-      {
+      {  // 変数であるとわかる
         Node *node = calloc(1, sizeof(Node));
-        node->token = token;
-        node->kind = ND_VAR;
-        node->is_new = false;
-        node->var = add_variables(token, NULL);
+
+        if (token->len == 8 && !strncmp(token->str, "__func__", 8))
+        {  // __func__ の場合をサポート
+          node->token = calloc(1, sizeof(Token));
+          node->token->kind = TK_STRING;
+          char *tmp = malloc(program_name_len + 2);
+          tmp[0] = tmp[program_name_len + 1] = '"';
+          strncpy(tmp + 1, program_name, program_name_len);
+          node->token->str = tmp;
+          node->token->len = program_name_len + 2;
+          node->kind = ND_STRING;
+        }
+        else
+        {
+          node->token = token;
+          node->kind = ND_VAR;
+          node->is_new = false;
+          node->var = add_variables(token, NULL);
+        }
         return node;
       }
       default: unreachable();
     }
   }
 
-  if (consume_string())
+  Token *string = consume_string();
+  if (string)
   {
     Node *node = calloc(1, sizeof(Node));
     node->kind = ND_STRING;
-    Token *token = get_old_token();
-    node->token = token;
+    node->token = string;
     return node;
   }
 

@@ -975,7 +975,7 @@ Node *postfix_expression()
     Token *old_token = get_old_token();
     if (consume("[", TK_RESERVED))
     {
-      node = new_node(ND_ARRAY, node, new_node_num(expect_number()), old_token);
+      node = new_node(ND_ARRAY, node, expression(), old_token);
       expect("]", TK_RESERVED);
     }
     else if (consume(".", TK_RESERVED))

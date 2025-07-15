@@ -406,7 +406,6 @@ void add_type_internal(Node *node)
       node->lhs = new_node(ND_ADD, node->lhs, node->rhs, node->token);
       node->rhs = NULL;
       add_type(node);
-      add_type_internal(node);
       return;
     case ND_DOT:
     case ND_ARROW:

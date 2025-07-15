@@ -172,7 +172,6 @@ assert 'int main() {int x = 1; void *y = &x; return 0;}'
 assert 'int main() {int i = 0; do {i =i+ 5;}while(0); return i;}'
 assert 'int main(){int r=0;int i=0;for(;i<1;i++)if(1)while(r==0)do{r++;if(r<3)continue;r=r+5;if(r>7)break;}while(r<10);return r;}'
 assert 'int main() {int k[3]; k[0] = 0; k[1] = 1; k[2] = 2; int *ptr = k; int t = *++ptr; int s = *ptr++; return t + s;}'
-# assert 'int main() {int k[3]; for (int i = 0; i < 3; i++) k[i] = i; int *ptr = k; int t = *++ptr; int s = *ptr++; return t + s;}'
 assert 'struct HOGE; struct HOGE { int x; int y; }; int main() {struct HOGE x; return sizeof(x);}'
 assert 'enum tmp; enum tmp { a, b, c = 8, d,}; int main() {return b + d;}'
 assert 'int main() {int x =0; return x ? 10 : 1;}'
@@ -214,6 +213,7 @@ assert 'int main() {_Bool x = 1; _Bool tmp; _Bool *y = &tmp; *y = 10; if (memcmp
 assert 'int main() {int a= 0; int b = 3; b += (a++, b); b += a++, b; b++, b++; return (a, b);}'
 assert 'int main() {int x = 100; void* a = &x; return *(int*)a;}'
 assert_print 'int printf(char *str, ...); int main() {for (int i = 0; i < 10; i++) printf("Hello World!!! %d\n", i); return 0;}'
+assert 'int main() {int k[3]; for (int i = 0; i < 3; i++) k[i] = i; int *ptr = k; int t = *++ptr; int s = *ptr++; return t + s;}'
 # assert '#include "../test/compiler_header.h"
 # int foo(int x, ...);int main(){ return foo(1, 2, 4, 7, 8, 9, 11, 15, 18, 20, 19, 0); } int foo(int x, ...){ va_list ap; va_start(ap, x); int tmp = x; int result; while (tmp) { result = tmp; tmp = va_arg(ap, int); } va_end(ap); return result; }'
 

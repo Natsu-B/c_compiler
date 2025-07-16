@@ -14,7 +14,6 @@
 
 #include "include/error.h"
 #include "include/type.h"
-#include "include/variables.h"
 #include "include/vector.h"
 
 #define error_exit_with_guard(fmt, ...)                                     \
@@ -374,8 +373,8 @@ void gen(Node *node)
 
     case ND_ASSIGN:
       output_debug2("ND_ASSIGN");
-      gen_lval(node->lhs);
       gen(node->rhs);
+      gen_lval(node->lhs);
       output_file("    pop rdi");
       output_file("    pop rax");
       output_file("    mov %s [rax], %s",
@@ -628,17 +627,16 @@ void generator(FuncBlock *parsed, char *output_filename)
   pr_debug("output filename: %.*s", strlen(output_filename), output_filename);
   fout = fopen(output_filename, "w");
   if (fout == NULL)
-  {
-    error_exit("ファイルに書き込めませんでした");
-  }
+    error_exit("cannot written to file");
   pr_debug("output file open");
   output_file(".intel_syntax noprefix");
   output_file(".data");
 
   // グローバル変数を書き込む
-  Var *root = get_global_var();
-  for (Var *pointer = root; pointer; pointer = pointer->next)
+  Vector *root = get_global_var();
+  for (size_t i = 1; i <= vector_size(root); i++)
   {
+    Var *pointer = vector_peek_at(root, i);
     output_file("%.*s:", (int)pointer->len, pointer->name);
     switch (pointer->how2_init)
     {

@@ -63,6 +63,7 @@ init-declarator
 
 storage-class-specifier
         = "typedef"
+        | "extern"
         | "auto";
 
 type-specifier

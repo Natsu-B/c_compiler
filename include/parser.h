@@ -13,10 +13,10 @@
 
 typedef struct Node Node;
 typedef struct Var Var;
+typedef struct Type Type;
 typedef struct GTLabel GTLabel;
 typedef struct NDBlock NDBlock;
 typedef struct FuncBlock FuncBlock;
-typedef struct NestedBlockVariables NestedBlockVariables;
 
 typedef enum
 {
@@ -144,15 +144,14 @@ struct Node
 
   // struct
   // {                                  // if for while switch の場合
-  GTLabel *name;                   // ラベルの名前 goto でも利用
-  Node *condition;                 // 判定条件
-  Node *true_code;                 // trueの際に実行されるコード
-  NestedBlockVariables *nest_var;  // 一行のときも使う
-  Node *false_code;                // if else文 falseの際に実行されるコード
-                                   // struct
-                                   // {                // for文
-  Node *init;                      // 初期化時のコード e.g. int i = 0
-  Node *update;                    // 毎ステップごとに実行されるコード e.g. i++
+  GTLabel *name;     // ラベルの名前 goto でも利用
+  Node *condition;   // 判定条件
+  Node *true_code;   // trueの際に実行されるコード
+  Node *false_code;  // if else文 falseの際に実行されるコード
+                     // struct
+                     // {                // for文
+  Node *init;        // 初期化時のコード e.g. int i = 0
+  Node *update;      // 毎ステップごとに実行されるコード e.g. i++
   // };
   Vector *case_list;  // switch文 case の Node*が入っている
                       // };
@@ -185,14 +184,6 @@ struct Node
   // };
 };
 
-// グローバル変数やローカル変数を調べるstruct
-struct NestedBlockVariables
-{
-  NestedBlockVariables *next;  // 一つ前のネストを指す
-  Var *var;                    // そのネスト内の変数
-  size_t counter;              // 変数が同じネストにいくつあるか
-};
-
 // 引数、またはブロックの中の式を管理するstruct
 struct NDBlock
 {
@@ -213,6 +204,6 @@ Node *new_node(NodeKind kind, Node *lhs, Node *rhs, Token *token);
 Node *new_node_num(long long val);
 Node *constant_expression();
 FuncBlock *parser();
-Node *declarator_no_side_effect(Type **type);
+Node *declarator_no_side_effect(Type **type, uint8_t storage_class_specifier);
 
 #endif  // PARSER_C_COMPILER

@@ -14,7 +14,6 @@
 #include "include/parser.h"
 #include "include/tokenizer.h"
 #include "include/type.h"
-#include "include/variables.h"
 
 extern GTLabel *head_label;
 extern Vector *output_list;
@@ -32,7 +31,7 @@ void print_token_str(Vector *vec)
   pr_debug("end");
 }
 
-static char *CPPTKlist[] = {CPPTK_list};
+static char *CPPTKlist[CPPTK_Reserved] = {CPPTK_list};
 
 void print_polish_notation()
 {

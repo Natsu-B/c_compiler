@@ -16,7 +16,6 @@
 #include "include/offset.h"
 #include "include/parser.h"
 #include "include/type.h"
-#include "include/variables.h"
 
 bool is_pointer_type(Type *t)
 {
@@ -673,11 +672,12 @@ FuncBlock *analyzer(FuncBlock *funcblock)
 #endif
   // グローバル変数の初期化方法を決める
   // TODO ゼロクリアと文字列以外対応していない
-  Var *pointer = get_global_var();
-  for (; pointer; pointer = pointer->next)
+  Vector *global_variables = get_global_var();
+  for (size_t i = 1; i <= vector_size(global_variables); i++)
   {
-    if (pointer->how2_init == reserved)
-      pointer->how2_init = init_zero;
+    Var *global = vector_peek_at(global_variables, i);
+    if (global->how2_init == reserved)
+      global->how2_init = init_zero;
   }
   return funcblock;
 }

@@ -17,17 +17,19 @@
 #include "include/eval_constant.h"
 #include "include/tokenizer.h"
 #include "include/type.h"
-#include "include/variables.h"
 #include "include/vector.h"
 
 Type *abstract_declarator(Type *type);
 Type *direct_abstract_declarator(Type *type);
 Node *external_declaration();
 Node *function_declaration();
-Node *declaration(Type *type, bool is_external_declaration);
-Node *init_declarator(Type *type);
-Node *declarator_no_side_effect();
-Node *declarator(Type *type);
+Node *declaration(Type *type, bool is_external_declaration,
+                  uint8_t storage_class_specifier);
+Node *init_declarator(Type *type, uint8_t storage_class_specifier);
+Node *declarator_no_side_effect(Type **type, uint8_t storage_class_specifier);
+Node *declarator(Type *type, uint8_t storage_class_specifier);
+Node *declarator(Type *type, uint8_t storage_class_specifier);
+
 Type *pointer(Type *type);
 Node *type_name();
 Node *initializer();
@@ -189,22 +191,24 @@ Node *new_node_num(long long val)
   return node;
 }
 
-NestedBlockVariables *new_nest()
+void new_nest()
 {
   new_nest_type();
   new_nest_label();
-  return new_nest_variables();
 }
 
 void exit_nest()
 {
   exit_nest_type();
   exit_nest_label();
-  exit_nest_variables();
 }
 
-Vector *parameter_type_list(Vector **type_list, Type *type)
+Vector *parameter_type_list(Vector **type_list, Type *type,
+                            uint8_t storage_class_specifier)
 {  // 関数の引数のnode リストを作成 ")"をconsumeして終了する
+  if (storage_class_specifier &
+      ~(1 << 1 | 1 << 2))  // 関数なので、staticとextern以外はブロック
+    error_exit("invalid storage specifier");
   if (type_list)
     vector_push(*type_list, type);
   Vector *list = vector_new();
@@ -225,10 +229,12 @@ Vector *parameter_type_list(Vector **type_list, Type *type)
     }
     else
     {
-      Type *type = declaration_specifiers();
+      uint8_t storage_class_specifier = 0;
+      Type *type = declaration_specifiers(&storage_class_specifier);
       if (!type)
         error_at(get_token()->str, get_token()->len, "invalid type");
-      Node *parameter = declarator_no_side_effect(&type);
+      Node *parameter =
+          declarator_no_side_effect(&type, storage_class_specifier);
       vector_push(list, parameter);
       if (type_list)
         vector_push(*type_list, type);
@@ -251,7 +257,6 @@ FuncBlock *parser()
   pr_debug("start parser...");
   head.next = NULL;
   FuncBlock *pointer = &head;
-  init_variables();
   init_types();
   while (!at_eof())
   {
@@ -270,15 +275,17 @@ FuncBlock *parser()
 Node *external_declaration()
 {
   pr_debug2("program");
-  Type *type = declaration_specifiers();
+  uint8_t storage_class_specifier = 0;
+  Type *type = declaration_specifiers(&storage_class_specifier);
   if (!type)
     error_at(get_token()->str, get_token()->len, "failed to parse");
-  return declaration(type, true);
+  return declaration(type, true, storage_class_specifier);
 }
 
-Node *declaration(Type *type, bool is_external_declaration)
+Node *declaration(Type *type, bool is_external_declaration,
+                  uint8_t storage_class_specifier)
 {
-  Node *node = init_declarator(type);
+  Node *node = init_declarator(type, storage_class_specifier);
   // funcdef
   if (is_external_declaration && consume("{", TK_RESERVED))
   {
@@ -288,7 +295,8 @@ Node *declaration(Type *type, bool is_external_declaration)
     for (size_t i = 1; i <= vector_size(node->expr); i++)
     {
       Node *param = vector_peek_at(node->expr, i);
-      param->var = add_variables(param->token, param->type);
+      param->var =
+          add_variables(param->token, param->type, storage_class_specifier);
       param->is_new = true;
     }
     NDBlock head;
@@ -312,9 +320,9 @@ Node *declaration(Type *type, bool is_external_declaration)
   return node;
 }
 
-Node *init_declarator(Type *type)
+Node *init_declarator(Type *type, uint8_t storage_class_specifier)
 {
-  Node *node = declarator(type);
+  Node *node = declarator(type, storage_class_specifier);
   if (!node)
     return NULL;
   Token *old = get_token();
@@ -323,13 +331,14 @@ Node *init_declarator(Type *type)
   return node;
 }
 
-Node *declarator_internal(Type **type, Token *token)
+Node *declarator_internal(Type **type, Token *token,
+                          uint8_t storage_class_specifier)
 {
   if (!token)
   {
     if (consume("(", TK_RESERVED))
     {
-      Node *result = declarator(*type);
+      Node *result = declarator(*type, storage_class_specifier);
       expect(")", TK_RESERVED);
       return result;
     }
@@ -353,8 +362,9 @@ Node *declarator_internal(Type **type, Token *token)
     node->token = token;
     Type *new = alloc_type(TYPE_FUNC);
     new->param_list = vector_new();
-    node->expr = parameter_type_list(&new->param_list, *type);
-    if (!add_function_name(new->param_list, token))
+    node->expr =
+        parameter_type_list(&new->param_list, *type, storage_class_specifier);
+    if (!add_function_name(new->param_list, token, storage_class_specifier))
       error_at(token->str, token->len, "invalid name");
     *type = new;
     return node;
@@ -366,21 +376,23 @@ Node *declarator_internal(Type **type, Token *token)
   return node;
 }
 
-Node *declarator_no_side_effect(Type **type)
+Node *declarator_no_side_effect(Type **type, uint8_t storage_class_specifier)
 {
+  if (storage_class_specifier)
+    error_exit("invalid storage class specifier");
   *type = pointer(*type);
   Token *token = consume_ident();
-  return declarator_internal(type, token);
+  return declarator_internal(type, token, storage_class_specifier);
 }
 
-Node *declarator(Type *type)
+Node *declarator(Type *type, uint8_t storage_class_specifier)
 {
   type = pointer(type);
   Token *token = consume_ident();
-  Node *node = declarator_internal(&type, token);
+  Node *node = declarator_internal(&type, token, storage_class_specifier);
   if (node && type->type != TYPE_FUNC)
   {
-    Var *var = add_variables(token, type);
+    Var *var = add_variables(token, type, storage_class_specifier);
     if (!var)
       return new_node(ND_NOP, NULL, NULL, NULL);
     node->var = var;
@@ -403,7 +415,8 @@ Type *pointer(Type *type)
 
 Node *type_name()
 {
-  Type *type = declaration_specifiers();
+  uint8_t storage_class_specifier = 0;
+  Type *type = declaration_specifiers(&storage_class_specifier);
   if (!type)
     return NULL;
   type = abstract_declarator(type);
@@ -469,7 +482,7 @@ Type *direct_abstract_declarator(Type *type)
 
         Type *func_type = alloc_type(TYPE_FUNC);
         func_type->param_list = vector_new();
-        parameter_type_list(&func_type->param_list, tail);
+        parameter_type_list(&func_type->param_list, tail, 0);
 
         if (parent_of_tail)
         {
@@ -484,7 +497,7 @@ Type *direct_abstract_declarator(Type *type)
       {
         Type *new = alloc_type(TYPE_FUNC);
         new->param_list = vector_new();
-        parameter_type_list(&new->param_list, type);
+        parameter_type_list(&new->param_list, type, 0);
         type = new;
       }
     }
@@ -500,9 +513,10 @@ Node *initializer()
 
 Node *block_item()
 {
-  Type *type = declaration_specifiers();
+  uint8_t storage_class_specifier = 0;
+  Type *type = declaration_specifiers(&storage_class_specifier);
   if (type)
-    return declaration(type, false);
+    return declaration(type, false, storage_class_specifier);
   return statement();
 }
 
@@ -638,9 +652,10 @@ Node *statement()
     node->name = generate_label_name(ND_FOR);
     expect("(", TK_RESERVED);
     // declarationかどうか
-    Type *type = declaration_specifiers();
+    uint8_t storage_class_specifier = 0;
+    Type *type = declaration_specifiers(&storage_class_specifier);
     if (type)
-      node->init = declaration(type, false);
+      node->init = declaration(type, false, storage_class_specifier);
     else if (!consume(";", TK_RESERVED))
     {
       Node *new = calloc(1, sizeof(Node));
@@ -1014,8 +1029,8 @@ Node *primary_expression()
   {
     Node *node = calloc(1, sizeof(Node));
     Type *type = NULL;
-    enum member_name result =
-        is_enum_or_function_or_typedef_name(token, NULL, &type);
+    enum member_name result = is_enum_or_function_or_typedef_or_variables_name(
+        token, NULL, &type, NULL);
     if (result == none_of_them)
       warn_at(token->str, token->len, "undefined function");
     else if (result == function_name)
@@ -1051,11 +1066,13 @@ Node *primary_expression()
   if (token)
   {
     size_t enum_number;
-    switch (is_enum_or_function_or_typedef_name(token, &enum_number, NULL))
+    Var *var = NULL;
+    switch (is_enum_or_function_or_typedef_or_variables_name(
+        token, &enum_number, NULL, &var))
     {  // enumの場合を除外
       case enum_member_name: return new_node_num(enum_number);
       case function_name: unreachable(); break;
-      case none_of_them:
+      case variables_name:
       {  // 変数であるとわかる
         Node *node = calloc(1, sizeof(Node));
 
@@ -1075,7 +1092,7 @@ Node *primary_expression()
           node->token = token;
           node->kind = ND_VAR;
           node->is_new = false;
-          node->var = add_variables(token, NULL);
+          node->var = var;
         }
         return node;
       }

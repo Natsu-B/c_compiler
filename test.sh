@@ -1,37 +1,59 @@
 #!/bin/bash
+COMPILER=${1:-./main}
+
 assert_print() {
   input="$1"
-
   echo "$input" > out/tmp.c
-  gcc -o out/gcc out/tmp.c
-  ./out/gcc > out/gcc.txt
-  expected="$?"
-  ./main -i out/tmp.c -o out/out.s
-  gcc -z noexecstack -o out/out out/out.s
-  ./out/out > out/out.txt
-  actual="$?"
-
-  if [ "$actual" = "$expected" ]; then
-    echo "$input => $actual"
-    if ! cmp -s "out/out.txt" "out/gcc.txt"; then
-      echo "ERROR: Compiler output does not match GCC output"
-      exit 1
-    fi
-  else
-    echo "$input => $expected expected, but got $actual"
+  if ! gcc -o out/gcc out/tmp.c; then
+    echo "ERROR: Reference build with GCC failed for input: '$input'"
     exit 1
   fi
+  ./out/gcc > out/gcc.txt
+  expected_exit_code="$?"
+
+  if ! "$COMPILER" -i out/tmp.c -o out/out.s; then
+    echo "COMPILATION FAILED: '$COMPILER' failed for input: '$input'"
+    exit 1
+  fi
+
+  if ! gcc -z noexecstack -o out/out out/out.s; then
+    echo "LINKING FAILED: GCC could not link 'out/out.s' for input: '$input'"
+    exit 1
+  fi
+
+  ./out/out > out/out.txt
+  actual_exit_code="$?"
+
+  if [ "$actual_exit_code" != "$expected_exit_code" ]; then
+    echo "$input => $expected_exit_code expected, but got $actual_exit_code"
+    exit 1
+  fi
+  if ! cmp -s "out/out.txt" "out/gcc.txt"; then
+    echo "ERROR: For input '$input', compiler output does not match GCC output"
+    exit 1
+  fi
+
+  echo "$input => $actual_exit_code"
 }
 
 assert() {
   input="$1"
-
   echo "$input" > out/tmp.c
+
   gcc -o out/gcc out/tmp.c
   ./out/gcc
   expected="$?"
-  ./main -i out/tmp.c -o out/out.s
-  gcc -z noexecstack -o out/out out/out.s
+
+  if ! "$COMPILER" -i out/tmp.c -o out/out.s; then
+    echo "COMPILATION FAILED: '$COMPILER' failed for input: '$input'"
+    exit 1
+  fi
+
+  if ! gcc -z noexecstack -o out/out out/out.s; then
+    echo "LINKING FAILED: GCC could not link 'out/out.s' for input: '$input'"
+    exit 1
+  fi
+
   ./out/out
   actual="$?"
 
@@ -44,15 +66,26 @@ assert() {
 }
 
 assert_with_outer_code() {
-  expected="$1"
-  input="$2"
-  shift 2
+  input="$1"
+  shift
   linkcode=("$@")
 
   echo "$input" > out/tmp.c
-  ./main -i out/tmp.c -o out/out.s
-  cc -c out/out.s -o out/out.o
-  cc -z noexecstack -o out/out out/out.o "${linkcode[@]}"
+
+  gcc -o out/gcc out/tmp.c "${linkcode[@]}"
+  ./out/gcc
+  expected="$?"
+
+  if ! "$COMPILER" -i out/tmp.c -o out/out.s; then
+    echo "COMPILATION FAILED: '$COMPILER' failed for input: '$input'"
+    exit 1
+  fi
+
+  if ! gcc -z noexecstack -o out/out out/out.s "${linkcode[@]}"; then
+    echo "LINKING FAILED: GCC could not link 'out/out.s' for input: '$input'"
+    exit 1
+  fi
+
   ./out/out
   actual="$?"
 
@@ -111,16 +144,16 @@ assert 'int main(){{} return 10;}'
 assert 'int main(){int i=0; int j=1; while(i != 10) {j = j+i; i = i+1;} return j;}'
 assert 'int return_val() {return 5;}int main() {return return_val();}'
 assert 'int fibonacci(int a, int b) {return a+b;}int main() {int x = 0; int y = 1; int i = 0; while(i != 10) { i = i+ 1; x = fibonacci(x, y); y = fibonacci(x, y); } return y; }'
-assert_with_outer_code 10 'int main() {int i = func();return i;}' './test/include_test.o'
-assert_with_outer_code 0 'int main() {int x = 0;int y = 1; int i = 0; while(i != 10) { i = i+ 1; x = fibonacci(x, y); if (x != func1(x)){ return 1;} y = fibonacci(x, y); if (y != func1(y)) {return 1;}} return 0; }' './test/print_u64.o' './test/fibonacci.o'
-assert_with_outer_code 0 'int fibonacci(int a,int b) {return a+b;}int main() {int x = 0; int y = 1; int i = 0; while(i != 10) { i = i+ 1; x = fibonacci(x, y); if (x != func1(x)) return 0; y = fibonacci(x, y); if (y != func1(y)) return 1; } return 0; }' './test/print_u64.o'
+assert_with_outer_code 'int main() {int i = func();return i;}' './test/include_test.o'
+assert_with_outer_code 'int main() {int x = 0;int y = 1; int i = 0; while(i != 10) { i = i+ 1; x = fibonacci(x, y); if (x != func1(x)){ return 1;} y = fibonacci(x, y); if (y != func1(y)) {return 1;}} return 0; }' './test/print_u64.o' './test/fibonacci.o'
+assert_with_outer_code 'int fibonacci(int a,int b) {return a+b;}int main() {int x = 0; int y = 1; int i = 0; while(i != 10) { i = i+ 1; x = fibonacci(x, y); if (x != func1(x)) return 0; y = fibonacci(x, y); if (y != func1(y)) return 1; } return 0; }' './test/print_u64.o'
 assert 'int main() {int i = 4;int *x = &i; return *x;}'
 assert 'int main() {int K = 6; return *&K;}'
-assert_with_outer_code 5 'int main() {int x = 0; for(int i= 0; i < 10 ; i =i+1) { x = x+ i; if (x !=func1(x)) return 1; }return 5;}' './test/print_u64.o'
+assert_with_outer_code 'int main() {int x = 0; for(int i= 0; i < 10 ; i =i+1) { x = x+ i; if (x !=func1(x)) return 1; }return 5;}' './test/print_u64.o'
 assert 'int main() {int x = 3; int *y = &x; *y = 0; return x;}'
 assert 'int main() {int x = 0; int *y = &x; int **z = &y;*y = 2; **z = 3; return x;}'
-assert_with_outer_code 3 'int main() {int *p; alloc(&p, 1, 3); int *q = p+1; return *q;}' './test/alloc2.o'
-assert_with_outer_code 1 'int main() {int *p; alloc(&p, 1, 3); int *q = p + 1; q = q-1; return *q;}' './test/alloc2.o'
+assert_with_outer_code 'int main() {int *p; alloc(&p, 1, 3); int *q = p+1; return *q;}' './test/alloc2.o'
+assert_with_outer_code 'int main() {int *p; alloc(&p, 1, 3); int *q = p + 1; q = q-1; return *q;}' './test/alloc2.o'
 assert 'int main() {int x; long z; if (sizeof(x) != 4) return 1; int* y; if (sizeof(y) != 8) return 1; if (sizeof(*y) != 4) return 1; if (sizeof(x + 1) != 4) return 1; if (sizeof(z) != 4) return 1; if (sizeof(sizeof(1)) != 8)return 1;  return 0;}'
 assert 'int main() {int x[2]; int y; long z; *(x+1) = 1; *x = 2; y = 5; return (y - *(x+1)) / *x;}'
 assert 'int main() {int x[2]; int y = 1; x[0] = y; x[1] = y + 1; return x[1] + x[0];}'
@@ -183,8 +216,8 @@ assert 'int add(int a, int b); int main() {int i = 0; int j = 1; return add(i, j
 assert 'int sub(int, int); int main() {int sub(int,int); int i = 100; int y = 90; return sub (i, y);} int sub(int a, int b) {return a - b;}'
 assert 'enum tmp {tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8, tmp9, tmp10 }; int main() {return tmp8;}'
 assert 'int foo(); int main() { return foo(); } int foo() { return 123; }'
-assert_with_outer_code 7 'int main() { int x = piyo(1, 2, 3, 4, 5, 6, 7, 8); return x; }' './test/piyo.o'
-assert_with_outer_code 7 'int main() { int g = 7; int x = piyo(1, 2, 3, 4, 5, 6, g, 8); return x; }' './test/piyo.o'
+assert_with_outer_code 'int main() { int x = piyo(1, 2, 3, 4, 5, 6, 7, 8); return x; }' './test/piyo.o'
+assert_with_outer_code 'int main() { int g = 7; int x = piyo(1, 2, 3, 4, 5, 6, g, 8); return x; }' './test/piyo.o'
 assert 'int hoge(int a, int b, int c, int d, int e, int f, int g, int h){return h;} int main() { int g = 7; int x = hoge(1, 2, 3, 4, 5, 6, g, 8); return x; }'
 assert 'int hoge(int a, int b, int c, int d, int e, int f, int g, int h){return g;} int main() { int g = 7; int x = hoge(1, 2, 3, 4, 5, 6, g, 8); return x; }'
 assert 'int main() { typedef int hoge; return sizeof(hoge); }'

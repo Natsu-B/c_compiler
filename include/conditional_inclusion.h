@@ -12,7 +12,7 @@ typedef enum
 
 typedef enum
 {
-  CPPTK_Reserved,           // unused
+  CPPTK_NOP,           // unused
   CPPTK_Question,           // ?
   CPPTK_Colon,              //  :
   CPPTK_Logical_OR,         // ||
@@ -40,6 +40,7 @@ typedef enum
   CPPTK_Integer,            // 数値
   CPPTK_Parentheses_Start,  // (
   CPPTK_Parentheses_End,    // )
+  CPPTK_Reserved,
 } conditional_inclusion_type;
 
 #define CPPTK_list                                                        \

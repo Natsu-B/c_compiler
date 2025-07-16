@@ -4,8 +4,7 @@ ASFLAGS=-g
 CPPFLAGS=-E -P -D__MYCC__ -DSELF_HOST
 
 SRCS=$(wildcard *.c)
-ASRCS=$(wildcard *.s)
-OBJS=$(SRCS:.c=.o) $(ASRCS:.s=.o)
+OBJS=$(SRCS:.c=.o)
 
 TARGET=main
 
@@ -18,16 +17,16 @@ NC=\033[0m
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
+	@echo -e "${GREEN}--> Linking $@${NC}"
 	$(CC) $(CFLAGS) -o $@ $(OBJS)
 
 test: all
-	./test.sh
+	@echo -e "${CYAN}--- Running tests on default target ($(TARGET))... ---${NC}"
+	./test.sh ./main
 
 %.o: %.c
+	@echo -e "${CYAN}Compiling $<...${NC}"
 	$(CC) $(CFLAGS) -c $< -o $@
-
-%.o: %.s
-	$(CC) $(ASFLAGS) -c $< -o $@
 
 self1: $(TARGET)
 	@echo -e "${CYAN}--- Starting self-host ---${NC}"
@@ -49,9 +48,14 @@ self1: $(TARGET)
 			$(CC) $(CFLAGS) -S -o out/$$s_file $$src; \
 		fi; \
 	done
-	@echo -e "${CYAN}[3/4] Linking to create $(TARGET)2...${NC}"
-	$(CC) $(CFLAGS) -z noexecstack -o $(TARGET)2 out/*.s $(ASRCS)
-	@echo -e "${CYAN}[4/4] Finalizing and showing summary...${NC}"
+	@echo -e "${CYAN}[3/4] Assembling generated sources...${NC}"
+	for src in $(SRCS); do \
+		s_file=$${src%.c}.s; \
+		o_file=$${src%.c}.o; \
+		$(CC) $(ASFLAGS) -c out/$$s_file -o out/$$o_file; \
+	done
+	@echo -e "${CYAN}[4/4] Linking to create $(TARGET)2...${NC}"
+	$(CC) $(CFLAGS) -o $(TARGET)2 out/*.o
 	@echo ""
 	@echo -e "${CYAN}--- Self-Host Compilation Summary ---${NC}"
 	@if [ -f .success_list ]; then \
@@ -65,9 +69,13 @@ self1: $(TARGET)
 	@echo ""
 	@echo -e "${GREEN}--- Self-host complete. Executable '$(TARGET)2' created. ---${NC}"
 
+self1-test: self1
+	@echo -e "\n${CYAN}--- Running tests after self-host... ---${NC}"
+	./test.sh ./main2
+
 clean:
 	rm -f *.o $(TARGET) $(TARGET)2
 	rm -f .success_list .failure_list
 	rm -rf out
 
-.PHONY: all clean self1 test
+.PHONY: all clean self1 test self1-test

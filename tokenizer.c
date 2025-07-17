@@ -173,13 +173,12 @@ bool is_number(long long *result)
 }
 
 // 次のトークンが整数だった場合読み進め、それ以外だったらエラーを返す関数
-long long expect_number()
+bool consume_number(long long *value)
 {
-  long long result;
-  if (!is_number(&result))
-    error_at(token->str, token->len, "トークンが整数ではありません");
+  if (!is_number(value))
+    return false;
   token_next();
-  return result;
+  return true;
 }
 
 // トークンが最後(TK_EOF)だったらtrueを、でなければfalseを返す関数

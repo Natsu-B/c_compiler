@@ -1109,6 +1109,8 @@ Node *primary_expression()
     node->token = string;
     return node;
   }
-
-  return new_node_num(expect_number());
+  long long num;
+  if (consume_number(&num))
+    return new_node_num(num);
+  return NULL;
 }

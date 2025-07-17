@@ -249,6 +249,8 @@ assert 'int main() {int k[3]; for (int i = 0; i < 3; i++) k[i] = i; int *ptr = k
 assert_print 'int printf(char*tmp, ...); int main() {printf(__func__); return foo();} int foo() {return printf(__func__); }'
 assert_print '#define HOGE "world!!!\n"
 int printf(char*tmp, ...); int main() {printf("hello" "world!!!"); return foo();} int foo() {return printf("hello" HOGE); }'
+assert 'struct HOGE {int x;}; int main() {struct HOGE {int x;}; return sizeof(struct HOGE);}'
+assert 'int foo; int main() {extern int foo; return foo;}'
 # assert '#include "../test/compiler_header.h"
 # int foo(int x, ...);int main(){ return foo(1, 2, 4, 7, 8, 9, 11, 15, 18, 20, 19, 0); } int foo(int x, ...){ va_list ap; va_start(ap, x); int tmp = x; int result; while (tmp) { result = tmp; tmp = va_arg(ap, int); } va_end(ap); return result; }'
 

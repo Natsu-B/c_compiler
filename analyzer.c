@@ -581,7 +581,7 @@ void analyze_type(Node *node)
       break;
 
     case ND_VAR:
-      if (node->var->is_local)
+      if (node->var->is_local && !(node->var->storage_class_specifier & 1 << 1))
       {
         if (node->is_new)
         {

@@ -23,7 +23,7 @@ static Vector* OrdinaryNamespaceList;  // 変数名 関数名 列挙体のメン
 static Vector* TagNamespaceList;       // 構造体 共用体 列挙体のタグ名
 static size_t tag_id;                  // 構造体 共用体 列挙体につけられる番号
 static Vector* EnumStructList;  // 構造体、共用体、列挙体のリスト tag_idの順番
-static Vector* GlobalVariablesList;  // global変数のリスト
+static Vector* GlobalVariablesList;  // global変数のVarリスト
 
 typedef struct
 {
@@ -99,8 +99,7 @@ bool is_type_specifier(Token* token)
       peek("unsigned", TK_IDENT) || peek("bool", TK_IDENT) ||
       peek("_Bool", TK_IDENT) || peek("const", TK_IDENT) ||
       peek("struct", TK_IDENT) || peek("union", TK_IDENT) ||
-      peek("enum", TK_IDENT) || peek("extern", TK_IDENT) ||
-      peek("auto", TK_IDENT))
+      peek("enum", TK_IDENT))
     return true;
 
   return find_typedef_type(token) != NULL;
@@ -118,6 +117,8 @@ bool is_typedef(uint8_t storage_class_specifier)
                                           "invalid storage class specifier"), \
                                  false))
 
+#define CONSUMED_TRUE (consumed = true)
+
 Type* declaration_specifiers(uint8_t* storage_class_specifier)
 {
   size_t long_count = 0;
@@ -128,30 +129,46 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
   size_t short_count = 0;
   size_t unsigned_count = 0;
   size_t void_count = 0;
-  size_t const_count = 0;     // 読み飛ばす
+  size_t const_count = 0;  // 読み飛ばす
+  size_t restrict_count = 0;
   size_t volatile_count = 0;  // 読み飛ばす
+  size_t inline_count = 0;
   Token* old = get_token();
   Type* type = NULL;
 
   for (;;)
   {
     Token* token = get_token();
-    bool consumed = true;
+    bool consumed = false;
 
-    if (consume("typedef", TK_IDENT) && ASSERT_STORAGE_SPECIFIER)
+    if (consume("typedef", TK_IDENT) && ASSERT_STORAGE_SPECIFIER &&
+        CONSUMED_TRUE)
       *storage_class_specifier = 1 << 0;
-    else if (consume("extern", TK_IDENT) && ASSERT_STORAGE_SPECIFIER)
+    else if (consume("extern", TK_IDENT) && ASSERT_STORAGE_SPECIFIER &&
+             CONSUMED_TRUE)
       *storage_class_specifier = 1 << 1;
-    else if (consume("static", TK_IDENT) && ASSERT_STORAGE_SPECIFIER)
+    else if (consume("static", TK_IDENT) && ASSERT_STORAGE_SPECIFIER &&
+             CONSUMED_TRUE)
       *storage_class_specifier = 1 << 2;
-    else if (consume("auto", TK_IDENT) && ASSERT_STORAGE_SPECIFIER)
+    else if (consume("auto", TK_IDENT) && ASSERT_STORAGE_SPECIFIER &&
+             CONSUMED_TRUE)
       *storage_class_specifier = 1 << 3;
-    else if (consume("register", TK_IDENT) && ASSERT_STORAGE_SPECIFIER)
+    else if (consume("register", TK_IDENT) && ASSERT_STORAGE_SPECIFIER &&
+             CONSUMED_TRUE)
       *storage_class_specifier = 1 << 4;
-    else if (consume("const", TK_IDENT))
+    else if (consume("const", TK_IDENT) && CONSUMED_TRUE)
       const_count++;
-    else if (consume("volatile", TK_IDENT))
+    else if (consume("restrict", TK_IDENT) && CONSUMED_TRUE)
+      restrict_count++;
+    else if (consume("volatile", TK_IDENT) && CONSUMED_TRUE)
       volatile_count++;
+    else if (consume("inline", TK_IDENT) && CONSUMED_TRUE)
+      if (inline_count)
+        error_at(token->str, token->len,
+                 "multiple function-specifier(inline) "
+                 "declaration");
+      else
+        inline_count++;
     else if (type == NULL &&
              (peek("struct", TK_IDENT) || peek("union", TK_IDENT) ||
               peek("enum", TK_IDENT)))
@@ -159,7 +176,7 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
       if (long_count || signed_count || unsigned_count || int_count ||
           bool_count || char_count || short_count || void_count)
         error_at(token->str, token->len, "invalid type specifier");
-
+      consumed = true;
       bool is_struct = consume("struct", TK_IDENT);
       bool is_union = !is_struct && consume("union", TK_IDENT);
       bool is_enum = !is_struct && !is_union && consume("enum", TK_IDENT);
@@ -192,9 +209,19 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
 
       bool is_definition = consume("{", TK_RESERVED);
       if (is_definition && new && new->data_list)
-        error_at(get_old_token()->str, get_old_token()->len,
-                 "multiple definition");
-
+      {
+        bool is_same_nest = false;
+        for (size_t i = 1; i <= vector_size(vector_peek(TagNamespaceList)); i++)
+        {
+          tag_list* tmp = vector_peek_at(vector_peek(TagNamespaceList), i);
+          if (tmp->name && tmp->name->len == tag_name->len &&
+              !strncmp(tmp->name->str, tag_name->str, tag_name->len))
+            is_same_nest = true;
+        }
+        if (is_same_nest)
+          error_at(get_old_token()->str, get_old_token()->len,
+                   "multiple definition");
+      }
       if (!new)
       {
         new = calloc(1, sizeof(tag_list));
@@ -298,23 +325,25 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
     }
     else if (type == NULL)
     {
-      if (consume("long", TK_IDENT))
+      if (consume("long", TK_IDENT) && CONSUMED_TRUE)
         long_count++;
-      else if (consume("signed", TK_IDENT))
+      else if (consume("signed", TK_IDENT) && CONSUMED_TRUE)
         signed_count++;
-      else if (consume("unsigned", TK_IDENT))
+      else if (consume("unsigned", TK_IDENT) && CONSUMED_TRUE)
         unsigned_count++;
-      else if (consume("int", TK_IDENT))
+      else if (consume("int", TK_IDENT) && CONSUMED_TRUE)
         int_count++;
-      else if (consume("bool", TK_IDENT) || consume("_Bool", TK_IDENT))
+      else if ((consume("bool", TK_IDENT) || consume("_Bool", TK_IDENT)) &&
+               CONSUMED_TRUE)
         bool_count++;
-      else if (consume("char", TK_IDENT))
+      else if (consume("char", TK_IDENT) && CONSUMED_TRUE)
         char_count++;
-      else if (consume("short", TK_IDENT))
+      else if (consume("short", TK_IDENT) && CONSUMED_TRUE)
         short_count++;
-      else if (consume("void", TK_IDENT))
+      else if (consume("void", TK_IDENT) && CONSUMED_TRUE)
         void_count++;
-      else
+      else if (!(long_count || signed_count || unsigned_count || int_count ||
+                 bool_count || char_count || short_count || void_count))
       {
         Token* ident = peek_ident();
         if (ident)
@@ -338,27 +367,12 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
         found_typedef_in_loop:
           if (found_type)
           {
-            if (long_count || signed_count || unsigned_count || int_count ||
-                bool_count || char_count || short_count || void_count)
-              error_at(ident->str, ident->len,
-                       "cannot combine typedef with other type specifiers");
             type = found_type;
             consume_ident();
+            consumed = true;
           }
-          else
-          {
-            consumed = false;
-          }
-        }
-        else
-        {
-          consumed = false;
         }
       }
-    }
-    else
-    {
-      consumed = false;
     }
 
     if (!consumed)
@@ -503,7 +517,7 @@ char* add_string_literal(Token* token)
   {
     ordinary_data_list* tmp =
         vector_peek_at(vector_peek_at(OrdinaryNamespaceList, 1), i);
-    if (tmp->variables->len &&
+    if (tmp->ordinary_kind == variables_name && tmp->variables->len &&
         !strncmp(tmp->variables->name, token->str, token->len))
       unreachable();
   }
@@ -515,6 +529,7 @@ char* add_string_literal(Token* token)
   new_var->is_local = false;
   new_var->how2_init = init_string;
   vector_push(vector_peek_at(OrdinaryNamespaceList, 1), new_var);
+  vector_push(GlobalVariablesList, new_var);
   return literal_name;
 }
 
@@ -715,6 +730,7 @@ void init_types()
   TagNamespaceList = vector_new();
   vector_push(TagNamespaceList, root_struct);
   EnumStructList = vector_new();
+  GlobalVariablesList = vector_new();
 }
 
 void new_nest_type()

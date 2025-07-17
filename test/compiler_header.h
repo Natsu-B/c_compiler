@@ -43,11 +43,9 @@ int *__errno_location();
 
 struct _IO_FILE;
 typedef struct _IO_FILE FILE;
-#ifndef __MYCC__
 extern FILE *stdin;
 extern FILE *stdout;
 extern FILE *stderr;
-#endif
 #define SEEK_SET 0
 #define SEEK_CUR 1
 #define SEEK_END 2

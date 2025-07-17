@@ -28,7 +28,6 @@ Node *declaration(Type *type, bool is_external_declaration,
 Node *init_declarator(Type *type, uint8_t storage_class_specifier);
 Node *declarator_no_side_effect(Type **type, uint8_t storage_class_specifier);
 Node *declarator(Type *type, uint8_t storage_class_specifier);
-Node *declarator(Type *type, uint8_t storage_class_specifier);
 
 Type *pointer(Type *type);
 Node *type_name();
@@ -1075,9 +1074,17 @@ Node *primary_expression()
       case variables_name:
       {  // 変数であるとわかる
         Node *node = calloc(1, sizeof(Node));
-
+        node->token = token;
+        node->kind = ND_VAR;
+        node->is_new = false;
+        node->var = var;
+        return node;
+      }
+      default:
+      {
         if (token->len == 8 && !strncmp(token->str, "__func__", 8))
         {  // __func__ の場合をサポート
+          Node *node = calloc(1, sizeof(Node));
           node->token = calloc(1, sizeof(Token));
           node->token->kind = TK_STRING;
           char *tmp = malloc(program_name_len + 2);
@@ -1086,17 +1093,11 @@ Node *primary_expression()
           node->token->str = tmp;
           node->token->len = program_name_len + 2;
           node->kind = ND_STRING;
+          return node;
         }
-        else
-        {
-          node->token = token;
-          node->kind = ND_VAR;
-          node->is_new = false;
-          node->var = var;
-        }
-        return node;
+        error_at(token->str, token->len, "variables %.*s is not defined",
+                 (int)token->len, token->str);
       }
-      default: unreachable();
     }
   }
 

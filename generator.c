@@ -173,7 +173,7 @@ void gen_lval(Node *node)
       output_file("    push rax");
       break;
     case ND_VAR:
-      if (node->var->is_local)
+      if (node->var->is_local && !(node->var->storage_class_specifier & 1 << 1))
         output_file("    lea rax, [rbp-%d]", (int)node->var->offset);
       else
         output_file("    lea rax,  [rip+%.*s]", (int)node->var->len,
@@ -373,8 +373,8 @@ void gen(Node *node)
 
     case ND_ASSIGN:
       output_debug2("ND_ASSIGN");
-      gen(node->rhs);
       gen_lval(node->lhs);
+      gen(node->rhs);
       output_file("    pop rdi");
       output_file("    pop rax");
       output_file("    mov %s [rax], %s",
@@ -637,6 +637,8 @@ void generator(FuncBlock *parsed, char *output_filename)
   for (size_t i = 1; i <= vector_size(root); i++)
   {
     Var *pointer = vector_peek_at(root, i);
+    if (pointer->storage_class_specifier & 1 << 1)
+      continue;
     output_file("%.*s:", (int)pointer->len, pointer->name);
     switch (pointer->how2_init)
     {

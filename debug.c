@@ -241,7 +241,8 @@ void _print_parse_result(Node *node, int nest)
     }
     case ND_SWITCH:
     {
-      fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);
+      fprintf(stdout, "NodeKind: %s label_name: %s\n", nodekindlist[node->kind],
+              node->name->name);
       make_space(nest);
       fprintf(stdout, "|   [expression]\n");
       _print_parse_result(node->condition, nest + 1);
@@ -252,7 +253,8 @@ void _print_parse_result(Node *node, int nest)
     }
     case ND_TERNARY:
     {
-      fprintf(stdout, "NodeKind: %s\n", nodekindlist[node->kind]);
+      fprintf(stdout, "NodeKind: %s label_name: %s\n", nodekindlist[node->kind],
+              node->name->name);
       make_space(nest);
       fprintf(stdout, "|   [rhs]\n");
       _print_parse_result(node->rhs, nest + 1);
@@ -268,6 +270,11 @@ void _print_parse_result(Node *node, int nest)
       fprintf(stdout, "NodeKind: %s child_name: %.*s offset: %lu\n",
               nodekindlist[node->kind], (int)node->token->len, node->token->str,
               node->child_offset);
+      break;
+    case ND_LOGICAL_OR:
+    case ND_LOGICAL_AND:
+      fprintf(stdout, "NodeKind: %s label_name: %s", nodekindlist[node->kind],
+              node->name->name);
       break;
     default:
     {

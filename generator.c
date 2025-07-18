@@ -217,22 +217,26 @@ void gen(Node *node)
            i++)
       {
         gen(vector_peek_at(node->expr, i));
-        output_file("    pop rax");
 
         switch (i)
         {
-          case 1: output_file("    mov rdi, rax"); break;
-          case 2: output_file("    mov rsi, rax"); break;
-          case 3: output_file("    mov rdx, rax"); break;
-          case 4: output_file("    mov rcx, rax"); break;
-          case 5: output_file("    mov r8, rax"); break;
-          case 6: output_file("    mov r9, rax"); break;
+          case 1: output_file("    pop rdi"); break;
+          case 2: output_file("    pop rsi"); break;
+          case 3: output_file("    pop rdx"); break;
+          case 4: output_file("    pop rcx"); break;
+          case 5: output_file("    pop r8"); break;
+          case 6: output_file("    pop r9"); break;
           default: break;
         }
       }
       output_file("    mov rax, rsp");
       output_file("    and rax, 15");
-      output_file("    jnz .L_%d_unaligned", align_counter);
+      output_file("    push r12");
+      output_file("    mov r12, 0");
+      output_file("    jz .L_%d_aligned", align_counter);
+      output_file("    mov r12, 8");
+      output_file("    sub rsp, 8");
+      output_file(".L_%d_aligned:", align_counter);
       size_t stack_args = 0;
       if (vector_size(node->expr) > 6)
         stack_args = vector_size(node->expr) - 6;
@@ -245,25 +249,10 @@ void gen(Node *node)
       }
       output_file("    mov rax, 0");
       output_file("    call %.*s", (int)node->func_len, node->func_name);
-      output_file("    jmp .L_%d_aligned", align_counter);
-      output_file(".L_%d_unaligned:", align_counter);
-      output_file("    sub rsp, 8");
-      stack_args = 0;
-      if (vector_size(node->expr) > 6)
-        stack_args = vector_size(node->expr) - 6;
-      if (stack_args)
-      {
-        // output_file("    sub rsp, %lu", (stack_args + 1) / 2 * 2 * 8);
-        for (size_t i = 7; i <= vector_size(node->expr); i++)
-          // Equivalent to pushing node value to stack
-          gen(vector_peek_at(node->expr, vector_size(node->expr) - i + 7));
-      }
-      output_file("    mov rax, 0");
-      output_file("    call %.*s", (int)node->func_len, node->func_name);
-      output_file("    add rsp, 8");
-      output_file(".L_%d_aligned:", align_counter);
+      output_file("    add rsp, r12");
       if (stack_args)
         output_file("    add rsp, %lu", stack_args * 8);
+      output_file("    pop r12");
       output_file("    push rax");
       align_counter++;
       output_debug("end calling %.*s", (int)node->func_len, node->func_name);

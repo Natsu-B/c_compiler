@@ -19,8 +19,8 @@
 #include "include/vector.h"
 
 Token *token_head;
-Token *token;      // トークンの実体
-Token *token_old;  // tokenの一つあとのトークン
+Token *token;      // The actual token
+Token *token_old;  // The token after token
 
 const char *tokenkindlist[TK_END] = {TokenKindTable};
 
@@ -41,7 +41,7 @@ Token *get_token_head()
   return token_head;
 }
 
-// TK_IGNORABLE、 TK_LIB と TK_LINEBREAKを無視してトークンを進める
+// Advance the token, ignoring TK_IGNORABLE, TK_LIB, and TK_LINEBREAK
 Token *token_next()
 {
   token_old = token;
@@ -56,8 +56,8 @@ Token *token_next()
   return token_old;
 }
 
-// トークンの位置を引数の位置に変更する
-// かなり危険なため利用は注意を
+// Change the position of the token to the position of the argument
+// Use with caution as it is quite dangerous
 void set_token(Token *next)
 {
   token = next;
@@ -68,8 +68,9 @@ Token *get_token()
   return token;
 }
 
-// 次のトークンが引数のkindのトークンで、その次のトークンがTK_RESERVEDで
-// 引数のreservedと等しければ消費する その他の場合NULLを返す
+// If the next token is of the argument kind and the token after that is
+// TK_RESERVED and equal to the argument reserved, consume it. Otherwise, return
+// NULL.
 Token *consume_token_if_next_matches(TokenKind kind, char reserved)
 {
   Token *next = token;
@@ -92,8 +93,8 @@ Token *peek(char *op, TokenKind kind)
   return token;
 }
 
-// 次のトークンが引数の記号だったら読み進めtokenをその他のときはNULLを返す関数
-// ただし、TK_IGNORABLEを除く
+// If the next token is the argument symbol, read it. Otherwise, return NULL.
+// However, TK_IGNORABLE is excluded.
 Token *consume(char *op, TokenKind kind)
 {
   if (peek(op, kind))
@@ -101,16 +102,16 @@ Token *consume(char *op, TokenKind kind)
   return NULL;
 }
 
-// 次のトークンが引数の記号だったら読み進め、そうでなければerror_atを呼び出す
+// If the next token is the argument symbol, read it. Otherwise, call error_at.
 Token *expect(char *op, TokenKind kind)
 {
   Token *result = consume(op, kind);
   if (!result)
-    error_at(token->str, token->len, "トークンが %s でありませんでした", op);
+    error_at(token->str, token->len, "Token is not %s.", op);
   return result;
 }
 
-// 一つ前のトークンを取得する
+// Get the previous token
 Token *get_old_token()
 {
   return token_old;
@@ -135,7 +136,7 @@ Token *expect_ident()
 {
   Token *expect = consume_ident();
   if (!expect)
-    error_at(token->str, token->len, "トークンがidentではありません");
+    error_at(token->str, token->len, "Token is not an ident");
   return expect;
 }
 
@@ -150,8 +151,7 @@ Token *consume_string()
     {
       Token *string = token_next();
       return_token->next = token;
-      char *tmp =
-          malloc(return_token->len + string->len - 2 /* "が重複している */);
+      char *tmp = malloc(return_token->len + string->len - 2 /* duplicate " */);
       strncpy(tmp, return_token->str, return_token->len);
       strncpy(tmp + return_token->len - 1, string->str + 1, string->len - 1);
       return_token->str = tmp;
@@ -172,7 +172,7 @@ bool is_number(long long *result)
   return true;
 }
 
-// 次のトークンが整数だった場合読み進め、それ以外だったらエラーを返す関数
+// If the next token is an integer, read it. Otherwise, return an error.
 bool consume_number(long long *value)
 {
   if (!is_number(value))
@@ -181,20 +181,20 @@ bool consume_number(long long *value)
   return true;
 }
 
-// トークンが最後(TK_EOF)だったらtrueを、でなければfalseを返す関数
+// Returns true if the token is the last (TK_EOF), otherwise returns false.
 bool at_eof()
 {
   return token->kind == TK_EOF;
 }
 
-// 与えられた引数がトークンを構成するかどうか 英数字と '_'
+// Whether the given argument constitutes a token (alphanumeric and '_')
 int is_alnum(char c)
 {
   return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') ||
          ('0' <= c && c <= '9') || (c == '_');
 }
 
-// 新しくトークンを作る関数
+// Function to create a new token
 Token *new_token(TokenKind kind, char *str)
 {
   Token *new = calloc(1, sizeof(Token));
@@ -206,7 +206,7 @@ Token *new_token(TokenKind kind, char *str)
 Token *tokenize_once(char *input, char **end)
 {
   Token *cur;
-  // 改行 isspaceでは'\n'も処理されてしまうのでそれより前に置く
+  // Newline: isspace also processes '\n', so place it before that.
   if (*input == '\n')
   {
     cur = new_token(TK_LINEBREAK, input++);
@@ -229,7 +229,7 @@ Token *tokenize_once(char *input, char **end)
     return cur;
   }
 
-  // コメントを読み飛ばす
+  // Skip comments
   if (!strncmp(input, "//", 2))
   {
     input++;
@@ -245,7 +245,7 @@ Token *tokenize_once(char *input, char **end)
   {
     char *comment_end = strstr(input + 2, "*/");
     if (!comment_end)
-      error_at(input, 1, "コメントが閉じられていません");
+      error_at(input, 1, "Comment is not closed.");
     cur = new_token(TK_IGNORABLE, input);
     char *pointer = input;
     while (pointer <= comment_end)
@@ -283,8 +283,9 @@ Token *tokenize_once(char *input, char **end)
       return cur;
     }
     cur = new_token(TK_RESERVED, input);
-    // "==", "<=", ">=", "!=", "&&", "||", "->", "++", "--", "*=", "/=", "%=",
-    // "+=", "-=", "<<=", ">>=", "&=", "^=", "|=" の場合
+    // For "==", "<=", ">=", "!=", "&&", "||", "->", "++", "--", "*=", "/=",
+    // "%=",
+    // "+=", "-=", "<<=", ">>=", "&=", "^=", "|="
     if ((*(input + 2) == '=' && ((*(input + 1) == '<' && *(input) == '<') ||
                                  (*(input + 1) == '>' && *(input) == '>'))) ||
         (*(input + 2) == '.' && *(input + 1) == '.' && *input == '.'))
@@ -320,20 +321,20 @@ Token *tokenize_once(char *input, char **end)
     return cur;
   }
 
-  // 文字列の検知
+  // String detection
   if (*input == '"')
   {
-    int i = 0;  // 文字列のサイズ("は除く)
+    int i = 0;  // Size of the string (excluding ")
     while (*(++input) != '"')
       i++;
-    input++;  // 終了まで送る
+    input++;  // Advance to the end
     cur = new_token(TK_STRING, input - i - 2);
     cur->len = i + 2;
     *end = input;
     return cur;
   }
 
-  // 英数字と'_'のみの場合は変数または予約語とみなす
+  // If it's only alphanumeric and '_', consider it a variable or reserved word
   int i = 0;
   while (is_alnum(*input))
   {
@@ -347,11 +348,11 @@ Token *tokenize_once(char *input, char **end)
     *end = input;
     return cur;
   }
-  error_at(input, 1, "トークナイズに失敗しました");
+  error_at(input, 1, "Failed to tokenize.");
   return NULL;
 }
 
-// トークナイズする関数
+// Function to tokenize
 Token *tokenizer(char *input, char *end, Token *next_token)
 {
   pr_debug("start tokenizer...");
@@ -377,7 +378,7 @@ Token *tokenizer(char *input, char *end, Token *next_token)
         counter++;
         tmp++;
       }
-      // Conditional_Inclusion (#if #endif 等)を高速化するためにまとめる
+      // Conditional_Inclusion (#if #endif etc.) to speed up
       if ((counter == 2 && !strncmp(tmp - counter, "if", 2)) ||
           (counter == 5 && !strncmp(tmp - counter, "ifdef", 5)) ||
           (counter == 6 && !strncmp(tmp - counter, "ifndef", 6)))
@@ -400,7 +401,7 @@ Token *tokenizer(char *input, char *end, Token *next_token)
   cur->next = new_token(TK_EOF, input);
   cur->next->next = next_token;
 
-  pr_debug("complite tokenize");
+  pr_debug("Tokenization complete.");
   vector_free(nest_list);
 #ifdef DEBUG
   print_tokenize_result(head.next);

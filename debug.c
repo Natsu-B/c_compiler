@@ -18,24 +18,23 @@
 extern GTLabel *head_label;
 extern Vector *output_list;
 
-// gdb で呼び出す用
+// for calling with gdb
 void print_token_str(Vector *vec)
 {
-  pr_debug("start\n");
+  pr_debug("Start\n");  // No Japanese here, just a comment
   for (size_t i = 1; i <= vector_size(vec); i++)
   {
     Token *token = vector_peek_at(vec, i);
     printf("%.*s", (int)token->len, token->str);
   }
-  printf("\n");
-  pr_debug("end");
+  pr_debug("\nEnd");  // No Japanese here, just a comment
 }
 
 static char *CPPTKlist[CPPTK_Reserved] = {CPPTK_list};
 
 void print_polish_notation()
 {
-  pr_debug("polish notation:");
+  pr_debug("Polish notation:");
   printf("vector size: %lu\n", vector_size(output_list));
   for (size_t i = 1; i <= vector_size(output_list); i++)
   {
@@ -45,12 +44,12 @@ void print_polish_notation()
       printf(": %lld", token->num);
     printf("\n");
   }
-  pr_debug("end polish notation");
+  pr_debug("End polish notation");
 }
 
 void print_tokenize_result(Token *token)
 {
-  pr_debug("tokenize result:");
+  pr_debug("Tokenize result:");
   for (;;)
   {
     if (token->kind == TK_EOF)
@@ -292,7 +291,7 @@ void _print_parse_result(Node *node, int nest)
 
 void print_parse_result(FuncBlock *node)
 {
-  pr_debug("parse result:");
+  pr_debug("Parse result:");
   int i = 0;
   for (FuncBlock *pointer = node; pointer; pointer = pointer->next)
   {
@@ -306,8 +305,8 @@ void print_parse_result(FuncBlock *node)
 
 void print_definition()
 {
-  pr_debug("definition:");
-  fprintf(stdout, "object_like_macro:\n");
+  pr_debug("Definition:");
+  fprintf(stdout, "Object-like macro:\n");
   for (size_t i = 1; i <= vector_size(object_like_macro_list); i++)
   {
     object_like_macro_storage *tmp = vector_peek_at(object_like_macro_list, i);
@@ -319,7 +318,7 @@ void print_definition()
     }
     fprintf(stdout, "\n");
   }
-  fprintf(stdout, "fuction like macro:\n");
+  fprintf(stdout, "Function-like macro:\n");
   for (size_t i = 1; i <= vector_size(function_like_macro_list); i++)
   {
     function_like_macro_storage *tmp =

@@ -17,7 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>  // signalのwriteのために利用
+#include <unistd.h>  // Used for signal write
 #endif
 
 #ifndef __GNUC__
@@ -29,7 +29,7 @@ void _error_at(char *error_location, size_t error_len, char *file, int line,
                const char *func, char *fmt, ...)
     __attribute__((format(printf, 6, 7)));
 
-// #define DEBUG 時に動作を出力する pr_debugから呼び出される
+// Called by pr_debug when DEBUG is defined
 void _debug(char *file, int line, const char *func, char *fmt, ...)
 {
   va_list ap;
@@ -41,7 +41,7 @@ void _debug(char *file, int line, const char *func, char *fmt, ...)
   fprintf(stdout, "\e[37m");
 }
 
-// #define DEBUG 時に動作を出力する pr_debug2から呼び出される
+// Called by pr_debug2 when DEBUG is defined
 void _debug2(char *file, int line, const char *func, char *fmt, ...)
 {
   va_list ap;
@@ -60,7 +60,7 @@ void error_init(char *name, char *input)
   user_input = input;
 }
 
-// エラー時にログを出力し、終了する関数 errorから呼び出される
+// Function to output logs and exit on error, called from error
 [[noreturn]]
 void _error(char *file, int line, const char *func, char *fmt, ...)
 {
@@ -68,7 +68,7 @@ void _error(char *file, int line, const char *func, char *fmt, ...)
   va_start(ap, fmt);
   fprintf(stderr, "\e[31m[ERROR] \e[37m");
   _debug2(file, line, func, fmt, ap);
-  fprintf(stderr, "\n error while compiling %s\n", file_name);
+  fprintf(stderr, "\nError while compiling %s\n", file_name);
   exit(1);
 }
 
@@ -92,21 +92,21 @@ void _info_at_(size_t log_level, char *location, size_t len, char *file,
   }
   fprintf(stderr, "%s%s%s\n", color_ansi, info, default_ansi);
   if (len)
-  {  // error_locationの行を特定
-    // 行開始
+  {  // Identify the line of error_location
+    // Line start
     char *start_line = location;
     while (user_input < start_line && start_line[-1] != '\n')
       start_line--;
-    // 行終了
+    // Line end
     char *end_line = location;
     while (*end_line != '\n')
       end_line++;
-    // 何行目か
+    // Line number
     int line_num = 1;
     for (char *p = user_input; p < start_line; p++)
       if (*p == '\n')
         line_num++;
-    // エラー位置特定
+    // Error position identification
     size_t error_position = location - start_line;
     fprintf(stderr, "%s:%d\n", file_name, line_num);
     fprintf(stderr, "%.*s\n", (int)(end_line - start_line), start_line);
@@ -116,13 +116,12 @@ void _info_at_(size_t log_level, char *location, size_t len, char *file,
             "~~~~~~~~~~~~~~~~~~~~",
             default_ansi);
     vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n %s at %s:%d:%s\n", info, file, line, func);
+    fprintf(stderr, "\n%s at %s:%d:%s\n", info, file, line, func);
   }
   else
   {
     fprintf(stderr, "%s\n", file_name);
-    vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n %s at %s:%d:%s\n", info, file, line, func);
+    fprintf(stderr, "\n%s at %s:%d:%s\n", info, file, line, func);
   }
 }
 
@@ -139,8 +138,9 @@ void _error_at(char *error_location, size_t error_len, char *file, int line,
   exit(1);
 }
 
-// 入力プログラムがおかしいとき、その箇所を可視化するプログラム
-// log_levelが0のときエラーを表示し終了する、1のとき警告を表示して元の関数に戻る
+// Program to visualize the location when the input program is incorrect.
+// If log_level is 0, an error is displayed and the program exits; if 1, a
+// warning is displayed and control returns to the original function.
 void _info_at(size_t log_level, char *location, size_t len, char *file,
               int line, const char *func, char *fmt, ...)
 {
@@ -152,7 +152,7 @@ void _info_at(size_t log_level, char *location, size_t len, char *file,
 #ifndef SELF_HOST
 #include "include/tokenizer.h"
 
-// signal が発生したときにバックトレースを出す
+// Displays backtrace when a signal occurs
 void handle_signal(int signum, siginfo_t *info, void *ucontext)
 {
   (void)ucontext;
@@ -160,14 +160,14 @@ void handle_signal(int signum, siginfo_t *info, void *ucontext)
       "\n\n\e[31m--- Segmentation Fault Detected !!! ---\n\n\e[37m";
   write(STDERR_FILENO, msg_header, strlen(msg_header));
 
-  char buffer[256];  // 出力用バッファ
+  char buffer[256];  // Output buffer
   int len;
 
-  // シグナル番号の表示
+  // Display signal number
   len = snprintf(buffer, sizeof(buffer), "Signal: %d\n", signum);
   write(STDERR_FILENO, buffer, len);
 
-  // エラーアドレスの表示 (SIGSEGVの場合に特に有用)
+  // Display error address (especially useful for SIGSEGV)
   if (info->si_addr != NULL)
   {
     len = snprintf(buffer, sizeof(buffer), "Faulting address: %p\n",
@@ -175,12 +175,12 @@ void handle_signal(int signum, siginfo_t *info, void *ucontext)
     write(STDERR_FILENO, buffer, len);
   }
 
-  // エラーコードの表示
+  // Display error code
   len = snprintf(buffer, sizeof(buffer), "Error code (si_code): %d\n",
                  info->si_code);
   write(STDERR_FILENO, buffer, len);
 
-  // スタックトレースの表示（GNU拡張）
+  // Displays stack trace (GNU extension)
   const char *backtrace_msg = "--- Backtrace (Stack Trace) ---\n";
   write(STDERR_FILENO, backtrace_msg, strlen(backtrace_msg));
 
@@ -195,7 +195,7 @@ void handle_signal(int signum, siginfo_t *info, void *ucontext)
       write(STDERR_FILENO, strs[i], strlen(strs[i]));
       write(STDERR_FILENO, "\n", 1);
     }
-    free(strs);  // backtrace_symbols は動的にメモリを確保するので解放する
+    free(strs);  // backtrace_symbols dynamically allocates memory, so free it
   }
   else
   {
@@ -203,7 +203,7 @@ void handle_signal(int signum, siginfo_t *info, void *ucontext)
     write(STDERR_FILENO, no_backtrace_msg, strlen(no_backtrace_msg));
   }
 
-  // その時のグローバル変数やトークン列をできる限り表示
+  // Display global variables and token stream as much as possible at that time
   const char *print_progress = "\n\n\e[31m--- Program Progress ---\e[37m\n\n";
   write(STDERR_FILENO, print_progress, strlen(print_progress));
   const char *file_name_header = "File Name: ";
@@ -224,7 +224,7 @@ void handle_signal(int signum, siginfo_t *info, void *ucontext)
   const char *msg_footer = "\n\n\e[31m--- Program Aborting ---\e[37m\n\n";
   write(STDERR_FILENO, msg_footer, strlen(msg_footer));
 
-  // 割り込みではリエントラントでないのでexitが使えない
+  // exit cannot be used in interrupts because it is not reentrant
   _exit(EXIT_FAILURE);
 }
 #endif

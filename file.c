@@ -17,39 +17,38 @@
 
 char *file_read(FILE *fin)
 {
-  // ファイルサイズ検証
+  // verify file size
   if (fseek(fin, 0, SEEK_END) == -1)
-    error_exit("ファイルポインタをファイル末尾に移動するのに失敗しました: %s",
+    error_exit("failed to seek file pointer to end-of-file: %s",
                strerror(errno));
   long filesize = ftell(fin);
   if (filesize == -1)
-    error_exit("ファイルポインタの位置を読み取るのに失敗しました: %s",
-               strerror(errno));
+    error_exit("failed to read file pointer location: %s", strerror(errno));
 
   if (fseek(fin, 0, SEEK_SET) == -1)
-    error_exit("ファイルポインタをファイル先頭に移動するのに失敗しました: %s",
+    error_exit("failed to seek file pointer to start-of-file: %s",
                strerror(errno));
   pr_debug("file size: %ld", filesize);
 
   char *buf = calloc(1, filesize + 2);
   fread(buf, filesize, 1, fin);
   if (filesize == 0 ||
-      buf[filesize - 1] != '\n')  // ファイルの最後が"\n\0"になるように
-    buf[filesize++] = '\n';       // 最後がEOFなら書き換える
+      buf[filesize - 1] != '\n')  // make sure the file ends with "\n\0"
+    buf[filesize++] = '\n';       // rewrite if the last is EOF
   buf[filesize] = '\0';
   pr_debug2("file content:\n%s", buf);
   return buf;
 }
 
-// 引数のファイル名のファイルを読み取り、char配列として返す
-// 内部でcallocを利用している
+// Read the file with the argument file name and return it as a char array.
+// Internally uses calloc
 char *openfile(char *filename)
 {
   FILE *fin = fopen(filename, "r");
   if (!fin)
   {
-    error_exit("ファイル名が正しくありません");
+    error_exit("Invalid filename.");
   }
-  pr_debug("file open");
+  pr_debug("File opened.");
   return file_read(fin);
 }

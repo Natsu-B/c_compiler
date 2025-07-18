@@ -45,11 +45,11 @@ void vector_push(Vector *vec, void *data)
   vec->data[vec->len++] = data;
 }
 
-// lenは1始まり
+// len starts from 1
 void vector_insert(Vector *vec, size_t len, void *data)
 {
   if (len > vec->len + 1 || len == 0)
-    error_exit("Invalid vector insertion");
+    error_exit("Invalid vector insertion.");
 
   if (vec->capacity < vec->len + 1)
   {
@@ -70,14 +70,14 @@ void vector_insert(Vector *vec, size_t len, void *data)
 void *vector_pop(Vector *vec)
 {
   if (vec->len == 0)
-    error_exit("Vector size is 0");
+    error_exit("Vector size is 0.");
   return vec->data[--vec->len];
 }
 
 void *vector_shift(Vector *vec)
 {
   if (vec->len == 0)
-    error_exit("Vector size is 0");
+    error_exit("Vector size is 0.");
   void *data = vec->data[0];
   if (vec->len > 1)
     memmove(&vec->data[0], &vec->data[1], sizeof(void *) * (vec->len - 1));
@@ -88,11 +88,11 @@ void *vector_shift(Vector *vec)
 void *vector_peek(Vector *vec)
 {
   if (vec->len == 0)
-    error_exit("Vector size is 0");
+    error_exit("Vector size is 0.");
   return vec->data[vec->len - 1];
 }
 
-// 指定できるlocationは1始まり
+// The specifiable location starts from 1
 void *vector_peek_at(Vector *vec, size_t location)
 {
   if (vec->len < location || location == 0)
@@ -133,7 +133,7 @@ void *vector_replace_at(Vector *vec, size_t location, void *data)
   return return_data;
 }
 
-// 引数の2つのベクトルが等しければtrueを返す
+// Returns true if the two argument vectors are equal
 bool vector_compare(Vector *vec1, Vector *vec2)
 {
   if (vector_size(vec1) != vector_size(vec2))

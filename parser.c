@@ -62,10 +62,11 @@ FuncBlock *get_funcblock_head()
 
 const char *nodekindlist[ND_END] = {NodeKindTable};
 
-// 同じnestのGTLabelを保持しているvectorを保持するvector
-// nestが深くなるとき新たなvectorがpushされ浅くなるときpopされる
+// Vector to hold GTLabel for the same nest
+// When the nest deepens, a new vector is pushed, and when it becomes shallow,
+// it is popped
 Vector *label_list;
-// 現在パースしている関数名と名前
+// Current function name and name being parsed
 char *program_name;
 int program_name_len;
 
@@ -98,11 +99,13 @@ GTLabel *generate_label_name(NodeKind kind)
   return next;
 }
 
-// break continueで飛ぶ場所を探す関数
-// 引数のtypeに1が来たときcontinueで2が来たときbreakとする
+// Function to find the jump target for break/continue
+// If type is 1, it's for continue; if type is 2, it's for break.
 char *find_jmp_target(size_t type)
 {
-  // while, for文を探す ネストが深いほうから探していく
+  // Function to find the jump target for break/continue
+  // If type is 1, it's for continue; if type is 2, it's for break.
+  // Search for while/for loops, starting from the deepest nested one.
   for (size_t i = vector_size(label_list); i >= 1; i--)
   {
     for (size_t j = 1; j <= vector_size(vector_peek_at(label_list, i)); j++)
@@ -160,7 +163,8 @@ char *find_jmp_target(size_t type)
   return NULL;
 }
 
-// goto文のラベルを.Lgoto_YYY_XXX (YYYにラベル名、XXXに関数名)とする
+// Set the goto label to .Lgoto_YYY_XXX (YYY is the label name, XXX is the
+// function name)
 char *mangle_goto_label(Token *token)
 {
   char *label_name = malloc(token->len + program_name_len + 9);
@@ -204,9 +208,9 @@ void exit_nest()
 
 Vector *parameter_type_list(Vector **type_list, Type *type,
                             uint8_t storage_class_specifier)
-{  // 関数の引数のnode リストを作成 ")"をconsumeして終了する
+{  // Creates a list of function argument nodes and consumes ")" to end.
   if (storage_class_specifier &
-      ~(1 << 1 | 1 << 2))  // 関数なので、staticとextern以外はブロック
+      ~(1 << 1 | 1 << 2))  // Functions are blocks except for static and extern
     error_exit("invalid storage specifier");
   if (type_list)
     vector_push(*type_list, type);
@@ -231,7 +235,7 @@ Vector *parameter_type_list(Vector **type_list, Type *type,
       uint8_t storage_class_specifier = 0;
       Type *type = declaration_specifiers(&storage_class_specifier);
       if (!type)
-        error_at(get_token()->str, get_token()->len, "invalid type");
+        error_at(get_token()->str, get_token()->len, "Invalid type.");
       Node *parameter =
           declarator_no_side_effect(&type, storage_class_specifier);
       vector_push(list, parameter);
@@ -253,7 +257,7 @@ Vector *parameter_type_list(Vector **type_list, Type *type,
 
 FuncBlock *parser()
 {
-  pr_debug("start parser...");
+  pr_debug("Starting parser...");
   head.next = NULL;
   FuncBlock *pointer = &head;
   init_types();
@@ -267,7 +271,7 @@ FuncBlock *parser()
 #ifdef DEBUG
   print_parse_result(head.next);
 #endif
-  pr_debug("complite parse");
+  pr_debug("Parsing complete.");
   return head.next;
 }
 
@@ -277,7 +281,7 @@ Node *external_declaration()
   uint8_t storage_class_specifier = 0;
   Type *type = declaration_specifiers(&storage_class_specifier);
   if (!type)
-    error_at(get_token()->str, get_token()->len, "failed to parse");
+    error_at(get_token()->str, get_token()->len, "Failed to parse.");
   return declaration(type, true, storage_class_specifier);
 }
 
@@ -431,7 +435,7 @@ Type *abstract_declarator(Type *type)
   return direct_abstract_declarator(type);
 }
 
-// direct_abstract_declaratorに当てはまらなくても許容する
+// Allow even if it does not match direct_abstract_declarator
 Type *direct_abstract_declarator(Type *type)
 {
   bool was_grouped = false;
@@ -551,7 +555,7 @@ Node *labeled_statement()
 Node *statement()
 {
   pr_debug2("statement");
-  // ブロックの判定 compound-statement
+  // Determine if it's a block: compound-statement
   if (consume("{", TK_RESERVED))
   {
     Node *node = calloc(1, sizeof(Node));
@@ -575,7 +579,7 @@ Node *statement()
   }
 
   // selection-statement
-  // if文の判定とelseがついてるかどうか
+  // Determine if it's an if statement and if it has an else clause
   if (consume("if", TK_IDENT))
   {
     Node *node = calloc(1, sizeof(Node));
@@ -612,7 +616,7 @@ Node *statement()
   }
 
   // iteration-statement
-  // while文の判定
+  // Determine if it's a while loop
   if (consume("while", TK_IDENT))
   {
     Node *node = calloc(1, sizeof(Node));
@@ -626,7 +630,7 @@ Node *statement()
     exit_nest();
     return node;
   }
-  // do while文の判定
+  // Determine if it's a do-while loop
   if (consume("do", TK_IDENT))
   {
     new_nest();
@@ -642,7 +646,7 @@ Node *statement()
     exit_nest();
     return node;
   }
-  // for文の判定
+  // Determine if it's a for loop
   if (consume("for", TK_IDENT))
   {
     Node *node = calloc(1, sizeof(Node));
@@ -650,7 +654,7 @@ Node *statement()
     new_nest();
     node->name = generate_label_name(ND_FOR);
     expect("(", TK_RESERVED);
-    // declarationかどうか
+    // Whether it is a declaration
     uint8_t storage_class_specifier = 0;
     Type *type = declaration_specifiers(&storage_class_specifier);
     if (type)
@@ -1037,7 +1041,7 @@ Node *primary_expression()
 
     if (result == function_name || result == none_of_them)
     {
-      // 関数呼び出し
+      // Function call
       expect("(", TK_RESERVED);
       node->token = token;
       node->kind = ND_FUNCCALL;
@@ -1060,7 +1064,7 @@ Node *primary_expression()
     }
   }
 
-  // 変数
+  // Variable
   token = consume_ident();
   if (token)
   {
@@ -1068,11 +1072,11 @@ Node *primary_expression()
     Var *var = NULL;
     switch (is_enum_or_function_or_typedef_or_variables_name(
         token, &enum_number, NULL, &var))
-    {  // enumの場合を除外
+    {  // Exclude enum cases
       case enum_member_name: return new_node_num(enum_number);
       case function_name: unreachable(); break;
       case variables_name:
-      {  // 変数であるとわかる
+      {  // It is known to be a variable
         Node *node = calloc(1, sizeof(Node));
         node->token = token;
         node->kind = ND_VAR;
@@ -1083,7 +1087,7 @@ Node *primary_expression()
       default:
       {
         if (token->len == 8 && !strncmp(token->str, "__func__", 8))
-        {  // __func__ の場合をサポート
+        {  // Support for __func__
           Node *node = calloc(1, sizeof(Node));
           node->token = calloc(1, sizeof(Token));
           node->token->kind = TK_STRING;

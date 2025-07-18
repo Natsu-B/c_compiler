@@ -19,26 +19,29 @@
 #include "include/tokenizer.h"
 #include "include/vector.h"
 
-static Vector* OrdinaryNamespaceList;  // 変数名 関数名 列挙体のメンバ名
-static Vector* TagNamespaceList;       // 構造体 共用体 列挙体のタグ名
-static size_t tag_id;                  // 構造体 共用体 列挙体につけられる番号
-static Vector* EnumStructList;  // 構造体、共用体、列挙体のリスト tag_idの順番
-static Vector* GlobalVariablesList;  // global変数のVarリスト
+static Vector* OrdinaryNamespaceList;  // variable names, function names,
+                                       // enumeration member names
+static Vector* TagNamespaceList;       // struct, union, enumeration tag names
+static size_t tag_id;  // number assigned to struct, union, enumeration
+static Vector*
+    EnumStructList;  // list of structs, unions, enumerations in order of tag_id
+static Vector* GlobalVariablesList;  // Var list of global variables
 
 typedef struct
 {
   enum member_name ordinary_kind;
   Token* name;
   Type* type;
-  size_t enum_number;  // enumのとき利用
-  Var* variables;      // 変数のとき利用
+  size_t enum_number;  // used for enums
+  Var* variables;      // used for variables
 } ordinary_data_list;
 
 typedef struct
 {
   Token* name;
   Type* type;
-  // structの先頭から何byte離れているか enumだったらその数字
+  // how many bytes from the beginning of the struct, or the number if it's an
+  // enum
   size_t offset;
 } tag_data_list;
 
@@ -49,12 +52,13 @@ typedef struct
     is_struct,
     is_union,
     is_enum,
-  } tagkind;                // unionかstructかenum
-  Token* name;              // 名前 なかったらNULL
-  Vector* data_list;        // structの中身 前方宣言のみならNULL
-  Type* type;               // struct union enumのtype
-  size_t struct_size;       // structのサイズ
-  size_t struct_alignment;  // structのアライメント
+  } tagkind;    // whether it is a union, struct, or enum
+  Token* name;  // name, NULL if not present
+  Vector*
+      data_list;  // contents of the struct, NULL for forward declarations only
+  Type* type;     // type of struct, union, or enum
+  size_t struct_size;       // size of the struct
+  size_t struct_alignment;  // alignment of the struct
 } tag_list;
 
 static Type* find_typedef_type(Token* token)
@@ -112,9 +116,9 @@ bool is_typedef(uint8_t storage_class_specifier)
   return false;
 }
 
-#define ASSERT_STORAGE_SPECIFIER                                              \
-  (!*storage_class_specifier || (error_at(get_token()->str, get_token()->len, \
-                                          "invalid storage class specifier"), \
+#define ASSERT_STORAGE_SPECIFIER                                               \
+  (!*storage_class_specifier || (error_at(get_token()->str, get_token()->len,  \
+                                          "Invalid storage class specifier."), \
                                  false))
 
 #define CONSUMED_TRUE (consumed = true)
@@ -129,9 +133,9 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
   size_t short_count = 0;
   size_t unsigned_count = 0;
   size_t void_count = 0;
-  size_t const_count = 0;  // 読み飛ばす
+  size_t const_count = 0;  // skip
   size_t restrict_count = 0;
-  size_t volatile_count = 0;  // 読み飛ばす
+  size_t volatile_count = 0;  // skip
   size_t inline_count = 0;
   Token* old = get_token();
   Type* type = NULL;
@@ -165,8 +169,7 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
     else if (consume("inline", TK_IDENT) && CONSUMED_TRUE)
       if (inline_count)
         error_at(token->str, token->len,
-                 "multiple function-specifier(inline) "
-                 "declaration");
+                 "Multiple function-specifier (inline) declaration.");
       else
         inline_count++;
     else if (type == NULL &&
@@ -175,7 +178,7 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
     {
       if (long_count || signed_count || unsigned_count || int_count ||
           bool_count || char_count || short_count || void_count)
-        error_at(token->str, token->len, "invalid type specifier");
+        error_at(token->str, token->len, "Invalid type specifier.");
       consumed = true;
       bool is_struct = consume("struct", TK_IDENT);
       bool is_union = !is_struct && consume("union", TK_IDENT);
@@ -197,7 +200,7 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
               if ((is_struct && tmp->tagkind != is_struct) ||
                   (is_union && tmp->tagkind != is_union) ||
                   (is_enum && tmp->tagkind != is_enum))
-                error_at(tag_name->str, tag_name->len, "invalid type");
+                error_at(tag_name->str, tag_name->len, "Invalid type.");
               new = tmp;
               break;
             }
@@ -220,7 +223,7 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
         }
         if (is_same_nest)
           error_at(get_old_token()->str, get_old_token()->len,
-                   "multiple definition");
+                   "Multiple definition.");
       }
       if (!new)
       {
@@ -250,7 +253,7 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
             Token* identifier = consume_ident();
             if (!identifier)
               error_at(get_token()->str, get_token()->len,
-                       "invalid enum definition");
+                       "Invalid enum definition.");
             tag_data_list* child = calloc(1, sizeof(tag_data_list));
             child->name = identifier;
             child->type = alloc_type(TYPE_INT);
@@ -261,7 +264,7 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
               long num = eval_constant_expression();
               if (num < 0 || (size_t)num < enum_num)
                 error_at(get_old_token()->str, get_old_token()->len,
-                         "invalid enum value");
+                         "Invalid enum value.");
               enum_num = num;
             }
             child->offset = enum_num;
@@ -280,7 +283,7 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
             else if (is_comma)
               continue;
             error_at(get_token()->str, get_token()->len,
-                     "invalid enum definition");
+                     "Invalid enum definition.");
           }
         }
         else
@@ -295,7 +298,7 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
                 declarator_no_side_effect(&child_type, storage_class_specifier);
             if (!node || !node->type)
               error_at(get_token()->str, get_token()->len,
-                       "invalid struct definition");
+                       "Invalid struct definition.");
             tag_data_list* new_data = malloc(sizeof(tag_data_list));
             new_data->name = node->token;
             new_data->type = node->type;
@@ -384,7 +387,7 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
     if (long_count || signed_count || unsigned_count || int_count ||
         bool_count || char_count || short_count || void_count)
       error_at(old->str, get_token()->str - old->str + get_token()->len,
-               "invalid type specifier");
+               "Invalid type specifier.");
     return type;
   }
 
@@ -400,7 +403,7 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
       int_count + bool_count + char_count + short_count + void_count > 1 ||
       (signed_count | unsigned_count) & (void_count | bool_count))
     error_at(old->str, get_token()->str - old->str + get_token()->len,
-             "invalid type specifier");
+             "Invalid type specifier.");
 
   TypeKind kind;
   if (long_count == 2)
@@ -427,7 +430,7 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
 
 void add_typedef(Token* token, Type* type)
 {
-  // 名前とTypeを関連付ける
+  // Associate a name with a Type
   ordinary_data_list* new = malloc(sizeof(ordinary_data_list));
   new->ordinary_kind = typedef_name;
   new->name = token;
@@ -438,7 +441,7 @@ void add_typedef(Token* token, Type* type)
 Var* add_variables(Token* token, Type* type, uint8_t storage_class_specifier)
 {
   if (storage_class_specifier & 1 << 2)
-    unimplemented();  // static にはまだ対応していない
+    unimplemented();  // static is not yet supported
   if (!token || !type)
     return NULL;
   if (type && is_typedef(storage_class_specifier))
@@ -447,12 +450,13 @@ Var* add_variables(Token* token, Type* type, uint8_t storage_class_specifier)
     return NULL;
   }
 
-  // 変数名が同じものが以前あったかどうかを調査
+  // Check if a variable with the same name already exists
   ordinary_data_list* same = find_local_var_in_current_nested_block(token);
   if (same && type)
-    error_at(token->str, token->len, "同じ名前の変数がすでに存在します");
+    error_at(token->str, token->len,
+             "A variable with the same name already exists.");
 
-  // 新規変数の場合
+  // For new variables
   Var* var = calloc(1, sizeof(Var));
   var->token = token;
   var->name = token->str;
@@ -460,11 +464,11 @@ Var* add_variables(Token* token, Type* type, uint8_t storage_class_specifier)
   var->type = type;
   if (vector_size(OrdinaryNamespaceList) == 1)
   {
-    var->is_local = false;  // 変数はグローバル変数
+    var->is_local = false;  // The variable is a global variable
     vector_push(GlobalVariablesList, var);
   }
   else
-    var->is_local = true;  // 変数はローカル変数
+    var->is_local = true;  // The variable is a local variable
   var->storage_class_specifier = storage_class_specifier;
   ordinary_data_list* new = calloc(1, sizeof(ordinary_data_list));
   new->ordinary_kind = variables_name;
@@ -487,12 +491,12 @@ struct literal_list
 static literal_list* literal_top;
 static size_t literal_counter;
 
-// ポインタへの文字列リテラルの代入の際利用
+// Used when assigning a string literal to a pointer
 char* add_string_literal(Token* token)
 {
   pr_debug2("string literal found");
-  // 同じ文字列がすでに存在した場合、それを使う
-  // 仕様として文字列の変更が認められていないため可能
+  // If the same string already exists, use it
+  // This is possible because the specification does not allow changing strings
   for (literal_list* pointer = literal_top; pointer; pointer = pointer->next)
     if (token->len == pointer->len &&
         !strncmp(token->str, pointer->name, pointer->len))
@@ -503,15 +507,15 @@ char* add_string_literal(Token* token)
   literal_top = new;
   literal_top->name = token->str;
   literal_top->len = token->len;
-  // 文字列リテラルの名前を決める
-  // 9999個まで文字列リテラルが存在可能
+  // Determine the name of the string literal
+  // Up to 9999 string literals can exist
   char* literal_name = malloc(8);
   int snprintf_return = snprintf(literal_name, 8, ".LC%lu", literal_counter++);
   if (snprintf_return < 3 || snprintf_return > 7)
     unreachable();
   pr_debug2("literal_name: %s", literal_name);
   literal_top->literal_name = literal_name;
-  // グローバル変数に存在しないか一応確かめる
+  // Check if it does not exist as a global variable
   for (size_t i = 1; i <= vector_size(vector_peek_at(OrdinaryNamespaceList, 1));
        i++)
   {
@@ -537,8 +541,8 @@ bool add_function_name(Vector* function_list, Token* name,
                        uint8_t storage_class_specifier)
 {
   if (storage_class_specifier & ~(1 << 2))
-    error_at(name->str, name->len, "invalid storage class specifier");
-  // 名前空間に以前から同じ名前で異なるものがないかを判別する
+    error_at(name->str, name->len, "Invalid storage class specifier.");
+  // Check if there is anything different with the same name in the namespace
   for (size_t i = 1; i <= vector_size(OrdinaryNamespaceList); i++)
   {
     Vector* typedef_nest = vector_peek_at(OrdinaryNamespaceList, i);
@@ -566,7 +570,7 @@ bool add_function_name(Vector* function_list, Token* name,
       }
     }
   }
-  // なければ追加する
+  // If not, add it
   ordinary_data_list* new = calloc(1, sizeof(ordinary_data_list));
   new->ordinary_kind = function_name;
   new->name = name;
@@ -613,7 +617,7 @@ Vector* get_global_var()
   return GlobalVariablesList;
 }
 
-// Typeを作成する関数
+// A function that creates a Type
 Type* alloc_type(TypeKind kind)
 {
   Type* new = calloc(1, sizeof(Type));
@@ -621,7 +625,7 @@ Type* alloc_type(TypeKind kind)
   return new;
 }
 
-// TYPE_INT TYPE_ARRAY 等を受け取ってその大きさを返す関数
+// A function that takes a TYPE_INT, TYPE_ARRAY, etc. and returns its size
 size_t size_of(Type* type)
 {
   switch (type->type)
@@ -668,11 +672,11 @@ size_t align_of(Type* type)
           {
             if (tmp->struct_alignment)
               return tmp->struct_alignment;
-            error_at(tmp->name->str, tmp->name->len, "struct not defined");
+            error_at(tmp->name->str, tmp->name->len, "Struct not defined.");
           }
         }
       }
-      error_exit("struct not found");
+      error_exit("Struct not found.");
     }
     break;
     default: return size_of(type);
@@ -682,8 +686,8 @@ size_t align_of(Type* type)
 }
 
 Type* find_struct_child(Node* parent, Node* child, size_t* offset)
-{  // structのchildを探してその型を返す
-  // また、そのchildのオフセットについても返す
+{  // Find the child of the struct and return its type
+  // Also return the offset of the child
   Type* type = parent->type;
   if (type->type == TYPE_PTR || type->type == TYPE_ARRAY)
     type = type->ptr_to;
@@ -710,14 +714,13 @@ Type* find_struct_child(Node* parent, Node* child, size_t* offset)
             }
           }
           error_at(child->token->str, child->token->len,
-                   "unknown child name (parent: %.*s)", (int)parent->token->len,
-                   parent->token->str);
+                   "Unknown child name (parent: %.*s).");
         }
-        error_at(tmp->name->str, tmp->name->len, "struct not defined");
+        error_at(tmp->name->str, tmp->name->len, "Struct not defined.");
       }
     }
   }
-  error_at(parent->token->str, parent->token->len, "unknown struct type");
+  error_at(parent->token->str, parent->token->len, "Unknown struct type.");
   return NULL;
 }
 

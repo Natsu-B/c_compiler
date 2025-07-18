@@ -4,7 +4,7 @@ typedef struct offset offset;
 
 struct offset
 {
-  offset *next;  // ネストが1つ浅い
+  offset *next;  // One level shallower nest
   size_t offset;
 };
 

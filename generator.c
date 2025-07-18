@@ -45,7 +45,7 @@ static FILE *fout;
     fprintf(fout, fmt "\n", ##__VA_ARGS__); \
   } while (0)
 
-// アクセスサイズの指定子を作成する
+// Creates the access size specifier
 char *access_size_specifier(int size)
 {
   char *tmp;
@@ -109,8 +109,8 @@ char *chose_register(int size, register_type reg_type)
   return tmp;
 }
 
-// 移すサイズによってmv命令を変更する
-// mv rax まで出力する
+// Changes the mv instruction depending on the size to be moved
+// Output up to mv rax
 char *mv_instruction_specifier(int size, bool is_sighed, register_type reg)
 {
   char *tmp = calloc(1, 11 /* movsxd rax */);
@@ -162,7 +162,7 @@ char *mv_instruction_specifier(int size, bool is_sighed, register_type reg)
 
 void gen(Node *node);
 
-// 左辺値をraxに出力する関数 raxが破壊されるため注意
+// Function to output lvalue to rax. Be careful as rax will be destroyed.
 void gen_lval(Node *node)
 {
   output_debug2("enter gen_lval");
@@ -190,7 +190,9 @@ void gen_lval(Node *node)
       output_file("    add rax, %lu", node->child_offset);
       output_file("    push rax");
       break;
-    default: error_exit_with_guard("代入の左辺値が変数でありません");
+    default:
+      error_exit_with_guard(
+          "The left-hand side of the assignment is not a variable.");
   }
   output_debug2("exit gen_lval");
 }
@@ -238,7 +240,7 @@ void gen(Node *node)
       {
         // output_file("    sub rsp, %lu", (stack_args + 1) / 2 * 2 * 8);
         for (size_t i = 7; i <= vector_size(node->expr); i++)
-          // node の値をstackにpushしているのと同等
+          // Equivalent to pushing node value to stack
           gen(vector_peek_at(node->expr, vector_size(node->expr) - i + 7));
       }
       output_file("    mov rax, 0");
@@ -253,7 +255,7 @@ void gen(Node *node)
       {
         // output_file("    sub rsp, %lu", (stack_args + 1) / 2 * 2 * 8);
         for (size_t i = 7; i <= vector_size(node->expr); i++)
-          // node の値をstackにpushしているのと同等
+          // Equivalent to pushing node value to stack
           gen(vector_peek_at(node->expr, vector_size(node->expr) - i + 7));
       }
       output_file("    mov rax, 0");
@@ -632,7 +634,7 @@ void generator(FuncBlock *parsed, char *output_filename)
   output_file(".intel_syntax noprefix");
   output_file(".data");
 
-  // グローバル変数を書き込む
+  // Write global variables
   Vector *root = get_global_var();
   for (size_t i = 1; i <= vector_size(root); i++)
   {
@@ -657,7 +659,7 @@ void generator(FuncBlock *parsed, char *output_filename)
     }
   }
 
-  // 関数を書き込む
+  // Write functions
   output_file(".text");
   for (FuncBlock *pointer = parsed; pointer; pointer = pointer->next)
   {
@@ -720,9 +722,9 @@ void generator(FuncBlock *parsed, char *output_filename)
       continue;
     }
     if (node->kind != ND_VAR && node->kind != ND_NOP)
-      error_exit_with_guard("unreachable");
+      error_exit_with_guard("Unreachable");
   }
 
   fclose(fout);
-  pr_debug("complite generate");
+  pr_debug("Generation complete.");
 }

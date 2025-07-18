@@ -12,7 +12,7 @@ typedef enum
 
 typedef enum
 {
-  CPPTK_NOP,           // unused
+  CPPTK_NOP,                // unused
   CPPTK_Question,           // ?
   CPPTK_Colon,              //  :
   CPPTK_Logical_OR,         // ||
@@ -37,7 +37,7 @@ typedef enum
   CPPTK_UnaryMinus,         // -
   CPPTK_NOT,                // !
   CPPTK_Bitwise,            // ~
-  CPPTK_Integer,            // 数値
+  CPPTK_Integer,            // Numeric value
   CPPTK_Parentheses_Start,  // (
   CPPTK_Parentheses_End,    // )
   CPPTK_Reserved,
@@ -58,7 +58,7 @@ typedef struct conditional_inclusion_token conditional_inclusion_token;
 struct conditional_inclusion_token
 {
   conditional_inclusion_type type;
-  long long num;  // 数値のときlong longが入る
+  long long num;  // long long value when numeric
 };
 
 void conditional_inclusion(if_directive type, Vector *conditional_list);

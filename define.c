@@ -26,21 +26,22 @@ int find_macro_name_without_hide_set(Token *identifier, Vector *hide_set,
                                      Vector **token_string, Token **token,
                                      size_t *location);
 
-// 引数の文字列が object like macro に定義されている場合は1を
-// function like macro に定義されている場合は2を、その他の場合は0を返す
+// If the argument string is defined as an object-like macro, it returns 1.
+// If it is defined as a function-like macro, it returns 2. Otherwise, it
+// returns 0.
 inline int find_macro_name_all(Token *identifier)
 {
   return find_macro_name_without_hide_set(identifier, NULL, NULL, NULL, NULL,
                                           NULL);
 }
 
-// 引数の文字列が object like macro に定義されている場合は1を
-// function like macro に定義されている場合は2を、その他の場合は0を返す
-// 1or2を返す場合は、token_stringにトークン列が、tokenにmacroの名前が、
-// locationにmacroが(object or function)_macro_listのどの位置にあるか
-// が入る(それぞれがnonnullの場合)
-// 2を返す場合はargument_listに関数引数列が入る
-// ただし、すでに展開済みのものを除く
+// If the argument string is defined as an object-like macro, it returns 1.
+// If it is defined as a function-like macro, it returns 2. Otherwise, it
+// returns 0. If it returns 1 or 2, the token string is stored in token_string,
+// the macro name is stored in token, and the location of the macro in the
+// (object or function)_macro_list is stored in location. (if they are non-null)
+// If it returns 2, the function argument list is stored in argument_list.
+// However, this excludes those that have already been expanded.
 int find_macro_name_without_hide_set(Token *identifier, Vector *hide_set,
                                      Vector **argument_list,
                                      Vector **token_string, Token **token,
@@ -102,7 +103,7 @@ void add_object_like_macro(Vector *token_list)
   if (result == 2 ||
       (result == 1 && !vector_compare(token_list, token_list_before)))
     error_at(identifier->str, identifier->len,
-             "identifier %s is already defined");
+             "Identifier %s is already defined.");
   object_like_macro_storage *new = malloc(sizeof(object_like_macro_storage));
   new->identifier = identifier;
   new->token_string = token_list;
@@ -120,7 +121,7 @@ void add_function_like_macro(Vector *token_list)
   if (result == 1 ||
       (result == 2 && !vector_compare(token_list, token_list_before)))
     error_at(identifier->str, identifier->len,
-             "identifier %s is already defined");
+             "Identifier %s is already defined.");
 
   function_like_macro_storage *new =
       malloc(sizeof(function_like_macro_storage));
@@ -143,7 +144,8 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
     if (!strncmp(token->str, "__FILE__", 8))
     {
       size_t file_name_len = strlen(File_Name);
-      char *file_name = malloc(file_name_len + 2);  // NULL terminatorは必要ない
+      char *file_name =
+          malloc(file_name_len + 2);  // no need for NULL terminator
       strncpy(file_name + 1, File_Name, file_name_len);
       file_name[0] = file_name[file_name_len + 1] = '"';
       token->kind = TK_STRING;
@@ -162,7 +164,7 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
         file_line_len =
             snprintf(file_line_str, file_line_len + 1, "%lu", File_Line);
         if (file_line_len < 0 || file_line_len + 1 > size)
-          error_exit("failed to preprocess __LINE__");
+          error_exit("Failed to preprocess __LINE__.");
       }
       token->len = file_line_len;
       token->str = file_line_str;
@@ -174,7 +176,7 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
     {
       time_t current_time = time(NULL);
       if (current_time == -1)
-        error_exit("failed to get time");
+        error_exit("Failed to get time.");
       // asctime
       char *asctime_str = asctime(localtime(&current_time));
       char *time_str;
@@ -210,7 +212,7 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
         file_line_len =
             snprintf(file_line_str, file_line_len + 1, "%lu", File_Line);
         if (file_line_len < 0 || file_line_len + 1 > size)
-          error_exit("failed to preprocess __INCLUDE_LEVEL__");
+          error_exit("Failed to preprocess __INCLUDE_LEVEL__.");
       }
       token->kind = TK_STRING;
       token->len = file_line_len;
@@ -225,7 +227,7 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
   size_t is_defined = find_macro_name_without_hide_set(
       token, hide_set, &argument_list, &token_string, &token_identifier, NULL);
   if (is_defined == 1)
-  {  // object like macro の場合
+  {  // if it is an object-like macro
     vector_push(hide_set, token_identifier);
     Token *tmp = token;
     Token *old = token;
@@ -254,18 +256,18 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
   else if (is_defined == 2 &&
            token_next_not_ignorable(token)->kind == TK_RESERVED &&
            token_next_not_ignorable(token)->str[0] == '(')
-  {  // function like macro の場合
+  {  // if it is a function-like macro
     token_void(token);
-    // function like macroの実際の引数リスト Vectorが入る
+    // Vector containing the actual argument list of the function-like macro
     Vector *argument_real_list = vector_new();
     vector_push(hide_set, token_identifier);
-    Token *const old = token;  // 置き換えられるトークンを指す(void)
+    Token *const old = token;  // points to the token to be replaced (void)
     Token *next = token_next_not_ignorable_void(token);
     token_void(next);
     next = token_next_not_ignorable_void(next);
-    bool is_end = false;  // IDENTの直後かどうか
+    bool is_end = false;  // whether it is immediately after an IDENT
     size_t nest_counter = 0;
-    // 関数の引数をvectorに入れる
+    // put the function arguments into a vector
     for (;;)
     {
       if (!is_end)
@@ -306,12 +308,12 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
           break;
         }
       }
-      error_at(next->str, next->len, "Invalid #define directive");
+      error_at(next->str, next->len, "Invalid #define directive.");
     }
     if (token_string && vector_size(token_string))
-    {  // function like macroの置換をしていく
+    {  // perform replacement for function-like macro
 
-      // function like macroの置換済みのデータを保存
+      // save the replaced data of the function-like macro
       Vector *result = vector_new();
 
       size_t directive_count = 0;
@@ -348,8 +350,8 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
         }
 
         if (is_args || is_ops)
-        {  // __VA_ARGS__ 等を置換する
-          // macroの引数の最後が"..."であることを確認する
+        {  // replace __VA_ARGS__, etc.
+          // check that the last argument of the macro is "..."
           Token *last =
               vector_peek_at(argument_list, vector_size(argument_list));
           if (last->len != 3 || strncmp(last->str, "...", 3) ||
@@ -358,7 +360,7 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
                       : vector_size(argument_list) - 1 >=
                             vector_size(argument_real_list)))
             error_at(token->str, token->len,
-                     "invalid function like macro argument");
+                     "Invalid function-like macro argument.");
           if (is_ops &&
               vector_size(argument_list) - 1 ==
                   vector_size(argument_real_list) &&
@@ -377,12 +379,12 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
           }
           else
           {
-            // startは__VA_ARGS__の最初
+            // start is the beginning of __VA_ARGS__
             Token *ptr = vector_peek_at(
                 vector_peek_at(argument_real_list, vector_size(argument_list)),
                 1);
             while (ptr != next)
-            {  // nextは__VA_ARGS__の終了部分
+            {  // next is the end of __VA_ARGS__
               vector_push(result, ptr);
               ptr = ptr->next;
             }
@@ -394,18 +396,19 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
           if (replace_token->kind == TK_IDENT ||
               replace_token->kind == TK_STRING ||
               replace_token->kind == TK_RESERVED)
-          {  // 通常の置換を行っていく (__VA_ARGS__等以外の)
+          {  // perform normal replacement (other than __VA_ARGS__, etc.)
             for (size_t j = 1; j <= vector_size(argument_list); j++)
-            {  // マクロの引数と同じものがないか探す
+            {  // search for something that matches the macro argument
               Token *argument = vector_peek_at(argument_list, j);
               if (argument->len == replace_token->len &&
                   !strncmp(argument->str, replace_token->str, argument->len))
-              {  // マクロの引数と同じ場合
+              {  // if it matches the macro argument
                 size_t start = vector_size(result) + 1;
                 for (size_t k = 1;
                      k <= vector_size(vector_peek_at(argument_real_list, j));
                      k++)
-                {  // マクロの引数に対応する実引数をコピーしてくる
+                {  // copy the actual argument corresponding to the macro
+                   // argument
                   vector_push(
                       result,
                       vector_peek_at(vector_peek_at(argument_real_list, j), k));
@@ -501,11 +504,11 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
   return false;
 }
 
-// #define を展開する関数
-// 返り値は展開終了のtoken
+// function to expand #define
+// return value is the token at the end of the expansion
 bool ident_replacement(Token *token)
 {
-  // #defineで定義されているものを展開する
+  // expand what is defined by #define
   Vector *hide_set = vector_new();
   bool tmp = ident_replacement_recursive(token, hide_set);
   vector_free(hide_set);

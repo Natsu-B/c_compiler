@@ -85,7 +85,7 @@ Type *implicit_type_conversion(Type *lhs, Type *rhs)
 Type *promote_integer(Type *type, Token *token)
 {
   if (!is_integer_type(type))
-    error_at(token->str, token->len, "operand must be a integer type");
+    error_at(token->str, token->len, "Operand must be an integer type.");
 
   if (type->type == TYPE_BOOL || type->type == TYPE_CHAR ||
       type->type == TYPE_SHORT)
@@ -119,7 +119,7 @@ Vector *switch_new(GTLabel *name)
 GTLabel *switch_add(Node *node, size_t *num)
 {
   if (!switch_list.case_list || !vector_size(switch_list.case_list))
-    error_at(node->token->str, node->token->len, "invalid case statement");
+    error_at(node->token->str, node->token->len, "Invalid case statement.");
   *num = vector_size(vector_peek(switch_list.case_list));
   vector_push(vector_peek(switch_list.case_list), node);
   return vector_peek(switch_list.switch_info_list);
@@ -185,7 +185,7 @@ void add_type_for_assignment(Node *node)
   }
 
   error_at(node->token->str, node->token->len,
-           "cannot convert both sides of '=' types");
+           "Cannot convert both sides of '=' types.");
 }
 
 void add_type_internal(Node *node)
@@ -197,7 +197,7 @@ void add_type_internal(Node *node)
     {
       if (is_pointer_type(node->lhs->type) && is_pointer_type(node->rhs->type))
         error_at(node->token->str, node->token->len,
-                 "invalid operands to binary +");
+                 "Invalid operands to binary +");
 
       if (is_pointer_type(node->lhs->type))
       {  // ptr + int
@@ -250,7 +250,7 @@ void add_type_internal(Node *node)
       if (is_pointer_type(node->rhs->type))
       {
         error_at(node->token->str, node->token->len,
-                 "invalid operands to binary -");
+                 "Invalid operands to binary -");
       }
 
       node->type = implicit_type_conversion(node->lhs->type, node->rhs->type);
@@ -262,7 +262,7 @@ void add_type_internal(Node *node)
       if (!is_integer_type(node->lhs->type) ||
           !is_integer_type(node->rhs->type))
         error_at(node->token->str, node->token->len,
-                 "operands for '%s' must be integer types",
+                 "Operands for '%s' must be integer types.",
                  (node->kind == ND_MUL ? "*" : "/"));
       node->type = implicit_type_conversion(node->lhs->type, node->rhs->type);
       return;
@@ -281,10 +281,10 @@ void add_type_internal(Node *node)
     }
     case ND_DEREF:
       if (!is_pointer_type(node->lhs->type))
-        error_at(node->token->str, node->token->len, "invalid dereference");
+        error_at(node->token->str, node->token->len, "Invalid dereference.");
       if (!node->lhs->type->ptr_to)
         error_at(node->token->str, node->token->len,
-                 "cannot dereference a void pointer");
+                 "Cannot dereference a void pointer.");
       node->type = node->lhs->type->ptr_to;
       size_of(node->type);  // check if it's a valid type
       return;
@@ -297,7 +297,7 @@ void add_type_internal(Node *node)
       {
         if (node->kind == ND_UNARY_MINUS || node->kind == ND_NOT)
           error_at(node->token->str, node->token->len,
-                   "ND_UNARY_MINUS or ND_NOT must be a integer type");
+                   "ND_UNARY_MINUS or ND_NOT must be an integer type.");
         node->type = alloc_type(TYPE_INT);
       }
       else
@@ -310,7 +310,7 @@ void add_type_internal(Node *node)
       if (!is_integer_type(node->lhs->type) &&
           !is_pointer_type(node->lhs->type))
         error_at(node->token->str, node->token->len,
-                 "operand must be integer or pointer for inc/dec");
+                 "Operand must be integer or pointer for inc/dec.");
       node->type = node->lhs->type;
       if (node->lhs->type->ptr_to)
         node->val = size_of(node->lhs->type->ptr_to);
@@ -333,7 +333,7 @@ void add_type_internal(Node *node)
           if (num_args < num_declared_params - 1)
           {
             error_at(node->token->str, node->token->len,
-                     "too few arguments to function call");
+                     "Too few arguments to function call.");
           }
         }
         else
@@ -341,7 +341,7 @@ void add_type_internal(Node *node)
           if (num_args != num_declared_params)
           {
             error_at(node->token->str, node->token->len,
-                     "invalid number of arguments to function call");
+                     "Invalid number of arguments to function call.");
           }
         }
 
@@ -412,7 +412,7 @@ void add_type_internal(Node *node)
       }
 
       error_at(node->token->str, node->token->len,
-               "mismatched types in ternary operator");
+               "Mismatched types in ternary operator.");
       return;
     }
     case ND_LOGICAL_OR:
@@ -422,10 +422,10 @@ void add_type_internal(Node *node)
       Type *rhs = node->rhs->type;
       if (!is_integer_type(lhs) && !is_pointer_type(lhs))
         error_at(node->lhs->token->str, node->lhs->token->len,
-                 "scalar type required");
+                 "Scalar type required.");
       if (!is_integer_type(rhs) && !is_pointer_type(rhs))
         error_at(node->rhs->token->str, node->rhs->token->len,
-                 "scalar type required");
+                 "Scalar type required.");
       node->type = alloc_type(TYPE_BOOL);
       return;
     }
@@ -435,7 +435,7 @@ void add_type_internal(Node *node)
       if (!is_integer_type(node->lhs->type) ||
           !is_integer_type(node->rhs->type))
         error_at(node->token->str, node->token->len,
-                 "operands for bitwise op must be integer types");
+                 "Operands for bitwise op must be integer types.");
       node->type = implicit_type_conversion(node->lhs->type, node->rhs->type);
       return;
     case ND_LEFT_SHIFT:
@@ -443,7 +443,7 @@ void add_type_internal(Node *node)
       if (!is_integer_type(node->lhs->type) ||
           !is_integer_type(node->rhs->type))
         error_at(node->token->str, node->token->len,
-                 "operands for shift op must be integer types");
+                 "Operands for shift op must be integer types.");
       node->type = node->lhs->type;
       return;
     case ND_ASSIGNMENT:
@@ -559,7 +559,7 @@ void analyze_type(Node *node)
     for (size_t i = 1; i <= vector_size(node->expr); i++)
       analyze_type(vector_peek_at(node->expr, i));
   if (node->stmt)
-  {  // ND_BLOCKのとき
+  {  // When ND_BLOCK
     offset_enter_nest();
     for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
       analyze_type(tmp->node);
@@ -569,7 +569,7 @@ void analyze_type(Node *node)
   switch (node->kind)
   {
     case ND_STRING:
-      // TODO ND_ARRAYのときは挙動が異なる
+      // TODO: Behavior is different for ND_ARRAY
       node->literal_name = add_string_literal(node->token);
       break;
 
@@ -618,8 +618,8 @@ void analyze_type(Node *node)
 
 FuncBlock *analyzer(FuncBlock *funcblock)
 {
-  pr_debug("start analyze");
-  // ND_ASSIGN等の変数や数字でないnodeに型をつける
+  pr_debug("Start analyze");
+  // Apply types to nodes that are not variables or numbers, such as ND_ASSIGN
   for (FuncBlock *pointer = funcblock; pointer; pointer = pointer->next)
   {
     Node *node = pointer->node;
@@ -635,7 +635,7 @@ FuncBlock *analyzer(FuncBlock *funcblock)
     else if (node->kind == ND_VAR)
     {
       if (node->var->is_local)
-        error_exit("failed to parse correctly");
+        error_exit("Failed to parse correctly.");
       add_type(node);
     }
     else if (node->kind != ND_NOP)
@@ -644,7 +644,7 @@ FuncBlock *analyzer(FuncBlock *funcblock)
 #ifdef DEBUG
   print_parse_result(funcblock);
 #endif
-  // add_typeでつけた型に応じてオフセットの計算等をする
+  // Calculate offsets based on the types assigned by add_type
   for (FuncBlock *pointer = funcblock; pointer; pointer = pointer->next)
   {
     Node *node = pointer->node;
@@ -657,7 +657,7 @@ FuncBlock *analyzer(FuncBlock *funcblock)
         analyze_type(vector_peek_at(node->expr, i));
       for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
         analyze_type(tmp->node);
-      // stacksizeは8byte単位で揃える
+      // Align stacksize to 8-byte units
       size_t max_stacksize = get_max_offset();
       pointer->stacksize =
           max_stacksize % 8 ? (max_stacksize / 8 + 1) * 8 : max_stacksize;
@@ -670,8 +670,8 @@ FuncBlock *analyzer(FuncBlock *funcblock)
 #ifdef DEBUG
   print_parse_result(funcblock);
 #endif
-  // グローバル変数の初期化方法を決める
-  // TODO ゼロクリアと文字列以外対応していない
+  // Determine how to initialize global variables
+  // TODO: Only zero-clear and strings are supported
   Vector *global_variables = get_global_var();
   for (size_t i = 1; i <= vector_size(global_variables); i++)
   {

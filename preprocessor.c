@@ -75,12 +75,12 @@ Token *token_next_not_ignorable_void(Token *token)
   return token;
 }
 
-// File_Nameからディレクトリを得る
+// Get directory from File_Name
 size_t get_current_directory_path()
 {
   char *file_name = File_Name;
   char *last_path = NULL;
-  while (*++file_name != '\0')  // NULL terminatorまで
+  while (*++file_name != '\0')  // Until NULL terminator
     if (*file_name == '/')
       last_path = file_name;
   if (!last_path)
@@ -115,7 +115,7 @@ static size_t lib_path_size[] = {
 
 Token *preprocess(char *input, char *end, char *file_name, Token *token);
 
-// #~ のプリプロセッサで処理するものたち
+// #~ Preprocessor processing
 Token *directive(Token *old)
 {
   token_void(old);
@@ -185,7 +185,7 @@ Token *directive(Token *old)
         ptr = ptr->next;
         bool is_function_like = false;
         bool is_end = true;
-        // function like macroのときの動作
+        // Behavior for function-like macros
         if (ptr->kind == TK_RESERVED && ptr->len == 1 && ptr->str[0] == '(')
         {
           is_function_like = true;
@@ -205,7 +205,7 @@ Token *directive(Token *old)
                 Token *argument = vector_peek_at(formal_parameter, i);
                 if (argument->len == new->len &&
                     !strncmp(argument->str, new->str, argument->len))
-                  error_at(new->str, new->len, "duplicate macro parameter");
+                  error_at(new->str, new->len, "Duplicate macro parameter.");
               }
               vector_push(formal_parameter, new);
               is_end = true;
@@ -213,11 +213,11 @@ Token *directive(Token *old)
             else if (ptr->kind == TK_RESERVED && ptr->str[0] == '.')
             {
               if (strncmp(ptr->str, "...", 3))
-                error_at(ptr->str, 1, "invalid identifier");
+                error_at(ptr->str, 1, "Invalid identifier.");
               token_void(ptr);
               ptr = token_next_not_ignorable_void(ptr);
               if (ptr->str[0] != ')')
-                error_at(ptr->str, 1, "invalid identifier");
+                error_at(ptr->str, 1, "Invalid identifier.");
               token_void(ptr);
               ptr = token_next_not_ignorable_void(ptr);
               Token *new = calloc(1, sizeof(Token));
@@ -244,7 +244,7 @@ Token *directive(Token *old)
               }
             }
             else
-              error_at(token->str, token->len, "Invalid #define use");
+              error_at(token->str, token->len, "Invalid #define use.");
           }
         }
         else if (ptr->kind == TK_IGNORABLE || ptr->kind == TK_ILB)
@@ -322,7 +322,7 @@ Token *directive(Token *old)
           token->next = next;
           return next;
         }
-        error_at(token->str, token->len, "unknown pragma directive");
+        error_at(token->str, token->len, "Unknown pragma directive.");
         return token_next_not_ignorable_void(token);
       }
       break;
@@ -336,7 +336,7 @@ Token *directive(Token *old)
           ident_replacement(tmp);
           tmp = token_next_not_ignorable(tmp);
         }
-        char *file_name = NULL;  // #include "ident"のident
+        char *file_name = NULL;  // #include "ident"'s ident
         size_t file_len = 0;
         size_t directory_path_size = get_current_directory_path();
         token = token_next_not_ignorable_void(token);
@@ -349,7 +349,7 @@ Token *directive(Token *old)
           while (token->kind != TK_RESERVED || token->str[0] != '>')
           {
             if (token->kind == TK_LINEBREAK)
-              error_at(token->str, token->len, "Invalid #include path");
+              error_at(token->str, token->len, "Invalid #include path.");
             file_len += token->len;
             token = token->next;
           }
@@ -368,7 +368,7 @@ Token *directive(Token *old)
           memcpy(file_name, token->str + 1, token->len - 2);
         }
         else
-          error_at(token->str, token->len, "invalid #include directive");
+          error_at(token->str, token->len, "Invalid #include directive.");
         file_name[file_len] = '\0';
         FILE *include_file_ptr = NULL;
         if (directory_path_size)
@@ -384,7 +384,7 @@ Token *directive(Token *old)
         else
           include_file_ptr = fopen(file_name, "r");
         if (!include_file_ptr)
-        {  // stdlib を読み込む
+        {  // Read stdlib
           for (size_t i = 0; i < sizeof(lib_path) / sizeof(char *); i++)
           {
             memmove(file_name + lib_path_size[i] - 1,
@@ -398,12 +398,12 @@ Token *directive(Token *old)
           }
         }
         if (!include_file_ptr)
-          error_at(token->str - file_len - 2, file_len, "file not found");
+          error_at(token->str - file_len - 2, file_len, "File not found.");
         Token *old = token;
         token_void(old);
         token = token_next_not_ignorable_void(token);
         if (token->kind != TK_LINEBREAK)
-          error_at(token->str, token->len, "invalid #include directive");
+          error_at(token->str, token->len, "Invalid #include directive.");
         File_Line++;
         token_void(token);
         preprocess(file_read(include_file_ptr), NULL, file_name, old);
@@ -417,7 +417,7 @@ Token *directive(Token *old)
       break;
     default: break;
   }
-  error_at(token->str, token->len, "unknown directive");
+  error_at(token->str, token->len, "Unknown directive.");
   return NULL;  // unreachable
 }
 
@@ -429,7 +429,7 @@ void preprocessor()
   {
     switch (token->kind)
     {
-      case TK_DIRECTIVE:  // '#'がトークン先頭に存在する場合
+      case TK_DIRECTIVE:  // If '#' exists at the beginning of the token
         token = directive(token);
         break;
       case TK_LINEBREAK: File_Line++; break;
@@ -438,7 +438,7 @@ void preprocessor()
       case TK_STRING: ident_replacement(token); break;
       default: break;
     }
-    // 次のトークンに送る
+    // Send to next token
     token = token->next;
   }
 }
@@ -497,7 +497,7 @@ void preprocessed_file_writer(Token *token, char *output_filename)
   FILE *fout = fopen(output_filename, "w");
   if (fout == NULL)
   {
-    error_exit("ファイルに書き込めませんでした");
+    error_exit("Could not write to file");
   }
   for (;;)
   {

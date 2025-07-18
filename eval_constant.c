@@ -44,7 +44,7 @@ long _eval_constant_expression(Node* node)
 long eval_constant_expression()
 {
   Node* node = constant_expression();
-  pr_debug2("start constant expression evaluator");
+  pr_debug2("Start constant expression evaluator");
 #if DEBUG
   FuncBlock tmp;
   tmp.next = NULL;

@@ -10,18 +10,18 @@
 
 typedef enum
 {
-  TK_RESERVED,   // 記号
-  TK_DIRECTIVE,  // preprocessorで使われるディレクティブ
-  TK_IGNORABLE,  // スペース、コメントアウト等の無視できるものたち
-  TK_LINEBREAK,  // 改行
-  TK_ILB,        // 無視できる改行 Ignorable Line Break
-  TK_IDENT,      // 識別子
+  TK_RESERVED,   // Symbol
+  TK_DIRECTIVE,  // Directive used in preprocessor
+  TK_IGNORABLE,  // Ignorable elements like spaces, comments, etc.
+  TK_LINEBREAK,  // Newline
+  TK_ILB,        // Ignorable Line Break
+  TK_IDENT,      // Ident
   TK_STRING,     // string literal
-  TK_EOF,        // 入力終了
-  TK_END,        // デバッグ出力用
-} TokenKind;     // トークンの種類
+  TK_EOF,        // End of input
+  TK_END,        // For debug output
+} TokenKind;     // Type of token
 
-// デバッグ出力用 TokenKindに追加したら必ず追加すること
+// For debug output. Must be added if TokenKind is added.
 #define TokenKindTable                                                     \
   "TK_RESERVED", "TK_DIRECTIVE", "TK_IGNORABLE", "TK_LINEBREAK", "TK_ILB", \
       "TK_IDENT", "TK_STRING", "TK_EOF"
@@ -31,10 +31,10 @@ typedef struct Token Token;
 
 struct Token
 {
-  TokenKind kind;  // トークンの種類
-  Token *next;     // 次のトークン
-  char *str;       // トークン文字列
-  size_t len;      // トークンの長さ
+  TokenKind kind;  // Type of token
+  Token *next;     // Next token
+  char *str;       // Token string
+  size_t len;      // Length of token
 };
 
 Token *tokenize_once(char *input, char **end);

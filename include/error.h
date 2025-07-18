@@ -4,19 +4,18 @@
 #ifdef SELF_HOST
 #include "../test/compiler_header.h"
 #else
-// sigactionを有効にしたい
 // #define _GNU_SOURCE
 #include <signal.h>
 #include <stddef.h>
 #endif
 
-#define DEBUG 0
+// #define DEBUG 0
 
-// デバッグ用のprintf管理
-// DEBUG が定義されてなければ何も出力されず、
-// DEBUG 0 ならpr_debugのみ出力され
-// DEBUG 1 ならpr_debug、 pr_debug2ともに出力される
-// pr_debug2 の方は長い出力も行う
+// Debug printf management
+// If DEBUG is not defined, nothing is output.
+// If DEBUG is 0, only pr_debug is output.
+// If DEBUG is 1, both pr_debug and pr_debug2 are output.
+// pr_debug2 outputs longer messages.
 #ifdef DEBUG
 #define pr_debug(fmt, ...) \
   _debug(__FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)

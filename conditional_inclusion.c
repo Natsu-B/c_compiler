@@ -16,8 +16,8 @@
 
 static void clean_while_next(Token *head, Token *next);
 
-// 右結合の優先順位を表す
-// 小さい方が優先順位が高い
+// Represents the precedence of right-associative operators
+// Smaller values indicate higher precedence
 static size_t operator_precedence(conditional_inclusion_type type)
 {
   switch (type)
@@ -142,7 +142,7 @@ static void shunting_yard_algorithm(Token *token)
     if (token->kind == TK_RESERVED)
     {
       if (token->len == 1 && token->str[0] == '\'')
-      {  // char文字の処理
+      {  // Character processing
         if (token->next->len == 1 && token->next->next->len == 1 &&
             token->next->next->str[0] == '\'')
         {
@@ -158,7 +158,7 @@ static void shunting_yard_algorithm(Token *token)
           token = token_next_not_ignorable_void(token->next->next);
           continue;
         }
-        error_at(token->str, token->len, "invalid #if directive");
+        error_at(token->str, token->len, "Invalid #if directive.");
       }
       conditional_inclusion_type *type =
           malloc(sizeof(conditional_inclusion_type));
@@ -194,7 +194,7 @@ static void shunting_yard_algorithm(Token *token)
             if (old_precedence > type_precedence ||
                 (old_precedence == type_precedence &&
                  (old_precedence != 0 && old_precedence != 11)))
-            {  // operator_stack から output_listへ移す
+            {  // Move from operator_stack to output_list
               conditional_inclusion_token *new =
                   calloc(1, sizeof(conditional_inclusion_token));
               if (old != vector_pop(operator_stack))
@@ -238,7 +238,7 @@ static void shunting_yard_algorithm(Token *token)
           is_brackets = true;
           token = token_next_not_ignorable(token);
         }
-        pr_debug2("defined operator found");
+        pr_debug2("Defined operator found");
         new->num = find_macro_name_all(token) ? 1 : 0;
         if (is_brackets)
         {
@@ -293,10 +293,10 @@ static bool reverse_polish_notation_stack_machine()
       case CPPTK_UnaryMinus:
       case CPPTK_NOT:
       case CPPTK_Bitwise:
-      {  // 単項右結合
+      {  // Unary right-associative
         conditional_inclusion_token *tmp = vector_pop(stack);
         if (tmp->type != CPPTK_Integer)
-          error_exit("invalid #if directive");
+          error_exit("Invalid #if directive.");
         switch (token->type)
         {
           case CPPTK_UnaryPlus: break;
@@ -309,7 +309,7 @@ static bool reverse_polish_notation_stack_machine()
       }
         continue;
       case CPPTK_Question: unreachable(); break;
-      case CPPTK_Colon:  // 2項演算子
+      case CPPTK_Colon:  // Binary operator
       {
         conditional_inclusion_token *left_hand_side = vector_pop(stack);
         conditional_inclusion_token *middle_hand_side = vector_pop(stack);
@@ -317,18 +317,18 @@ static bool reverse_polish_notation_stack_machine()
         if (left_hand_side->type != CPPTK_Integer ||
             middle_hand_side->type != CPPTK_Integer ||
             right_hand_side->type != CPPTK_Integer)
-          error_exit("invalid #if directive");
+          error_exit("Invalid #if directive.");
         left_hand_side->num =
             left_hand_side->num ? middle_hand_side->num : right_hand_side->num;
         vector_push(stack, left_hand_side);
       }
         continue;
-      default:  // 2項左結合演算子
+      default:  // Binary left-associative operator
       {
         conditional_inclusion_token *lhs = vector_pop(stack);
         conditional_inclusion_token *rhs = vector_pop(stack);
         if (lhs->type != CPPTK_Integer || rhs->type != CPPTK_Integer)
-          error_exit("invalid #if directive");
+          error_exit("Invalid #if directive.");
         switch (token->type)
         {
           case CPPTK_Logical_OR: rhs->num = rhs->num || lhs->num; break;
@@ -358,7 +358,7 @@ static bool reverse_polish_notation_stack_machine()
   }
   bool result = ((conditional_inclusion_token *)vector_pop(stack))->num;
   if (vector_has_data(stack))
-    error_exit("invalid #if directive");
+    error_exit("Invalid #if directive.");
   return result;
 }
 
@@ -392,7 +392,7 @@ bool condition_interpreter(Token *head)
 {
   pr_debug2("start #if token %.*s", head->len, head->str);
 #ifdef DEBUG
-  pr_debug("condition interpreter");
+  pr_debug("Condition interpreter");
   Token *ptr = head;
   while (ptr->kind != TK_LINEBREAK)
   {
@@ -408,14 +408,14 @@ bool condition_interpreter(Token *head)
   return reverse_polish_notation_stack_machine();
 }
 
-// 引数のheadトークンから nextトークンまでのトークンを消す
-// ただし、TK_LINEBREAKは残す
+// Deletes tokens from the head token to the next token in the argument.
+// However, TK_LINEBREAK is retained.
 static void clean_while_next(Token *head, Token *next)
 {
   while (head != next)
   {
     if (head->kind == TK_EOF)
-      error_exit("#ifディレクティブが閉じていません");
+      error_exit("#if directive is not closed.");
     if (head->kind != TK_LINEBREAK)
       token_void(head);
     head = head->next;
@@ -425,7 +425,8 @@ static void clean_while_next(Token *head, Token *next)
 static void _conditional_inclusion(if_directive type, Token *head,
                                    Vector *conditional_list);
 
-// #if #ifdef #ifndefに対応する #else #elif #endif 等を処理する関数
+// Function to process #else #elif #endif etc. corresponding to #if #ifdef
+// #ifndef
 void next_conditional_inclusion(Token *token, bool is_true,
                                 Vector *conditional_list, bool is_end)
 {
@@ -521,7 +522,7 @@ static void _conditional_inclusion(if_directive type, Token *head,
       token_void(head);
       head = head->next;
 
-      // #else #endif 等の対応するディレクティブ
+      // Corresponding directives like #else #endif
       Token *next = vector_shift(conditional_list);
       token_void(next);
       next = token_next_not_ignorable_void(next);

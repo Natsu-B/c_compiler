@@ -17,6 +17,7 @@ typedef enum
   TK_ILB,        // Ignorable Line Break
   TK_IDENT,      // Ident
   TK_STRING,     // string literal
+  TK_CHAR,       // character literal
   TK_EOF,        // End of input
   TK_END,        // For debug output
 } TokenKind;     // Type of token
@@ -24,7 +25,7 @@ typedef enum
 // For debug output. Must be added if TokenKind is added.
 #define TokenKindTable                                                     \
   "TK_RESERVED", "TK_DIRECTIVE", "TK_IGNORABLE", "TK_LINEBREAK", "TK_ILB", \
-      "TK_IDENT", "TK_STRING", "TK_EOF"
+      "TK_IDENT", "TK_STRING", "TK_CHAR", "TK_EOF"
 extern const char *tokenkindlist[TK_END];
 
 typedef struct Token Token;
@@ -54,6 +55,7 @@ Token *peek_ident();
 Token *consume_ident();
 Token *expect_ident();
 Token *consume_string();
+Token *consume_char();
 bool is_number(long long *result);
 bool consume_number(long long *value);
 

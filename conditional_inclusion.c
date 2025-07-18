@@ -141,23 +141,32 @@ static void shunting_yard_algorithm(Token *token)
   {
     if (token->kind == TK_RESERVED)
     {
-      if (token->len == 1 && token->str[0] == '\'')
+      if (token->kind == TK_CHAR)
       {  // Character processing
-        if (token->next->len == 1 && token->next->next->len == 1 &&
-            token->next->next->str[0] == '\'')
+        conditional_inclusion_token *new =
+            malloc(sizeof(conditional_inclusion_token));
+        new->type = CPPTK_Integer;
+        if (token->len == 2)
         {
-          conditional_inclusion_token *new =
-              malloc(sizeof(conditional_inclusion_token));
-          new->type = CPPTK_Integer;
-          new->num = token->next->str[0];
-          vector_push(output_list, new);
-          is_unary = false;
-          token_void(token);
-          token_void(token->next);
-          token_void(token->next->next);
-          token = token_next_not_ignorable_void(token->next->next);
-          continue;
+          switch (token->str[1])
+          {
+            case 'n': new->num = '\n'; break;
+            case 't': new->num = '\t'; break;
+            case '\\': new->num = '\\'; break;
+            case '\'': new->num = '\''; break;
+            case '"': new->num = '\"'; break;
+            case '0': new->num = '\0'; break;
+            default: unreachable();
+          }
         }
+        else
+          new->num = token->next->str[0];
+        vector_push(output_list, new);
+        is_unary = false;
+        token_void(token);
+        token = token_next_not_ignorable_void(token);
+        continue;
+
         error_at(token->str, token->len, "Invalid #if directive.");
       }
       conditional_inclusion_type *type =

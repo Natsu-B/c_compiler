@@ -161,6 +161,13 @@ Token *consume_string()
   return return_token;
 }
 
+Token *consume_char()
+{
+  if (token->kind == TK_CHAR)
+    return token_next();
+  return NULL;
+}
+
 bool is_number(long long *result)
 {
   if (token->kind != TK_IDENT || !isdigit(token->str[0]))
@@ -272,7 +279,7 @@ Token *tokenize_once(char *input, char **end)
     return cur;
   }
 
-  if (strchr("+-*/()=!<>;{},&[].\\'|%?:~^", *input))
+  if (strchr("+-*/()=!<>;{},&[].\\|%?:~^", *input))
   {
     if (*input == '\\' && *(input + 1) == '\n')
     {
@@ -330,6 +337,30 @@ Token *tokenize_once(char *input, char **end)
     input++;  // Advance to the end
     cur = new_token(TK_STRING, input - i - 2);
     cur->len = i + 2;
+    *end = input;
+    return cur;
+  }
+
+  // Character detection
+  if (*input == '\'')
+  {
+    input++;  // Skip opening quote
+    cur = new_token(TK_CHAR, input);
+    cur->str = input;
+    cur->len = 1;
+    if (*input++ == '\\')
+    {  // Handle escape sequences
+      input++;
+      cur->len = 2;
+      if (!(*input == 'n' || *input == 't' || *input == '\\' ||
+            *input == '\'' || *input == '"' || *input == '0'))
+        error_at(input, 1, "Unknown escape sequence.");
+    }
+    if (*input != '\'')
+    {
+      error_at(input, 1, "Unterminated character literal.");
+    }
+    input++;  // Skip closing quote
     *end = input;
     return cur;
   }

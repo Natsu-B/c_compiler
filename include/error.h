@@ -9,7 +9,7 @@
 #include <stddef.h>
 #endif
 
-// #define DEBUG 0
+#define DEBUG 0
 
 // Debug printf management
 // If DEBUG is not defined, nothing is output.

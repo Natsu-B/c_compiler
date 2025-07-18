@@ -1113,6 +1113,29 @@ Node *primary_expression()
     node->token = string;
     return node;
   }
+
+  Token *char_token = consume_char();
+  if (char_token)
+  {
+    Node *node = calloc(1, sizeof(Node));
+    node->kind = ND_NUM;
+    if (char_token->len == 2)
+    {
+      switch (char_token->str[1])
+      {
+        case 'n': node->val = '\n'; break;
+        case 't': node->val = '\t'; break;
+        case '\\': node->val = '\\'; break;
+        case '\'': node->val = '\''; break;
+        case '"': node->val = '\"'; break;
+        case '0': node->val = '\0'; break;
+        default: unreachable();
+      }
+    }
+    else
+      node->val = char_token->str[0];
+    return node;
+  }
   long long num;
   if (consume_number(&num))
     return new_node_num(num);

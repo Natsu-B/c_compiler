@@ -24,7 +24,7 @@ bool gcc_compatible;
 // -I: Use standard input after this argument as input
 int main(int argc, char **argv)
 {
-  fprintf(stdout, "c_compiler\n");
+  fprintf(stdout, "\e[32mc_compiler\e[37m\n");
   if (argc < 3)
     error_exit("Invalid arguments.");
 

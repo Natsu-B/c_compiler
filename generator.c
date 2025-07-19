@@ -645,6 +645,8 @@ void generator(FuncBlock *parsed, char *output_filename)
     Var *pointer = vector_peek_at(root, i);
     if (pointer->storage_class_specifier & 1 << 1)
       continue;
+    if (!(pointer->storage_class_specifier & 1 << 2))
+      output_file("    .globl %.*s", (int)pointer->len, pointer->name);
     output_file("%.*s:", (int)pointer->len, pointer->name);
     switch (pointer->how2_init)
     {

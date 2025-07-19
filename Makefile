@@ -45,7 +45,7 @@ self1: $(TARGET)
 		else \
 			echo -e "    [${YELLOW}WARNING${NC}] Failed on '$${src}'. Falling back to gcc."; \
 			echo "$$src" >> .failure_list; \
-			$(CC) $(CFLAGS) -S -o out/$$s_file $$src; \
+			$(CC) $(CFLAGS) -S -masm=intel -o out/$$s_file $$src; \
 		fi; \
 	done
 	@echo -e "${CYAN}[3/4] Assembling generated sources...${NC}"

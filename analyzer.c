@@ -33,14 +33,29 @@ bool is_equal_type(Type *lhs, Type *rhs)
 {
   if (is_pointer_type(lhs) && is_pointer_type(rhs))
     return is_equal_type(lhs->ptr_to, rhs->ptr_to);
-
   if (lhs->type != rhs->type)
     return false;
-
   if (is_integer_type(lhs))
     return lhs->is_signed == rhs->is_signed;
-
-  return true;
+  switch (lhs->type)
+  {
+    case TYPE_VOID:
+    case TYPE_STR: return true;
+    case TYPE_ENUM:
+    case TYPE_STRUCT: return lhs->type_num == rhs->type_num;
+    case TYPE_FUNC:
+      if (vector_size(lhs->param_list) != vector_size(rhs->param_list))
+        return false;
+      for (size_t i = 1; i <= vector_size(lhs->param_list); i++)
+        if (!is_equal_type(vector_peek_at(lhs->param_list, i),
+                           vector_peek_at(rhs->param_list, i)))
+          return false;
+      return true;
+    case TYPE_VARIABLES: return true;
+    default: break;
+  }
+  unreachable();
+  return false;
 }
 
 Type *implicit_type_conversion(Type *lhs, Type *rhs)

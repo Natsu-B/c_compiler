@@ -82,15 +82,19 @@ static Type* find_typedef_type(Token* token)
   return NULL;
 }
 
-static ordinary_data_list* find_local_var_in_current_nested_block(Token* token)
+static ordinary_data_list* find_var_in_current_nested_block(Token* token,
+                                                            size_t* data_num)
 {
-  for (size_t i = 1; i < vector_size(vector_peek(OrdinaryNamespaceList)); i++)
+  for (size_t i = 1; i <= vector_size(vector_peek(OrdinaryNamespaceList)); i++)
   {
     ordinary_data_list* var =
         vector_peek_at(vector_peek(OrdinaryNamespaceList), i);
     if (var->name->len == token->len &&
         !strncmp(var->name->str, token->str, token->len))
+    {
+      *data_num = i;
       return var;
+    }
   }
   return NULL;
 }
@@ -450,12 +454,19 @@ Var* add_variables(Token* token, Type* type, uint8_t storage_class_specifier)
     return NULL;
   }
 
+  size_t data_num = 0;
   // Check if a variable with the same name already exists
-  ordinary_data_list* same = find_local_var_in_current_nested_block(token);
-  if (same && type)
-    error_at(token->str, token->len,
-             "A variable with the same name already exists.");
-
+  ordinary_data_list* same = find_var_in_current_nested_block(token, &data_num);
+  if (same)
+  {  // Check if the variable's storage class is extern
+    if (!is_equal_type(type, same->type) ||
+        (!(storage_class_specifier & 1 << 1) &&
+         !(same->variables->storage_class_specifier & 1 << 1)))
+      error_at(token->str, token->len,
+               "A variable with the same name already exists.");
+    if (storage_class_specifier & 1 << 1)
+      return same->variables;
+  }
   // For new variables
   Var* var = calloc(1, sizeof(Var));
   var->token = token;
@@ -474,7 +485,11 @@ Var* add_variables(Token* token, Type* type, uint8_t storage_class_specifier)
   new->ordinary_kind = variables_name;
   new->name = token;
   new->variables = var;
-  vector_push(vector_peek(OrdinaryNamespaceList), new);
+  new->type = type;
+  if (same)
+    vector_replace_at(vector_peek(OrdinaryNamespaceList), data_num, new);
+  else
+    vector_push(vector_peek(OrdinaryNamespaceList), new);
   return var;
 }
 
@@ -496,7 +511,8 @@ char* add_string_literal(Token* token)
 {
   pr_debug2("string literal found");
   // If the same string already exists, use it
-  // This is possible because the specification does not allow changing strings
+  // This is possible because the specification does not allow changing
+  // strings
   for (literal_list* pointer = literal_top; pointer; pointer = pointer->next)
     if (token->len == pointer->len &&
         !strncmp(token->str, pointer->name, pointer->len))
@@ -532,6 +548,7 @@ char* add_string_literal(Token* token)
   new_var->type = alloc_type(TYPE_STR);
   new_var->is_local = false;
   new_var->how2_init = init_string;
+  new_var->storage_class_specifier = 1 << 2;
   vector_push(vector_peek_at(OrdinaryNamespaceList, 1), new_var);
   vector_push(GlobalVariablesList, new_var);
   return literal_name;

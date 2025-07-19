@@ -107,7 +107,7 @@ static size_t lib_path_size[] = {
 };
 #define MAX_LIB_PATH_SIZE sizeof(gcc_lib_path)
 #else
-// TODO
+#error unsupported compiler
 #endif
 
 Token *preprocess(char *input, char *end, char *file_name, Token *token);

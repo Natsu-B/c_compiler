@@ -416,6 +416,9 @@ Type *pointer(Type *type)
       Type *new = alloc_type(TYPE_PTR);
       new->ptr_to = type;
       type = new;
+      while (consume("const", TK_IDENT) || consume("volatile", TK_IDENT) ||
+             consume("restrict", TK_IDENT))
+        ;
     }
   return type;
 }

@@ -295,9 +295,7 @@ static bool reverse_polish_notation_stack_machine()
     conditional_inclusion_token *token = vector_shift(output_list);
     switch (token->type)
     {
-      case CPPTK_Integer:  // TODO char
-        vector_push(stack, token);
-        continue;
+      case CPPTK_Integer: vector_push(stack, token); continue;
       case CPPTK_UnaryPlus:
       case CPPTK_UnaryMinus:
       case CPPTK_NOT:

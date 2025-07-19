@@ -25,16 +25,13 @@ size_t File_Line = 1;
 char *File_Start;
 long long include_level = -1;
 
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__MYCC__)
 __asm__(
     "gcc_predef_start: \n"
     " .incbin \"gcc_predef.h\" \n"
     "gcc_predef_end: \n");
-extern char *gcc_predef_start;
-extern char *gcc_predef_end;
-#elif defined(__MYCC__)
-#pragma GCC_PREDEF
-char *gcc_predef_end;
+extern char gcc_predef_start[];
+extern char gcc_predef_end[];
 #else
 #error unsupported compiler
 #endif

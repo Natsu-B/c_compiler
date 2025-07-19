@@ -140,6 +140,37 @@ Token *expect_ident()
   return expect;
 }
 
+// parse escape sequences
+Token *parse_string_literal(Token *token)
+{
+  char *string = malloc(token->len);
+  size_t string_len = 0;
+  for (size_t i = 0; i < token->len; i++)
+  {
+    if (*(token->str + i) == '\\')
+    {
+      switch ((token->str + i)[1])
+      {
+        case 'n': *(string + string_len) = '\n'; break;
+        case 't': *(string + string_len) = '\t'; break;
+        case '\\': *(string + string_len) = '\\'; break;
+        case '\'': *(string + string_len) = '\''; break;
+        case '"': *(string + string_len) = '\"'; break;
+        case '0': *(string + string_len) = '\0'; break;
+        case 'e': *(string + string_len) = '\e'; break;
+        default: error_at(token->str + i, 2, "unknown control character found");
+      }
+      ++i;
+      ++string_len;
+    }
+    else
+      *(string + string_len++) = *(token->str + i);
+  }
+  token->str = string;
+  token->len = string_len;
+  return token;
+}
+
 Token *consume_string()
 {
   Token *return_token = NULL;
@@ -151,11 +182,11 @@ Token *consume_string()
     {
       Token *string = token_next();
       return_token->next = token;
-      char *tmp = malloc(return_token->len + string->len - 2 /* duplicate " */);
+      char *tmp = malloc(return_token->len + string->len);
       strncpy(tmp, return_token->str, return_token->len);
-      strncpy(tmp + return_token->len - 1, string->str + 1, string->len - 1);
+      strncpy(tmp + return_token->len, string->str, string->len);
       return_token->str = tmp;
-      return_token->len += (string->len - 2);
+      return_token->len += string->len;
     }
   }
   return return_token;
@@ -332,11 +363,15 @@ Token *tokenize_once(char *input, char **end)
   if (*input == '"')
   {
     int i = 0;  // Size of the string (excluding ")
-    while (*(++input) != '"')
+    do
+    {
+      while (*(++input) != '"')
+        i++;
       i++;
+    } while (*(input - 1) == '\\');
     input++;  // Advance to the end
-    cur = new_token(TK_STRING, input - i - 2);
-    cur->len = i + 2;
+    cur = new_token(TK_STRING, input - i);
+    cur->len = i - 1;
     *end = input;
     return cur;
   }
@@ -365,7 +400,8 @@ Token *tokenize_once(char *input, char **end)
     return cur;
   }
 
-  // If it's only alphanumeric and '_', consider it a variable or reserved word
+  // If it's only alphanumeric and '_', consider it a variable or reserved
+  // word
   int i = 0;
   while (is_alnum(*input))
   {

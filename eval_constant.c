@@ -6,8 +6,11 @@
 #include "include/tokenizer.h"
 #include "include/type.h"
 
-long _eval_constant_expression(Node* node)
+long long _eval_constant_expression(Node* node)
 {
+  if (!node)
+    error_exit(get_token()->str, get_token()->len,
+               "failed to parse constant expression");
   switch (node->kind)
   {
     case ND_ADD:
@@ -23,6 +26,12 @@ long _eval_constant_expression(Node* node)
       return _eval_constant_expression(node->lhs) /
              _eval_constant_expression(node->rhs);
     case ND_NUM: return node->val;
+    case ND_SIZEOF:
+      if (node->lhs->kind != ND_TYPE_NAME &&
+          node->lhs->type->type == TYPE_ARRAY)
+        return size_of(node->lhs->type) * node->lhs->val;
+      else
+        return size_of(node->lhs->type);
     default:
     {
       Token* token = peek_ident();
@@ -41,7 +50,7 @@ long _eval_constant_expression(Node* node)
   return 0;
 }
 
-long eval_constant_expression()
+long long eval_constant_expression()
 {
   Node* node = constant_expression();
   pr_debug2("Start constant expression evaluator");

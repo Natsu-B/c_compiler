@@ -191,7 +191,7 @@ void _print_parse_result(Node *node, int nest)
     case ND_FUNCDEF:
     {
       fprintf(stdout, "NodeKind: %s funcname: %.*s\n", nodekindlist[node->kind],
-              (int)node->func_len, node->func_name);
+              (int)node->token->len, node->token->str);
       make_space(nest);
       fprintf(stdout, "|   [arguments]\n");
       for (size_t i = 1; i <= vector_size(node->expr); i++)

@@ -227,15 +227,14 @@ void add_type_internal(Node *node)
       {
         // ptr - ptr
         Node *n = new_node(ND_SUB, node->lhs, node->rhs, node->token);
-        n->lhs->type = n->rhs->type = alloc_type(TYPE_LONG);
-        node->lhs =
+        n->type = alloc_type(TYPE_PTR);
+        n->type->ptr_to =
+            alloc_type(TYPE_LONG);  // sizeof(TYPE_LONG) == sizeof(void*)
+        node =
             new_node(ND_DIV, n, new_node_num(size_of(node->lhs->type->ptr_to)),
                      node->token);
-        add_type(node->lhs);
-        node->kind = node->lhs->kind;
-        node->rhs = node->lhs->rhs;
         node->type = alloc_type(TYPE_LONG);
-        node->type->is_signed = true;
+        node->type->is_signed = false;
         return;
       }
       if (is_pointer_type(node->lhs->type))
@@ -369,6 +368,7 @@ void add_type_internal(Node *node)
       }
       return;
     }
+    case ND_BUILTINFUNC:
     case ND_RETURN: node->type = alloc_type(TYPE_VOID); return;
     case ND_SIZEOF:
     {
@@ -638,6 +638,8 @@ FuncBlock *analyzer(FuncBlock *funcblock)
         error_exit("Failed to parse correctly.");
       add_type(node);
     }
+    else if (node->kind == ND_BUILTINFUNC)
+      node->type = alloc_type(TYPE_VOID);
     else if (node->kind != ND_NOP)
       error_exit("unreachable");
   }
@@ -664,7 +666,7 @@ FuncBlock *analyzer(FuncBlock *funcblock)
     }
     else if (node->kind == ND_VAR)
       analyze_type(node);
-    else if (node->kind != ND_NOP)
+    else if (node->kind != ND_NOP && node->kind != ND_BUILTINFUNC)
       error_exit("unreachable");
   }
 #ifdef DEBUG

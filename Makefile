@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-std=c11 -g -static -Wall -Wextra -Werror -Wno-builtin-declaration-mismatch -D_GNU_SOURCE -DSELF_HOST
+CFLAGS=-std=c11 -g -static -Wall -Wextra -Werror -Wno-builtin-declaration-mismatch -Wno-attributes -D_GNU_SOURCE -DSELF_HOST
 ASFLAGS=-g
 CPPFLAGS=-E -P -D__MYCC__ -DSELF_HOST
 

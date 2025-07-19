@@ -12,6 +12,7 @@
 #include <string.h>
 #endif
 
+#include "include/builtin.h"
 #include "include/debug.h"
 #include "include/error.h"
 #include "include/eval_constant.h"
@@ -280,8 +281,6 @@ Node *external_declaration()
   pr_debug2("program");
   uint8_t storage_class_specifier = 0;
   Type *type = declaration_specifiers(&storage_class_specifier);
-  if (!type)
-    error_at(get_token()->str, get_token()->len, "Failed to parse.");
   return declaration(type, true, storage_class_specifier);
 }
 
@@ -290,7 +289,8 @@ Node *declaration(Type *type, bool is_external_declaration,
 {
   Node *node = init_declarator(type, storage_class_specifier);
   // funcdef
-  if (is_external_declaration && consume("{", TK_RESERVED))
+  if (is_external_declaration && node && node->kind == ND_FUNCDEF &&
+      consume("{", TK_RESERVED))
   {
     program_name = node->token->str;
     program_name_len = node->token->len;
@@ -319,6 +319,7 @@ Node *declaration(Type *type, bool is_external_declaration,
   }
   else if (node && node->kind == ND_FUNCDEF)
     memset(node, 0, sizeof(Node));
+
   expect(";", TK_RESERVED);
   return node;
 }
@@ -355,12 +356,14 @@ Node *declarator_internal(Type **type, Token *token,
     *type = new;
     expect("]", TK_RESERVED);
   }
-  else if (consume("(", TK_RESERVED))
+  else if (peek("(", TK_RESERVED))
   {
-    Node *node = calloc(1, sizeof(Node));
+    Node *node = NULL;
+    if (token && is_builtin_function(&node, token, true))
+      return node;
+    consume("(", TK_RESERVED);
+    node = calloc(1, sizeof(Node));
     node->kind = ND_FUNCDEF;
-    node->func_name = token->str;
-    node->func_len = token->len;
     node->type = *type;
     node->token = token;
     Type *new = alloc_type(TYPE_FUNC);
@@ -393,7 +396,7 @@ Node *declarator(Type *type, uint8_t storage_class_specifier)
   type = pointer(type);
   Token *token = consume_ident();
   Node *node = declarator_internal(&type, token, storage_class_specifier);
-  if (node && type->type != TYPE_FUNC)
+  if (node && type && type->type != TYPE_FUNC)
   {
     Var *var = add_variables(token, type, storage_class_specifier);
     if (!var)
@@ -407,12 +410,13 @@ Node *declarator(Type *type, uint8_t storage_class_specifier)
 
 Type *pointer(Type *type)
 {
-  while (consume("*", TK_RESERVED))
-  {
-    Type *new = alloc_type(TYPE_PTR);
-    new->ptr_to = type;
-    type = new;
-  }
+  if (type)
+    while (consume("*", TK_RESERVED))
+    {
+      Type *new = alloc_type(TYPE_PTR);
+      new->ptr_to = type;
+      type = new;
+    }
   return type;
 }
 
@@ -1030,23 +1034,25 @@ Node *primary_expression()
   Token *token = consume_token_if_next_matches(TK_IDENT, '(');
   if (token)
   {
-    Node *node = calloc(1, sizeof(Node));
     Type *type = NULL;
     enum member_name result = is_enum_or_function_or_typedef_or_variables_name(
         token, NULL, &type, NULL);
     if (result == none_of_them)
+    {
+      Node *node = NULL;
+      if (is_builtin_function(&node, token, false))
+        return node;
       warn_at(token->str, token->len, "undefined function");
-    else if (result == function_name)
-      node->type = type;
+    }
 
     if (result == function_name || result == none_of_them)
     {
+      Node *node = calloc(1, sizeof(Node));
+      node->type = type;
       // Function call
       expect("(", TK_RESERVED);
       node->token = token;
       node->kind = ND_FUNCCALL;
-      node->func_name = token->str;
-      node->func_len = token->len;
       node->expr = vector_new();
       while (!consume(")", TK_RESERVED))
       {
@@ -1091,11 +1097,8 @@ Node *primary_expression()
           Node *node = calloc(1, sizeof(Node));
           node->token = calloc(1, sizeof(Token));
           node->token->kind = TK_STRING;
-          char *tmp = malloc(program_name_len + 2);
-          tmp[0] = tmp[program_name_len + 1] = '"';
-          strncpy(tmp + 1, program_name, program_name_len);
-          node->token->str = tmp;
-          node->token->len = program_name_len + 2;
+          node->token->str = program_name;
+          node->token->len = program_name_len;
           node->kind = ND_STRING;
           return node;
         }
@@ -1129,7 +1132,10 @@ Node *primary_expression()
         case '\'': node->val = '\''; break;
         case '"': node->val = '\"'; break;
         case '0': node->val = '\0'; break;
-        default: unreachable();
+        case 'e': node->val = '\e'; break;
+        default:
+          error_at(node->token->str, node->token->len,
+                   "unknown control character found");
       }
     }
     else

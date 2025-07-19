@@ -160,6 +160,19 @@ char *mv_instruction_specifier(int size, bool is_sighed, register_type reg)
   return tmp;
 }
 
+void call_built_in_func(Node *node)
+{
+  if (node->token->len == 7 && !strncmp(node->token->str, "__asm__", 7))
+  {
+    Node *asm_string = vector_pop(node->expr);
+    if (asm_string->kind != ND_NOP || vector_size(node->expr))
+      unreachable();
+    output_file("%.*s", (int)asm_string->token->len, asm_string->token->str);
+    return;
+  }
+  unreachable();
+}
+
 void gen(Node *node);
 
 // Function to output lvalue to rax. Be careful as rax will be destroyed.
@@ -211,10 +224,11 @@ void gen(Node *node)
     case ND_FUNCCALL:
     {
       output_debug2("FUNC CALL");
-      output_debug("start calling %.*s", (int)node->func_len, node->func_name);
-      for (size_t i = 1;
-           i <= (vector_size(node->expr) > 6 ? 6 : vector_size(node->expr));
-           i++)
+      output_debug("start calling %.*s", (int)node->token->len,
+                   node->token->str);
+      for (size_t i =
+               (vector_size(node->expr) > 6 ? 6 : vector_size(node->expr));
+           i >= 1; i--)
       {
         gen(vector_peek_at(node->expr, i));
 
@@ -248,16 +262,17 @@ void gen(Node *node)
           gen(vector_peek_at(node->expr, vector_size(node->expr) - i + 7));
       }
       output_file("    mov rax, 0");
-      output_file("    call %.*s", (int)node->func_len, node->func_name);
+      output_file("    call %.*s", (int)node->token->len, node->token->str);
       output_file("    add rsp, r12");
       if (stack_args)
         output_file("    add rsp, %lu", stack_args * 8);
       output_file("    pop r12");
       output_file("    push rax");
       align_counter++;
-      output_debug("end calling %.*s", (int)node->func_len, node->func_name);
+      output_debug("end calling %.*s", (int)node->token->len, node->token->str);
       return;
     }
+    case ND_BUILTINFUNC: call_built_in_func(node); return;
     case ND_ARRAY:
     case ND_DISCARD_EXPR:
       output_debug2("ND_ARRAY ND_DISCARD_EXPR");
@@ -426,38 +441,38 @@ void gen(Node *node)
       output_file("    pop rax");
       output_file("    %s, %s [rax]",
                   mv_instruction_specifier(size_of(node->lhs->type),
-                                           node->lhs->type->is_signed, rdi),
+                                           node->lhs->type->is_signed, r10),
                   access_size_specifier(size_of(node->lhs->type)));
       if (node->kind == ND_POSTINCREMENT || node->kind == ND_POSTDECREMENT)
-        output_file("    mov rsi, rdi");
+        output_file("    mov r11, r10");
       if (node->val)
       {
         if (node->kind == ND_PREINCREMENT || node->kind == ND_POSTINCREMENT)
-          output_file("    add rdi, %lld", node->val);
+          output_file("    add r10, %lld", node->val);
         else
-          output_file("    sub rdi, %lld", node->val);
+          output_file("    sub r10, %lld", node->val);
       }
       else
       {
         if (node->kind == ND_PREINCREMENT || node->kind == ND_POSTINCREMENT)
-          output_file("    inc rdi");
+          output_file("    inc r10");
         else
-          output_file("    dec rdi");
+          output_file("    dec r10");
 
         if (node->type->type == TYPE_BOOL)
         {
-          output_file("    cmp rdi, 0");
+          output_file("    cmp r10, 0");
           output_file("    setne dil");
-          output_file("    movzx rdi, dil");
+          output_file("    movzx r10, dil");
         }
       }
       output_file("    mov %s [rax], %s",
                   access_size_specifier(size_of(node->type)),
-                  chose_register(size_of(node->type), rdi));
+                  chose_register(size_of(node->type), r10));
       if (node->kind == ND_POSTINCREMENT || node->kind == ND_POSTDECREMENT)
-        output_file("    push rsi");
+        output_file("    push r11");
       else
-        output_file("    push rdi");
+        output_file("    push r10");
       return;
     case ND_CASE:
     {
@@ -537,8 +552,8 @@ void gen(Node *node)
       gen(node->lhs);
       gen(node->rhs);
       output_file("    pop rax");
-      output_file("    pop rdi");
-      output_file("    %s rax, rdi", node->kind == ND_INCLUSIVE_OR ? "or"
+      output_file("    pop r10");
+      output_file("    %s rax, r10", node->kind == ND_INCLUSIVE_OR ? "or"
                                      : node->kind == ND_AND        ? "and"
                                                                    : "xor");
       output_file("    push rax");
@@ -581,17 +596,17 @@ void gen(Node *node)
   gen(node->lhs);
   gen(node->rhs);
 
-  output_file("    pop rdi");
+  output_file("    pop r10");
   output_file("    pop rax");
   switch (node->kind)
   {
-    case ND_ADD: output_file("    add rax, rdi"); break;
-    case ND_SUB: output_file("    sub rax, rdi"); break;
-    case ND_MUL: output_file("    imul rax, rdi"); break;
+    case ND_ADD: output_file("    add rax, r10"); break;
+    case ND_SUB: output_file("    sub rax, r10"); break;
+    case ND_MUL: output_file("    imul rax, r10"); break;
     case ND_DIV:
     case ND_IDIV:
       output_file("    cqo");
-      output_file("    idiv rdi");
+      output_file("    idiv r10");
       if (node->kind == ND_IDIV)
         output_file("    mov rax, rdx");
       break;
@@ -599,7 +614,7 @@ void gen(Node *node)
     case ND_NEQ:
     case ND_LT:
     case ND_LTE:
-      output_file("    cmp rax, rdi");
+      output_file("    cmp rax, r10");
       output_file("    set%s al", node->kind == ND_EQ    ? "e"
                                   : node->kind == ND_NEQ ? "ne"
                                   : node->kind == ND_LT  ? "l"
@@ -641,7 +656,7 @@ void generator(FuncBlock *parsed, char *output_filename)
                 (pointer->type->type == TYPE_ARRAY ? pointer->type->size : 1));
         break;
       case init_string:
-        output_file("    .string %.*s", (int)pointer->token->len,
+        output_file("    .string \"%.*s\"", (int)pointer->token->len,
                     pointer->token->str);
         break;
       default: unreachable(); break;
@@ -657,8 +672,8 @@ void generator(FuncBlock *parsed, char *output_filename)
       continue;
     if (node->kind == ND_FUNCDEF)
     {
-      output_file("\n.global %.*s", (int)node->func_len, node->func_name);
-      output_file("%.*s:", (int)node->func_len, node->func_name);
+      output_file("\n.global %.*s", (int)node->token->len, node->token->str);
+      output_file("%.*s:", (int)node->token->len, node->token->str);
       output_file("    push rbp");
       output_file("    mov rbp, rsp");
       output_file("    sub rsp, %lu", pointer->stacksize);
@@ -710,7 +725,9 @@ void generator(FuncBlock *parsed, char *output_filename)
       output_file("    ret");
       continue;
     }
-    if (node->kind != ND_VAR && node->kind != ND_NOP)
+    else if (node->kind == ND_BUILTINFUNC)
+      call_built_in_func(node);
+    else if (node->kind != ND_VAR && node->kind != ND_NOP)
       error_exit_with_guard("Unreachable");
   }
 

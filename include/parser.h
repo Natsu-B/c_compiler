@@ -43,6 +43,7 @@ typedef enum
   ND_POSTDECREMENT,  // ident --
   ND_FUNCDEF,        // Function definition
   ND_FUNCCALL,       // Function call
+  ND_BUILTINFUNC,    // Built in function call
   ND_RETURN,         // Return statement
   ND_SIZEOF,         // sizeof unary-expression
   ND_TYPE_NAME,      // type-name
@@ -115,9 +116,9 @@ struct GTLabel
       "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF",        \
       "ND_LOGICAL_NOT", "ND_NOT", "ND_UNARY_PLUS", "ND_UNARY_MINUS",          \
       "ND_PREINCREMENT", "ND_PREDECREMENT", "ND_POSTINCREMENT",               \
-      "ND_POSTDECREMENT", "ND_FUNCDEF", "ND_FUNCCALL", "ND_RETURN",           \
-      "ND_SIZEOF", "ND_TYPE_NAME", "ND_IF", "ND_ELIF", "ND_FOR", "ND_WHILE",  \
-      "ND_DO", "ND_TERNARY", "ND_LOGICAL_OR", "ND_LOGICAL_AND",               \
+      "ND_POSTDECREMENT", "ND_FUNCDEF", "ND_FUNCCALL", "ND_BUILTINFUNC",      \
+      "ND_RETURN", "ND_SIZEOF", "ND_TYPE_NAME", "ND_IF", "ND_ELIF", "ND_FOR", \
+      "ND_WHILE", "ND_DO", "ND_TERNARY", "ND_LOGICAL_OR", "ND_LOGICAL_AND",   \
       "ND_INCLUSIVE_OR", "ND_EXCLUSIVE_OR", "ND_AND", "ND_LEFT_SHIFT",        \
       "ND_RIGHT_SHIFT", "ND_ASSIGNMENT", "ND_VAR", "ND_ARRAY", "ND_DOT",      \
       "ND_ARROW", "ND_FIELD", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR",        \
@@ -131,8 +132,8 @@ struct Node
   Type *type;     // Type
   Token *token;   // Token from which it was parsed
 
-  Node *lhs;            // Left-hand side
-  Node *rhs;            // Right-hand side
+  Node *lhs;  // Left-hand side
+  Node *rhs;  // Right-hand side
   // struct
   // {                // For loop
   Node *chs;            // Used only for ternary operator
@@ -155,15 +156,13 @@ struct Node
                       // struct
                       // struct
   // {                   // For ND_BLOCK, ND_FUNCCALL, ND_FUNCDEF
-  Vector *expr;       // Used in ND_FUNCCALL, ND_FUNCDEF
-  NDBlock *stmt;      // Used in ND_BLOCK, ND_FUNCDEF
-  char *func_name;    // Used in ND_FUNCCALL, ND_FUNCDEF, function name
-  size_t func_len;  // Used only in ND_FUNCCALL, ND_FUNCDEF, length of function
-                    // name
+  Vector *expr;   // Used in ND_FUNCCALL, ND_FUNCDEF
+  NDBlock *stmt;  // Used in ND_BLOCK, ND_FUNCDEF
+                  // name
   // };
-  long long val;  // Value for ND_NUM, size of pointer type for ND_POST/PRE
-                  // INCREMENT/DECREMENT, 0 for numeric type
-                  // For variables (ND_VAR)
+  long long val;       // Value for ND_NUM, size of pointer type for ND_POST/PRE
+                       // INCREMENT/DECREMENT, 0 for numeric type
+                       // For variables (ND_VAR)
   bool is_new;         // Whether it's a newly defined variable
   Var *var;            // Variable information
                        // };
@@ -203,5 +202,6 @@ Node *new_node_num(long long val);
 Node *constant_expression();
 FuncBlock *parser();
 Node *declarator_no_side_effect(Type **type, uint8_t storage_class_specifier);
+Node *assignment_expression();
 
 #endif  // PARSER_C_COMPILER

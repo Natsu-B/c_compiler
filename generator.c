@@ -287,9 +287,8 @@ void gen(Node *node)
       return;
     }
     case ND_BUILTINFUNC: call_built_in_func(node); return;
-    case ND_ARRAY:
     case ND_DISCARD_EXPR:
-      output_debug2("ND_ARRAY ND_DISCARD_EXPR");
+      output_debug2("ND_DISCARD_EXPR");
       gen(node->lhs);
       output_file("    add rsp, 8");
       return;

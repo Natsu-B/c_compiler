@@ -257,6 +257,13 @@ assert 'int foo; extern int foo;extern int foo; int main() {extern int foo; retu
 assert 'extern int foo; int foo; extern int foo;extern int foo; int main() {extern int foo; return foo;}'
 assert 'int a = 187; int *b = &a; char* c = "abc"; int main() {return a + *b + c[1];}'
 assert '_Bool a = 187; int main() {return a;}'
+assert 'int main () {int a[3][4];return sizeof(a);}'
+assert 'int main () {int a[3][4];return sizeof(a[0][0]);}'
+assert 'int main () {int a[3][4];return sizeof(a[1]);}'
+assert 'int main () {int a[3][4];return sizeof(a) + sizeof(a[1]) + sizeof(a[0][0]);}'
+assert 'int main () {int a[3][4]; a[1][2] = 10; a[2][3] = 99; return a[2][3] + sizeof(a);}'
+assert 'int a[3][4];int main () {a[1][2] = 10; a[2][3] = 99; return a[2][3] + sizeof(a);}'
+
 # assert '#include "../test/compiler_header.h"
 # int foo(int x, ...);int main(){ return foo(1, 2, 4, 7, 8, 9, 11, 15, 18, 20, 19, 0); } int foo(int x, ...){ va_list ap; va_start(ap, x); int tmp = x; int result; while (tmp) { result = tmp; tmp = va_arg(ap, int); } va_end(ap); return result; }'
 

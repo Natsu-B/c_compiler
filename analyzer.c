@@ -242,9 +242,7 @@ void add_type_internal(Node *node)
       {
         // ptr - ptr
         Node *n = new_node(ND_SUB, node->lhs, node->rhs, node->token);
-        n->type = alloc_type(TYPE_PTR);
-        n->type->ptr_to =
-            alloc_type(TYPE_LONG);  // sizeof(TYPE_LONG) == sizeof(void*)
+        n->type = alloc_type(TYPE_LONG);  // sizeof(TYPE_LONG) == sizeof(void*)
         node =
             new_node(ND_DIV, n, new_node_num(size_of(node->lhs->type->ptr_to)),
                      node->token);
@@ -468,10 +466,23 @@ void add_type_internal(Node *node)
       return;
     case ND_VAR: node->type = node->var->type; return;
     case ND_ARRAY:
-      node->kind = ND_DEREF;
-      node->lhs = new_node(ND_ADD, node->lhs, node->rhs, node->token);
-      node->rhs = NULL;
-      add_type(node);
+      if (node->lhs->type->type != TYPE_ARRAY &&
+          node->lhs->type->type != TYPE_PTR)
+        error_at(node->lhs->token->str, node->lhs->token->len, "invalid array");
+      node->type = node->lhs->type->ptr_to;
+      if (node->lhs->kind == ND_ARRAY)
+        node->rhs = new_node(ND_ADD, node->rhs,
+                             new_node(ND_MUL, node->lhs->rhs,
+                                      new_node_num(size_of(node->type)), NULL),
+                             NULL);
+
+      if (node->is_top)
+      {
+        node->kind = ND_DEREF;
+        node->lhs = new_node(ND_ADD, node->lhs, node->rhs, node->token);
+        node->rhs = NULL;
+        add_type(node);
+      }
       return;
     case ND_DOT:
     case ND_ARROW:
@@ -546,68 +557,67 @@ void add_type(Node *node)
   add_type_internal(node);
 }
 
-void analyze_type(Node *node)
+Node *analyze_type(Node *node)
 {
   if (!node)
-    return;
+    return NULL;
   if (node->lhs)
-    analyze_type(node->lhs);
+    node->lhs = analyze_type(node->lhs);
   if (node->rhs)
-    analyze_type(node->rhs);
+    node->rhs = analyze_type(node->rhs);
   if (node->chs)
-    analyze_type(node->chs);
+    node->chs = analyze_type(node->chs);
   if (node->init)
-    analyze_type(node->init);
+    node->init = analyze_type(node->init);
   if (node->condition)
-    analyze_type(node->condition);
+    node->condition = analyze_type(node->condition);
   if (node->true_code)
-    analyze_type(node->true_code);
+    node->true_code = analyze_type(node->true_code);
   if (node->false_code)
-    analyze_type(node->false_code);
+    node->false_code = analyze_type(node->false_code);
   if (node->init)
-    analyze_type(node->init);
+    node->init = analyze_type(node->init);
   if (node->update)
-    analyze_type(node->update);
+    node->update = analyze_type(node->update);
   if (node->statement_child)
-    analyze_type(node->statement_child);
+    node->statement_child = analyze_type(node->statement_child);
   if (node->expr)
     for (size_t i = 1; i <= vector_size(node->expr); i++)
-      analyze_type(vector_peek_at(node->expr, i));
+      vector_replace_at(node->expr, i,
+                        analyze_type(vector_peek_at(node->expr, i)));
   if (node->stmt)
   {  // When ND_BLOCK
     offset_enter_nest();
     for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
-      analyze_type(tmp->node);
+      tmp->node = analyze_type(tmp->node);
     offset_exit_nest();
   }
 
   switch (node->kind)
   {
-    case ND_STRING:
-      // TODO: Behavior is different for ND_ARRAY
-      node->literal_name = add_string_literal(node->token);
+    case ND_SIZEOF:
+      node->kind = ND_NUM;
+      node->val = size_of(node->lhs->type);
       break;
-
+    case ND_VAR:
+      if (node->var->is_local &&
+          !(node->var->storage_class_specifier & 1 << 1) && node->is_new)
+        node->var->offset = calculate_offset(size_of(node->type));
+      break;
+    case ND_ARRAY: node->lhs->type = node->type; return node->lhs;
     case ND_NUM:
       if (node->type->type == TYPE_PTR || node->type->type == TYPE_ARRAY)
       {
         node->val = node->val * size_of(node->type->ptr_to);
       }
       break;
-
-    case ND_VAR:
-      if (node->var->is_local &&
-          !(node->var->storage_class_specifier & 1 << 1) && node->is_new)
-        node->var->offset = calculate_offset(size_of(node->type));
+    case ND_STRING:
+      // TODO: Behavior is different for ND_ARRAY
+      node->literal_name = add_string_literal(node->token);
       break;
-
-    case ND_SIZEOF:
-      node->kind = ND_NUM;
-      node->val = size_of(node->lhs->type);
-      break;
-
     default: break;
   }
+  return node;
 }
 
 FuncBlock *analyzer(FuncBlock *funcblock)
@@ -650,16 +660,18 @@ FuncBlock *analyzer(FuncBlock *funcblock)
     {
       init_nest();
       for (size_t i = 1; i <= vector_size(node->expr); i++)
-        analyze_type(vector_peek_at(node->expr, i));
+        vector_replace_at(node->expr, i,
+                          analyze_type(vector_peek_at(node->expr, i)));
       for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
-        analyze_type(tmp->node);
+        tmp->node = analyze_type(tmp->node);
       // Align stacksize to 8-byte units
       size_t max_stacksize = get_max_offset();
       pointer->stacksize = (max_stacksize + 7) / 8 * 8;
     }
     else if (node->kind != ND_NOP && node->kind != ND_BUILTINFUNC)
     {
-      analyze_type(node);
+      pointer->node = analyze_type(node);
+      node = pointer->node;
       // global variables initializer only allows constant value
       if (node->kind != ND_ASSIGN && node->kind != ND_VAR)
         error_at(node->token->str, node->token->len,

@@ -134,52 +134,46 @@ struct Node
 
   Node *lhs;  // Left-hand side
   Node *rhs;  // Right-hand side
-  // struct
-  // {                // For loop
+
+  // For loop
   Node *chs;            // Used only for ternary operator
   size_t child_offset;  // Used for ND_DOT, ND_ARROW, offset of its child
-                        // };
 
-  // struct
-  // {                                  // For if, for, while, switch statements
+  bool is_top;  // For ND_ARRAY
+
+  // For if, for, while, switch statements
   GTLabel *name;     // Label name, also used for goto
   Node *condition;   // Condition for judgment
   Node *true_code;   // Code executed when true
   Node *false_code;  // Code executed when false in if-else statements
-                     // struct
-                     // {                // For loop
+                     // For loop
   Node *init;        // Initialization code, e.g., int i = 0
   Node *update;      // Code executed at each step, e.g., i++
-  // };
+
   Vector *case_list;  // Contains Node* of cases in switch statement
-                      // };
-                      // struct
-                      // struct
-  // {                   // For ND_BLOCK, ND_FUNCCALL, ND_FUNCDEF
+
+  // For ND_BLOCK, ND_FUNCCALL, ND_FUNCDEF
   Vector *expr;                     // Used in ND_FUNCCALL, ND_FUNCDEF
   NDBlock *stmt;                    // Used in ND_BLOCK, ND_FUNCDEF
   uint8_t storage_class_specifier;  // Used in ND_FUNCDEF only
-                                    // name
-  // };
-  long long val;       // Value for ND_NUM, size of pointer type for ND_POST/PRE
-                       // INCREMENT/DECREMENT, 0 for numeric type
-                       // For variables (ND_VAR)
-  bool is_new;         // Whether it's a newly defined variable
-  Var *var;            // Variable information
-                       // };
-                       // struct
-                       // {                      // For string type ND_STRING
+  // name
+
+  long long val;  // Value for ND_NUM, size of pointer type for ND_POST/PRE
+                  // INCREMENT/DECREMENT, 0 for numeric type
+                  // For variables (ND_VAR)
+  bool is_new;    // Whether it's a newly defined variable
+  Var *var;       // Variable information
+
+  // For string type ND_STRING
   char *literal_name;  // Name to access string literal
-                       // };
-                       // struct
-  // {                            // For ND_GOTO, ND_LABEL, ND_CASE, ND_DEFAULT
+
+  // For ND_GOTO, ND_LABEL, ND_CASE, ND_DEFAULT
   Node *statement_child;  // statement
   char *label_name;       // Label name (not used in ND_CASE, ND_DEFAULT)
   bool is_case;           // For ND_CASE, ND_DEFAULT
   size_t case_num;        // Which case number in switch statement (0-indexed)
   GTLabel *switch_name;   // Label name of switch statement
   long constant_expression;  // The 'n' part of 'case n:'
-  // };
 };
 
 // Struct to manage expressions within arguments or blocks

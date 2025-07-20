@@ -278,7 +278,10 @@ FuncBlock *parser()
 
 Node *external_declaration()
 {
-  pr_debug2("program");
+#if DEBUG
+  Token *t = get_token();
+  pr_debug2("Current token: '%.*s'", (int)t->len, t->str);
+#endif
   uint8_t storage_class_specifier = 0;
   Type *type = declaration_specifiers(&storage_class_specifier);
   return declaration(type, true, storage_class_specifier);
@@ -334,8 +337,26 @@ Node *init_declarator(Type *type, uint8_t storage_class_specifier)
     return NULL;
   Token *old = get_token();
   if (node->kind != ND_FUNCDEF && consume("=", TK_RESERVED))
-    node = new_node(ND_ASSIGN, node, assignment_expression(), old);
+    node = new_node(ND_ASSIGN, node, initializer(), old);
   return node;
+}
+
+bool consume_array(Type **type)
+{
+  if (consume("[", TK_RESERVED))
+  {
+    Type *new = alloc_type(TYPE_ARRAY);
+    if (peek("]", TK_RESERVED))
+      new->size = 0;
+    else
+      new->size = eval_constant_expression();
+    expect("]", TK_RESERVED);
+    consume_array(type);
+    new->ptr_to = *type;
+    *type = new;
+    return true;
+  }
+  return false;
 }
 
 Node *declarator_internal(Type **type, Token *token,
@@ -351,15 +372,7 @@ Node *declarator_internal(Type **type, Token *token,
     }
     return NULL;
   }
-  if (consume("[", TK_RESERVED))
-  {
-    Type *new = alloc_type(TYPE_ARRAY);
-    new->ptr_to = *type;
-    new->size = eval_constant_expression();
-    *type = new;
-    expect("]", TK_RESERVED);
-  }
-  else if (peek("(", TK_RESERVED))
+  if (peek("(", TK_RESERVED))
   {
     Node *node = NULL;
     if (token && is_builtin_function(&node, token, true))
@@ -380,6 +393,9 @@ Node *declarator_internal(Type **type, Token *token,
     *type = new;
     return node;
   }
+  else
+    consume_array(type);
+
   Node *node = calloc(1, sizeof(Node));
   node->token = token;
   node->kind = ND_VAR;
@@ -466,22 +482,8 @@ Type *direct_abstract_declarator(Type *type)
 
   for (;;)
   {
-    if (consume("[", TK_RESERVED))
-    {
-      Type *new = alloc_type(TYPE_ARRAY);
-      new->ptr_to = type;
-      if (peek("]", TK_RESERVED))
-      {
-        new->size = 0;
-      }
-      else
-      {
-        new->size = eval_constant_expression();
-      }
-      expect("]", TK_RESERVED);
-      type = new;
+    if (consume_array(&type))
       continue;
-    }
 
     if (consume("(", TK_RESERVED))
     {
@@ -566,7 +568,10 @@ Node *labeled_statement()
 
 Node *statement()
 {
-  pr_debug2("statement");
+#if DEBUG
+  Token *t = get_token();
+  pr_debug2("Current token: '%.*s'", (int)t->len, t->str);
+#endif
   // Determine if it's a block: compound-statement
   if (consume("{", TK_RESERVED))
   {
@@ -725,7 +730,10 @@ Node *statement()
 
 Node *expression()
 {
-  pr_debug2("expression");
+#if DEBUG
+  Token *t = get_token();
+  pr_debug2("Current token: '%.*s'", (int)t->len, t->str);
+#endif
   Node *node = assignment_expression();
   while (consume(",", TK_RESERVED))
   {
@@ -737,7 +745,10 @@ Node *expression()
 
 Node *assignment_expression()
 {
-  pr_debug2("assignment-expression");
+#if DEBUG
+  Token *t = get_token();
+  pr_debug2("Current token: '%.*s'", (int)t->len, t->str);
+#endif
   Node *node = conditional_expression();
   Token *old = get_token();
   if (consume("=", TK_RESERVED))
@@ -858,7 +869,10 @@ Node *AND_expression()
 
 Node *equality_expression()
 {
-  pr_debug2("equality");
+#if DEBUG
+  Token *t = get_token();
+  pr_debug2("Current token: '%.*s'", (int)t->len, t->str);
+#endif
   Node *node = relational_expression();
 
   for (;;)
@@ -874,7 +888,10 @@ Node *equality_expression()
 
 Node *relational_expression()
 {
-  pr_debug2("relational");
+#if DEBUG
+  Token *t = get_token();
+  pr_debug2("Current token: '%.*s'", (int)t->len, t->str);
+#endif
   Node *node = shift_expression();
   for (;;)
   {
@@ -909,7 +926,10 @@ Node *shift_expression()
 
 Node *additive_expression()
 {
-  pr_debug2("add");
+#if DEBUG
+  Token *t = get_token();
+  pr_debug2("Current token: '%.*s'", (int)t->len, t->str);
+#endif
   Node *node = multiplicative_expression();
 
   for (;;)
@@ -931,7 +951,10 @@ Node *additive_expression()
 
 Node *multiplicative_expression()
 {
-  pr_debug2("mul");
+#if DEBUG
+  Token *t = get_token();
+  pr_debug2("Current token: '%.*s'", (int)t->len, t->str);
+#endif
   Node *node = cast_expression();
 
   for (;;)
@@ -963,7 +986,10 @@ Node *cast_expression()
 
 Node *unary_expression()
 {
-  pr_debug2("unary");
+#if DEBUG
+  Token *t = get_token();
+  pr_debug2("Current token: '%.*s'", (int)t->len, t->str);
+#endif
   if (consume("++", TK_RESERVED))
     return new_node(ND_PREINCREMENT, unary_expression(), NULL, get_old_token());
   if (consume("--", TK_RESERVED))
@@ -998,7 +1024,10 @@ Node *unary_expression()
 
 Node *postfix_expression()
 {
-  pr_debug2("postfix");
+#if DEBUG
+  Token *t = get_token();
+  pr_debug2("Current token: '%.*s'", (int)t->len, t->str);
+#endif
   Node *node = primary_expression();
   for (;;)
   {
@@ -1006,6 +1035,8 @@ Node *postfix_expression()
     if (consume("[", TK_RESERVED))
     {
       node = new_node(ND_ARRAY, node, expression(), old_token);
+      node->is_top = true;
+      node->lhs->is_top = false;
       expect("]", TK_RESERVED);
     }
     else if (consume(".", TK_RESERVED))
@@ -1031,7 +1062,10 @@ Node *postfix_expression()
 
 Node *primary_expression()
 {
-  pr_debug2("primary");
+#if DEBUG
+  Token *t = get_token();
+  pr_debug2("Current token: '%.*s'", (int)t->len, t->str);
+#endif
   if (consume("(", TK_RESERVED))
   {
     Node *node = expression();

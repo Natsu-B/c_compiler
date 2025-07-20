@@ -37,31 +37,6 @@ typedef struct
   bool is_defined;     // used for functions
 } ordinary_data_list;
 
-typedef struct
-{
-  Token* name;
-  Type* type;
-  // how many bytes from the beginning of the struct, or the number if it's an
-  // enum
-  size_t offset;
-} tag_data_list;
-
-typedef struct
-{
-  enum
-  {
-    is_struct,
-    is_union,
-    is_enum,
-  } tagkind;    // whether it is a union, struct, or enum
-  Token* name;  // name, NULL if not present
-  Vector*
-      data_list;  // contents of the struct, NULL for forward declarations only
-  Type* type;     // type of struct, union, or enum
-  size_t struct_size;       // size of the struct
-  size_t struct_alignment;  // alignment of the struct
-} tag_list;
-
 static Type* find_typedef_type(Token* token)
 {
   if (!token)
@@ -770,4 +745,9 @@ void exit_nest_type()
 {
   vector_pop(OrdinaryNamespaceList);
   vector_pop(TagNamespaceList);
+}
+
+Vector* get_enum_struct_list()
+{
+  return EnumStructList;
 }

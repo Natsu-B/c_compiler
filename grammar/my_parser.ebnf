@@ -119,7 +119,7 @@ declarator
 
 direct-declarator
         = "(", declarator, ")"
-        | identifier, [ "[", constant-expression, "]" ]
+        | identifier, { "[", constant-expression, "]" }
         | identifier, "(", [ parameter-type-list ], ")";
 
 pointer

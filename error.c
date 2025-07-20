@@ -46,9 +46,10 @@ void _debug2(char *file, int line, const char *func, char *fmt, ...)
 {
   va_list ap;
   va_start(ap, fmt);
+  fprintf(stdout, "\e[90m  ");  // Gray color and indent
   fprintf(stdout, "%s:%d:%s(): ", file, line, func);
   vfprintf(stdout, fmt, ap);
-  fprintf(stdout, "\n");
+  fprintf(stdout, "\e[0m\n");  // Reset color
 }
 
 char *file_name;

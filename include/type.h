@@ -14,6 +14,7 @@
 
 typedef struct Var Var;
 typedef struct Type Type;
+typedef struct Token Token;
 
 // Struct to manage variables
 struct Var
@@ -38,9 +39,6 @@ struct Var
 Var *add_variables(Token *token, Type *type, uint8_t storage_class_specifier);
 char *add_string_literal(Token *token);
 Vector *get_string_list();
-
-typedef struct Type Type;
-typedef struct Token Token;
 
 // Supported variable types
 typedef enum
@@ -70,7 +68,7 @@ struct Type
                        // union
                        // {
   bool is_signed;      // Used for integer types like TYPE_INT
-  size_t size;         // Used for TYPE_ARRAY
+  size_t size;         // Used for TYPE_ARRAY 0 is unknown
   size_t type_num;     // Used for TYPE_STRUCT
   Vector *param_list;  // Used for TYPE_FUNC, first argument is return type,
                        // others are argument types
@@ -78,6 +76,31 @@ struct Type
 };
 
 typedef struct Node Node;  // Define only to include parser.h
+
+typedef struct
+{
+  Token *name;
+  Type *type;
+  // how many bytes from the beginning of the struct, or the number if it's an
+  // enum
+  size_t offset;
+} tag_data_list;
+
+typedef struct
+{
+  enum
+  {
+    is_struct,
+    is_union,
+    is_enum,
+  } tagkind;    // whether it is a union, struct, or enum
+  Token *name;  // name, NULL if not present
+  Vector
+      *data_list;  // contents of the struct, NULL for forward declarations only
+  Type *type;      // type of struct, union, or enum
+  size_t struct_size;       // size of the struct
+  size_t struct_alignment;  // alignment of the struct
+} tag_list;
 
 bool is_type_specifier(Token *token);
 bool is_typedef(uint8_t storage_class_specifier);
@@ -103,5 +126,6 @@ Type *find_struct_child(Node *parent, Node *child, size_t *offset);
 void init_types();
 void new_nest_type();
 void exit_nest_type();
+Vector* get_enum_struct_list();
 
 #endif

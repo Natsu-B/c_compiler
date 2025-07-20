@@ -596,35 +596,14 @@ void analyze_type(Node *node)
       break;
 
     case ND_VAR:
-      if (node->var->is_local && !(node->var->storage_class_specifier & 1 << 1))
-      {
-        if (node->is_new)
-        {
-          switch (node->type->type)
-          {
-            case TYPE_STRUCT:
-              node->var->offset = calculate_offset(size_of(node->type));
-              break;
-            case TYPE_ARRAY:
-              node->var->offset = calculate_offset(size_of(node->type->ptr_to) *
-                                                   node->type->size);
-              break;
-            default:
-              node->var->offset = calculate_offset(size_of(node->type));
-              break;
-          }
-        }
-      }
+      if (node->var->is_local &&
+          !(node->var->storage_class_specifier & 1 << 1) && node->is_new)
+        node->var->offset = calculate_offset(size_of(node->type));
       break;
 
     case ND_SIZEOF:
       node->kind = ND_NUM;
-      if (node->lhs->kind == ND_TYPE_NAME)
-        node->val = size_of(node->lhs->type);
-      else if (node->lhs->type->type == TYPE_ARRAY)
-        node->val = size_of(node->lhs->type) * node->lhs->val;
-      else
-        node->val = size_of(node->lhs->type);
+      node->val = size_of(node->lhs->type);
       break;
 
     default: break;
@@ -656,7 +635,7 @@ FuncBlock *analyzer(FuncBlock *funcblock)
     else if (node->kind == ND_BUILTINFUNC)
       node->type = alloc_type(TYPE_VOID);
     else if (node->kind != ND_NOP)
-      error_exit("unreachable");
+      add_type(node);
   }
 #ifdef DEBUG
   print_parse_result(funcblock);
@@ -676,25 +655,42 @@ FuncBlock *analyzer(FuncBlock *funcblock)
         analyze_type(tmp->node);
       // Align stacksize to 8-byte units
       size_t max_stacksize = get_max_offset();
-      pointer->stacksize =
-          max_stacksize % 8 ? (max_stacksize / 8 + 1) * 8 : max_stacksize;
+      pointer->stacksize = (max_stacksize + 7) / 8 * 8;
     }
-    else if (node->kind == ND_VAR)
-      analyze_type(node);
     else if (node->kind != ND_NOP && node->kind != ND_BUILTINFUNC)
-      error_exit("unreachable");
+    {
+      analyze_type(node);
+      // global variables initializer only allows constant value
+      if (node->kind != ND_ASSIGN && node->kind != ND_VAR)
+        error_at(node->token->str, node->token->len,
+                 "invalid global variable initializer");
+      if (node->kind == ND_ASSIGN)
+      {
+        switch (node->rhs->kind)
+        {
+          case ND_NUM:
+          case ND_STRING: break;
+          case ND_ADDR:
+            if (node->rhs->lhs->kind != ND_VAR)
+              error_at(node->rhs->lhs->token->str, node->rhs->lhs->token->len,
+                       "invalid global variable initializer");
+            break;
+          case ND_EVAL:
+            if (node->rhs->lhs->kind != ND_NUM)
+              error_at(node->rhs->lhs->token->str, node->rhs->lhs->token->len,
+                       "invalid global variable initializer");
+            node->rhs = node->rhs->lhs;
+            node->rhs->val = node->rhs->val ? 1 : 0;
+            break;
+          default:
+            error_at(node->rhs->token->str, node->rhs->token->len,
+                     "invalid global variable initializer");
+        }
+      }
+    }
   }
 #ifdef DEBUG
   print_parse_result(funcblock);
 #endif
-  // Determine how to initialize global variables
-  // TODO: Only zero-clear and strings are supported
-  Vector *global_variables = get_global_var();
-  for (size_t i = 1; i <= vector_size(global_variables); i++)
-  {
-    Var *global = vector_peek_at(global_variables, i);
-    if (global->how2_init == reserved)
-      global->how2_init = init_zero;
-  }
   return funcblock;
 }

@@ -156,9 +156,10 @@ struct Node
                       // struct
                       // struct
   // {                   // For ND_BLOCK, ND_FUNCCALL, ND_FUNCDEF
-  Vector *expr;   // Used in ND_FUNCCALL, ND_FUNCDEF
-  NDBlock *stmt;  // Used in ND_BLOCK, ND_FUNCDEF
-                  // name
+  Vector *expr;                     // Used in ND_FUNCCALL, ND_FUNCDEF
+  NDBlock *stmt;                    // Used in ND_BLOCK, ND_FUNCDEF
+  uint8_t storage_class_specifier;  // Used in ND_FUNCDEF only
+                                    // name
   // };
   long long val;       // Value for ND_NUM, size of pointer type for ND_POST/PRE
                        // INCREMENT/DECREMENT, 0 for numeric type

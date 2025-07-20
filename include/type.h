@@ -29,15 +29,7 @@ struct Var
   // Whether the 3rd bit is auto
   // Whether the 4th bit is register
   uint8_t storage_class_specifier;
-  bool is_local;  // Whether it is a local or global variable
-  enum
-  {                // How to initialize when it's a global variable
-    reserved,      // To avoid using 0
-    init_zero,     // Zero-clear
-    init_val,      // Initial value as a number
-    init_pointer,  // Initialize with a pointer
-    init_string,   // Initialize with a string
-  } how2_init;
+  bool is_local;      // Whether it is a local or global variable
   char *global_name;  // Variable name for global variable
                       // May change from original name due to static, etc.
   size_t offset;      // For local variables, the variable is at RBP - offset
@@ -45,7 +37,7 @@ struct Var
 
 Var *add_variables(Token *token, Type *type, uint8_t storage_class_specifier);
 char *add_string_literal(Token *token);
-Vector *get_global_var();
+Vector *get_string_list();
 
 typedef struct Type Type;
 typedef struct Token Token;
@@ -80,7 +72,8 @@ struct Type
   bool is_signed;      // Used for integer types like TYPE_INT
   size_t size;         // Used for TYPE_ARRAY
   size_t type_num;     // Used for TYPE_STRUCT
-  Vector *param_list;  // Used for TYPE_FUNC, first argument is return type, others are argument types
+  Vector *param_list;  // Used for TYPE_FUNC, first argument is return type,
+                       // others are argument types
   // };
 };
 
@@ -91,7 +84,7 @@ bool is_typedef(uint8_t storage_class_specifier);
 Type *alloc_type(TypeKind kind);
 Type *declaration_specifiers(uint8_t *storage_class_specifier);
 bool add_function_name(Vector *function_list, Token *name,
-                       uint8_t storage_class_specifier);
+                       uint8_t storage_class_specifier, bool is_defined);
 
 enum member_name
 {
@@ -105,7 +98,7 @@ enum member_name is_enum_or_function_or_typedef_or_variables_name(
     Token *token, size_t *number, Type **type, Var **var);
 size_t size_of(Type *type);
 size_t align_of(Type *type);
-void add_typedef();
+void add_typedef(Token *token, Type *type);
 Type *find_struct_child(Node *parent, Node *child, size_t *offset);
 void init_types();
 void new_nest_type();

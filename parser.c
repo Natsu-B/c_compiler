@@ -235,7 +235,7 @@ Vector *parameter_type_list(Vector **type_list, Type *type,
     {
       uint8_t storage_class_specifier = 0;
       Type *type = declaration_specifiers(&storage_class_specifier);
-      if (!type)
+      if (!type || storage_class_specifier)
         error_at(get_token()->str, get_token()->len, "Invalid type.");
       Node *parameter =
           declarator_no_side_effect(&type, storage_class_specifier);
@@ -294,12 +294,15 @@ Node *declaration(Type *type, bool is_external_declaration,
   {
     program_name = node->token->str;
     program_name_len = node->token->len;
+    if (!add_function_name(node->type->param_list, node->token,
+                           storage_class_specifier, true))
+      error_at(node->token->str, node->token->len,
+               "invalid function definition");
     new_nest();
     for (size_t i = 1; i <= vector_size(node->expr); i++)
     {
       Node *param = vector_peek_at(node->expr, i);
-      param->var =
-          add_variables(param->token, param->type, storage_class_specifier);
+      param->var = add_variables(param->token, param->type, 0);
       param->is_new = true;
     }
     NDBlock head;
@@ -330,7 +333,7 @@ Node *init_declarator(Type *type, uint8_t storage_class_specifier)
   if (!node)
     return NULL;
   Token *old = get_token();
-  if (consume("=", TK_RESERVED))
+  if (node->kind != ND_FUNCDEF && consume("=", TK_RESERVED))
     node = new_node(ND_ASSIGN, node, assignment_expression(), old);
   return node;
 }
@@ -364,13 +367,15 @@ Node *declarator_internal(Type **type, Token *token,
     consume("(", TK_RESERVED);
     node = calloc(1, sizeof(Node));
     node->kind = ND_FUNCDEF;
-    node->type = *type;
     node->token = token;
     Type *new = alloc_type(TYPE_FUNC);
     new->param_list = vector_new();
+    node->type = new;
     node->expr =
         parameter_type_list(&new->param_list, *type, storage_class_specifier);
-    if (!add_function_name(new->param_list, token, storage_class_specifier))
+    node->storage_class_specifier = storage_class_specifier;
+    if (!add_function_name(new->param_list, token, storage_class_specifier,
+                           false))
       error_at(token->str, token->len, "invalid name");
     *type = new;
     return node;

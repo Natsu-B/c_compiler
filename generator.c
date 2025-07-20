@@ -173,6 +173,20 @@ void call_built_in_func(Node *node)
   unreachable();
 }
 
+void gen_global_var(Node *node)
+{
+  if (node->kind != ND_VAR)
+    unreachable();
+  // in order to support name mangling for static variables declared inside
+  // functions we should use node->var->name
+  if (!(node->var->storage_class_specifier & 1 << 2))
+    output_file("    .globl %.*s", (int)node->var->len, node->var->name);
+  output_file("    .type %.*s, @object", (int)node->var->len, node->var->name);
+  output_file("    .size %.*s, %lu", (int)node->var->len, node->var->name,
+              size_of(node->var->type));
+  output_file("%.*s:", (int)node->var->len, node->var->name);
+}
+
 void gen(Node *node);
 
 // Function to output lvalue to rax. Be careful as rax will be destroyed.
@@ -635,38 +649,21 @@ void generator(FuncBlock *parsed, char *output_filename)
   if (fout == NULL)
     error_exit("cannot written to file");
   pr_debug("output file open");
-  output_file(".intel_syntax noprefix");
-  output_file(".data");
+  output_file("    .intel_syntax noprefix\n");
 
-  // Write global variables
-  Vector *root = get_global_var();
-  for (size_t i = 1; i <= vector_size(root); i++)
+  // strings
+  Vector *string_list = get_string_list();
+  for (size_t i = 1; i <= vector_size(string_list); i++)
   {
-    Var *pointer = vector_peek_at(root, i);
-    if (pointer->storage_class_specifier & 1 << 1)
-      continue;
-    if (!(pointer->storage_class_specifier & 1 << 2))
-      output_file("    .globl %.*s", (int)pointer->len, pointer->name);
-    output_file("%.*s:", (int)pointer->len, pointer->name);
-    switch (pointer->how2_init)
-    {
-      case reserved: unimplemented(); break;
-      case init_zero:
-        output_file(
-            "    .zero %ld",
-            size_of(pointer->type) *
-                (pointer->type->type == TYPE_ARRAY ? pointer->type->size : 1));
-        break;
-      case init_string:
-        output_file("    .string \"%.*s\"", (int)pointer->token->len,
-                    pointer->token->str);
-        break;
-      default: unreachable(); break;
-    }
+    if (i == 1)
+      output_file("    .section .rodata");
+    Var *string = vector_peek_at(string_list, i);
+    output_file("%.*s:", (int)string->len, string->name);
+    output_file("    .string \"%.*s\"", (int)string->token->len,
+                string->token->str);
   }
 
   // Write functions
-  output_file(".text");
   for (FuncBlock *pointer = parsed; pointer; pointer = pointer->next)
   {
     Node *node = pointer->node;
@@ -674,7 +671,12 @@ void generator(FuncBlock *parsed, char *output_filename)
       continue;
     if (node->kind == ND_FUNCDEF)
     {
-      output_file("\n.global %.*s", (int)node->token->len, node->token->str);
+      output_file("\n    .text\n");
+      if (!(node->storage_class_specifier & 1 << 2))
+        output_file("    .global %.*s", (int)node->token->len,
+                    node->token->str);
+      output_file("    .type   %.*s, @function", (int)node->token->len,
+                  node->token->str);
       output_file("%.*s:", (int)node->token->len, node->token->str);
       output_file("    push rbp");
       output_file("    mov rbp, rsp");
@@ -729,7 +731,41 @@ void generator(FuncBlock *parsed, char *output_filename)
     }
     else if (node->kind == ND_BUILTINFUNC)
       call_built_in_func(node);
-    else if (node->kind != ND_VAR && node->kind != ND_NOP)
+    else if (node->kind == ND_VAR)
+    {
+      if (node->var->storage_class_specifier & 1 << 1)
+        continue;
+      output_file("\n    .section    .bss");
+      gen_global_var(node);
+      output_file("    .zero %lu\n", size_of(node->var->type));
+    }
+    else if (node->kind == ND_ASSIGN && node->lhs->kind == ND_VAR)
+    {
+      output_file("\n    .section .data");
+      gen_global_var(node->lhs);
+      switch (node->rhs->kind)
+      {
+        case ND_NUM:
+          switch (size_of(node->lhs->type))
+          {
+            case 1: output_file("    .byte %lld", node->rhs->val); break;
+            case 2: output_file("    .word %lld", node->rhs->val); break;
+            case 4: output_file("    .long %lld", node->rhs->val); break;
+            case 8: output_file("    .quad %lld", node->rhs->val); break;
+            default: unreachable();
+          }
+          break;
+        case ND_ADDR:
+          output_file("    .quad %.*s", (int)node->rhs->lhs->var->len,
+                      node->rhs->lhs->var->name);
+          break;
+        case ND_STRING:
+          output_file("    .quad %s", node->rhs->literal_name);
+          break;
+        default: unimplemented();
+      }
+    }
+    else if (node->kind != ND_NOP)
       error_exit_with_guard("Unreachable");
   }
 

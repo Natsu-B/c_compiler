@@ -25,7 +25,7 @@ static Vector* TagNamespaceList;       // struct, union, enumeration tag names
 static size_t tag_id;  // number assigned to struct, union, enumeration
 static Vector*
     EnumStructList;  // list of structs, unions, enumerations in order of tag_id
-static Vector* GlobalVariablesList;  // Var list of global variables
+static Vector* StringList;
 
 typedef struct
 {
@@ -34,6 +34,7 @@ typedef struct
   Type* type;
   size_t enum_number;  // used for enums
   Var* variables;      // used for variables
+  bool is_defined;     // used for functions
 } ordinary_data_list;
 
 typedef struct
@@ -444,7 +445,8 @@ void add_typedef(Token* token, Type* type)
 
 Var* add_variables(Token* token, Type* type, uint8_t storage_class_specifier)
 {
-  if (storage_class_specifier & 1 << 2)
+  if (storage_class_specifier & 1 << 2 &&
+      vector_size(OrdinaryNamespaceList) != 1)
     unimplemented();  // static is not yet supported
   if (!token || !type)
     return NULL;
@@ -465,7 +467,7 @@ Var* add_variables(Token* token, Type* type, uint8_t storage_class_specifier)
       error_at(token->str, token->len,
                "A variable with the same name already exists.");
     if (storage_class_specifier & 1 << 1)
-      return same->variables;
+      return NULL;
   }
   // For new variables
   Var* var = calloc(1, sizeof(Var));
@@ -474,10 +476,7 @@ Var* add_variables(Token* token, Type* type, uint8_t storage_class_specifier)
   var->len = token->len;
   var->type = type;
   if (vector_size(OrdinaryNamespaceList) == 1)
-  {
     var->is_local = false;  // The variable is a global variable
-    vector_push(GlobalVariablesList, var);
-  }
   else
     var->is_local = true;  // The variable is a local variable
   var->storage_class_specifier = storage_class_specifier;
@@ -490,6 +489,8 @@ Var* add_variables(Token* token, Type* type, uint8_t storage_class_specifier)
     vector_replace_at(vector_peek(OrdinaryNamespaceList), data_num, new);
   else
     vector_push(vector_peek(OrdinaryNamespaceList), new);
+  if (storage_class_specifier & 1 << 1)
+    return NULL;
   return var;
 }
 
@@ -498,9 +499,9 @@ typedef struct literal_list literal_list;
 struct literal_list
 {
   literal_list* next;
-  char* literal_name;
-  char* name;
-  size_t len;
+  char* literal_name;  // string identifier
+  char* name;          // string
+  size_t len;          // string len
 };
 
 static literal_list* literal_top;
@@ -547,17 +548,21 @@ char* add_string_literal(Token* token)
   new_var->len = snprintf_return;
   new_var->type = alloc_type(TYPE_STR);
   new_var->is_local = false;
-  new_var->how2_init = init_string;
   new_var->storage_class_specifier = 1 << 2;
   vector_push(vector_peek_at(OrdinaryNamespaceList, 1), new_var);
-  vector_push(GlobalVariablesList, new_var);
+  vector_push(StringList, new_var);
   return literal_name;
 }
 
-bool add_function_name(Vector* function_list, Token* name,
-                       uint8_t storage_class_specifier)
+Vector* get_string_list()
 {
-  if (storage_class_specifier & ~(1 << 2))
+  return StringList;
+}
+
+bool add_function_name(Vector* function_list, Token* name,
+                       uint8_t storage_class_specifier, bool is_defined)
+{
+  if (storage_class_specifier & ~((1 << 1) + (1 << 2)))
     error_at(name->str, name->len, "Invalid storage class specifier.");
   // Check if there is anything different with the same name in the namespace
   for (size_t i = 1; i <= vector_size(OrdinaryNamespaceList); i++)
@@ -573,17 +578,21 @@ bool add_function_name(Vector* function_list, Token* name,
         if (tmp->ordinary_kind == function_name &&
             vector_size(function_list) == vector_size(tmp->type->param_list))
         {
+          is_same = true;
           for (size_t k = 1; k <= vector_size(tmp->type->param_list); k++)
           {
             if (!is_equal_type(vector_peek_at(function_list, k),
                                vector_peek_at(tmp->type->param_list, k)))
-              goto end;
+            {
+              is_same = false;
+              break;
+            }
           }
-          is_same = true;
-        end:
         }
-        if (!is_same || tmp->ordinary_kind != function_name)
+        if (!is_same || (tmp->is_defined && is_defined))
           return false;
+        else
+          return true;
       }
     }
   }
@@ -591,6 +600,7 @@ bool add_function_name(Vector* function_list, Token* name,
   ordinary_data_list* new = calloc(1, sizeof(ordinary_data_list));
   new->ordinary_kind = function_name;
   new->name = name;
+  new->is_defined = is_defined;
   new->type = alloc_type(TYPE_FUNC);
   new->type->param_list = function_list;
   vector_push(vector_peek(OrdinaryNamespaceList), new);
@@ -627,11 +637,6 @@ enum member_name is_enum_or_function_or_typedef_or_variables_name(
     }
   }
   return none_of_them;
-}
-
-Vector* get_global_var()
-{
-  return GlobalVariablesList;
 }
 
 // A function that creates a Type
@@ -750,7 +755,7 @@ void init_types()
   TagNamespaceList = vector_new();
   vector_push(TagNamespaceList, root_struct);
   EnumStructList = vector_new();
-  GlobalVariablesList = vector_new();
+  StringList = vector_new();
 }
 
 void new_nest_type()

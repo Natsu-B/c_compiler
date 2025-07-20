@@ -255,6 +255,8 @@ assert "int main() {return 'a' + '\n' + '\0';}"
 assert_print '__asm__("gcc_predef_start: \n"" .incbin \"gcc_predef.h\"\n""gcc_predef_end: \n");extern char gcc_predef_start;extern char gcc_predef_end; int main() {printf("%.*s", (int)(&gcc_predef_end - &gcc_predef_start), &gcc_predef_start); __asm__("nop"); return 0;}'
 assert 'int foo; extern int foo;extern int foo; int main() {extern int foo; return foo;}'
 assert 'extern int foo; int foo; extern int foo;extern int foo; int main() {extern int foo; return foo;}'
+assert 'int a = 187; int *b = &a; char* c = "abc"; int main() {return a + *b + c[1];}'
+assert '_Bool a = 187; int main() {return a;}'
 # assert '#include "../test/compiler_header.h"
 # int foo(int x, ...);int main(){ return foo(1, 2, 4, 7, 8, 9, 11, 15, 18, 20, 19, 0); } int foo(int x, ...){ va_list ap; va_start(ap, x); int tmp = x; int result; while (tmp) { result = tmp; tmp = va_arg(ap, int); } va_end(ap); return result; }'
 

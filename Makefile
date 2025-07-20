@@ -69,7 +69,7 @@ self1: $(TARGET)
 	@echo ""
 	@echo -e "${GREEN}--- Self-host complete. Executable '$(TARGET)2' created. ---${NC}"
 
-self1-test: self1
+self1-test: test self1
 	@echo -e "\n${CYAN}--- Running tests after self-host... ---${NC}"
 	./test.sh ./main2
 

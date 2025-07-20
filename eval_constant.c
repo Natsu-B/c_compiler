@@ -27,10 +27,6 @@ long long _eval_constant_expression(Node* node)
              _eval_constant_expression(node->rhs);
     case ND_NUM: return node->val;
     case ND_SIZEOF:
-      if (node->lhs->kind != ND_TYPE_NAME &&
-          node->lhs->type->type == TYPE_ARRAY)
-        return size_of(node->lhs->type) * node->lhs->val;
-      else
         return size_of(node->lhs->type);
     default:
     {

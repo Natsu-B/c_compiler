@@ -188,6 +188,46 @@ void gen_global_var(Node *node)
 }
 
 void gen(Node *node);
+void gen_lval(Node *node);
+
+void gen_assign(Node *assigned, Node *node, size_t padding, Type *type)
+{
+  if (node->kind == ND_INITIALIZER)
+  {
+    for (size_t i = 0; i < vector_size(node->init_list); i++)
+    {
+      Node *child = vector_peek_at(node->init_list, i + 1);
+      gen_assign(assigned, child, padding + i * size_of(node->type->ptr_to),
+                 child->type);
+    }
+    // Uninitialized array elements are padded with zeros
+    size_t done_init =
+        vector_size(node->init_list) * size_of(node->type->ptr_to);
+    while (size_of(node->type) - done_init)
+    {
+      gen_lval(assigned);
+      output_file("    pop rax");
+      output_file("    add rax, %lu", padding + done_init);
+      size_t size = size_of(node->type) - done_init > 8
+                        ? 8
+                        : size_of(node->type) - done_init;
+      done_init += size;
+      output_file("    mov %s [rax], %d", access_size_specifier(size), 0);
+    }
+  }
+  else
+  {
+    gen_lval(assigned);
+    gen(node);
+    output_file("    pop rdi");
+    output_file("    pop rax");
+    if (padding)
+      output_file("    add rax, %lu", padding);
+    output_file("    mov %s [rax], %s", access_size_specifier(size_of(type)),
+                chose_register(size_of(type), rdi));
+    output_file("    push rdi");
+  }
+}
 
 // Function to output lvalue to rax. Be careful as rax will be destroyed.
 void gen_lval(Node *node)
@@ -195,10 +235,6 @@ void gen_lval(Node *node)
   output_debug2("enter gen_lval");
   switch (node->kind)
   {
-    case ND_STRING:
-      output_file("    lea rax, [rip+OFFSET FLAT:%s]", node->literal_name);
-      output_file("    push rax");
-      break;
     case ND_VAR:
       if (node->var->is_local && !(node->var->storage_class_specifier & 1 << 1))
         output_file("    lea rax, [rbp-%d]", (int)node->var->offset);
@@ -370,6 +406,9 @@ void gen(Node *node)
       return;
 
     case ND_STRING:
+      output_file("    lea rax, [rip+OFFSET FLAT:%s]", node->literal_name);
+      output_file("    push rax");
+      return;
     case ND_VAR:
     case ND_DOT:
     case ND_ARROW:
@@ -392,16 +431,8 @@ void gen(Node *node)
 
     case ND_ASSIGN:
       output_debug2("ND_ASSIGN");
-      gen_lval(node->lhs);
-      gen(node->rhs);
-      output_file("    pop rdi");
-      output_file("    pop rax");
-      output_file("    mov %s [rax], %s",
-                  access_size_specifier(size_of(node->type)),
-                  chose_register(size_of(node->type), rdi));
-      output_file("    push rdi");
+      gen_assign(node->lhs, node->rhs, 0, node->type);
       return;
-
     case ND_ADDR:
       output_debug2("ND_ADDR");
       gen_lval(node->lhs);

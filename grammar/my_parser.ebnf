@@ -148,7 +148,11 @@ typedef-name
         = identifier;
 
 initializer
-        = assignment-expression;
+        = assignment-expression
+        | "{", initializer-list, [ "," ], "}";
+
+initializer-list
+        = initializer, { ",", initializer };
 
 (* EXPRESSIONS *)
 constant-expression

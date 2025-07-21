@@ -8,6 +8,7 @@
 #include "test/compiler_header.h"
 #else
 #include <stdlib.h>
+#include <string.h>
 #endif
 
 #include "include/debug.h"
@@ -31,6 +32,8 @@ bool is_integer_type(Type *t)
 
 bool is_equal_type(Type *lhs, Type *rhs)
 {
+  if (!lhs || !rhs)
+    unreachable();
   if (is_pointer_type(lhs) && is_pointer_type(rhs))
     return is_equal_type(lhs->ptr_to, rhs->ptr_to);
   if (lhs->type != rhs->type)
@@ -201,6 +204,41 @@ void add_type_for_assignment(Node *node)
 
   error_at(node->token->str, node->token->len,
            "Cannot convert both sides of '=' types.");
+}
+
+bool check_initializer_type(Type *type, Node *init_list, bool is_root)
+{
+  if (init_list->kind == ND_INITIALIZER)
+  {
+    init_list->type = type;
+    const size_t initializer_size = vector_size(init_list->init_list);
+    if (type->type != TYPE_ARRAY)
+      error_at(init_list->token->str, init_list->token->len,
+               "array initializer requires an array type");
+    else if (type->size != 0)
+    {
+      if (type->size < initializer_size)
+        error_at(init_list->token->str, init_list->token->len,
+                 "too many elements in initializer");
+    }
+    else if (is_root)
+      type->size = initializer_size;
+    else
+      error_at(init_list->token->str, init_list->token->len,
+               "array size is not specified");
+
+    for (size_t i = 1; i <= vector_size(init_list->init_list); i++)
+    {
+      Node *child = vector_peek_at(init_list->init_list, i);
+      if (!(check_initializer_type(type->ptr_to, child, false)))
+        return false;
+    }
+    return true;
+  }
+  Node *tmp = calloc(1, sizeof(Node));
+  tmp->type = type;
+  add_type_for_assignment(new_node(ND_ASSIGN, tmp, init_list, NULL));
+  return true;
 }
 
 void add_type_internal(Node *node)
@@ -470,19 +508,12 @@ void add_type_internal(Node *node)
           node->lhs->type->type != TYPE_PTR)
         error_at(node->lhs->token->str, node->lhs->token->len, "invalid array");
       node->type = node->lhs->type->ptr_to;
-      if (node->lhs->kind == ND_ARRAY)
-        node->rhs = new_node(ND_ADD, node->rhs,
-                             new_node(ND_MUL, node->lhs->rhs,
-                                      new_node_num(size_of(node->type)), NULL),
-                             NULL);
 
-      if (node->is_top)
-      {
-        node->kind = ND_DEREF;
-        node->lhs = new_node(ND_ADD, node->lhs, node->rhs, node->token);
-        node->rhs = NULL;
+      node->kind = ND_DEREF;
+      node->lhs = new_node(ND_ADD, node->lhs, node->rhs, node->token);
+      node->rhs = NULL;
+      if (node->is_top) // add_type internal should call only one time
         add_type(node);
-      }
       return;
     case ND_DOT:
     case ND_ARROW:
@@ -516,6 +547,18 @@ void add_type_internal(Node *node)
       return;
     }
     case ND_COMMA: node->type = node->rhs->type; return;
+    case ND_INITIALIZER:
+      if (node->is_top)
+      {  // check if the assigned types are correct
+        node->type = node->assigned->type;
+        if (node->assigned->kind != ND_VAR &&
+            node->assigned->type->type == TYPE_ARRAY)
+          error_at(node->assigned->token->str, node->assigned->token->len,
+                   "invalid initializer");
+        if (!(check_initializer_type(node->assigned->type, node, true)))
+          error_at(node->token->str, node->token->len, "invalid initializer");
+      }
+      break;
     case ND_CAST: node->type = node->rhs->type; return;
     default: unreachable();
   }
@@ -551,6 +594,9 @@ void add_type(Node *node)
   if (node->stmt)
     for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
       add_type(tmp->node);
+  if (node->init_list)
+    for (size_t i = 1; i <= vector_size(node->init_list); i++)
+      add_type(vector_peek_at(node->init_list, i));
   if (node->kind == ND_SWITCH)
     switch_end();
 
@@ -595,6 +641,14 @@ Node *analyze_type(Node *node)
 
   switch (node->kind)
   {
+    case ND_DEREF:
+      // When the dereferenced type is a multidimensional array
+      if (node->type->type == TYPE_ARRAY)
+      {
+        node->lhs->type = node->type;
+        memcpy(node, node->lhs, sizeof(Node));
+      }
+      break;
     case ND_SIZEOF:
       node->kind = ND_NUM;
       node->val = size_of(node->lhs->type);
@@ -604,7 +658,6 @@ Node *analyze_type(Node *node)
           !(node->var->storage_class_specifier & 1 << 1) && node->is_new)
         node->var->offset = calculate_offset(size_of(node->type));
       break;
-    case ND_ARRAY: node->lhs->type = node->type; return node->lhs;
     case ND_NUM:
       if (node->type->type == TYPE_PTR || node->type->type == TYPE_ARRAY)
       {

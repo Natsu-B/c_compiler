@@ -32,7 +32,7 @@ Node *declarator(Type *type, uint8_t storage_class_specifier);
 
 Type *pointer(Type *type);
 Node *type_name();
-Node *initializer();
+Node *initializer(Node *assigned);
 Node *block_item();
 Node *statement();
 Node *expression();
@@ -337,7 +337,7 @@ Node *init_declarator(Type *type, uint8_t storage_class_specifier)
     return NULL;
   Token *old = get_token();
   if (node->kind != ND_FUNCDEF && consume("=", TK_RESERVED))
-    node = new_node(ND_ASSIGN, node, initializer(), old);
+    node = new_node(ND_ASSIGN, node, initializer(node), old);
   return node;
 }
 
@@ -523,8 +523,28 @@ Type *direct_abstract_declarator(Type *type)
   return type;
 }
 
-Node *initializer()
+Node *initializer(Node *assigned)
 {
+  if (consume("{", TK_RESERVED))
+  {
+    Node *node = calloc(1, sizeof(Node));
+    node->kind = ND_INITIALIZER;
+    node->init_list = vector_new();
+    node->is_top = true;
+    node->assigned = assigned;
+    node->token = get_old_token();
+
+    while (!consume("}", TK_RESERVED))
+    {
+      Node *list = initializer(node);
+      if (list->kind == ND_INITIALIZER)
+        list->is_top = false;
+      vector_push(node->init_list, list);
+      if (!consume(",", TK_RESERVED) && !peek("}", TK_RESERVED))
+        error_at(get_token()->str, get_token()->len, "invalid initializer");
+    }
+    return node;
+  }
   return assignment_expression();
 }
 
@@ -1036,7 +1056,8 @@ Node *postfix_expression()
     {
       node = new_node(ND_ARRAY, node, expression(), old_token);
       node->is_top = true;
-      node->lhs->is_top = false;
+      if (node->lhs->kind == ND_ARRAY)
+        node->lhs->is_top = false;
       expect("]", TK_RESERVED);
     }
     else if (consume(".", TK_RESERVED))

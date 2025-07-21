@@ -71,7 +71,7 @@ struct Type
   size_t size;         // Used for TYPE_ARRAY 0 is unknown
   size_t type_num;     // Used for TYPE_STRUCT
   Vector *param_list;  // Used for TYPE_FUNC, first argument is return type,
-                       // others are argument types
+                       // others are argument types,
   // };
 };
 

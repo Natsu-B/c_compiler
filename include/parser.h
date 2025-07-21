@@ -75,6 +75,7 @@ typedef enum
   ND_CASE,           // Case statement
   ND_SWITCH,         // Switch statement
   ND_COMMA,          // Comma operator
+  ND_INITIALIZER,    // array or struct initializer
   ND_CAST,           // Type cast
   ND_EVAL,           // Cast to bool
   ND_VARIABLE_ARGS,  // Variadic arguments
@@ -123,7 +124,7 @@ struct GTLabel
       "ND_RIGHT_SHIFT", "ND_ASSIGNMENT", "ND_VAR", "ND_ARRAY", "ND_DOT",      \
       "ND_ARROW", "ND_FIELD", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR",        \
       "ND_STIRNG", "ND_GOTO", "ND_LABEL", "ND_CASE", "ND_SWITCH", "ND_COMMA", \
-      "ND_CAST", "ND_EVAL"
+      "ND_INITIALIZER", "ND_CAST", "ND_EVAL", "ND_VARIABLE_ARGS"
 extern const char *nodekindlist[ND_END];
 
 struct Node
@@ -150,7 +151,9 @@ struct Node
   Node *init;        // Initialization code, e.g., int i = 0
   Node *update;      // Code executed at each step, e.g., i++
 
-  Vector *case_list;  // Contains Node* of cases in switch statement
+  Vector *case_list;  // ND_SWITCH Contains Node* of cases in switch statement
+  Vector *init_list;  // ND_INITIALIZER
+  Node *assigned;     // ND_INITIALIZER this node isn't used for type analysis
 
   // For ND_BLOCK, ND_FUNCCALL, ND_FUNCDEF
   Vector *expr;                     // Used in ND_FUNCCALL, ND_FUNCDEF

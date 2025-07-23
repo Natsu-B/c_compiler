@@ -71,6 +71,7 @@ int fprintf(FILE *stream, char *fmt, ...);
 int vfprintf(FILE *stream, char *format, va_list ap);
 #endif
 int snprintf(char *str, size_t size, char *fmt, ...);
+int sprintf(char *str, char *fmt, ...);
 long strtol(char *nptr, char **endptr, int base);
 long long strtoll(char *nptr, char **endptr, int base);
 void exit(int status);

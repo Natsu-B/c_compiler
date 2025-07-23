@@ -4,7 +4,7 @@ COMPILER=${1:-./main}
 assert_print() {
   input="$1"
   echo "$input" > out/tmp.c
-  if ! gcc -o out/gcc out/tmp.c; then
+  if ! gcc -I./test -include gcc.h -o out/gcc out/tmp.c; then
     echo "ERROR: Reference build with GCC failed for input: '$input'"
     exit 1
   fi
@@ -40,7 +40,7 @@ assert() {
   input="$1"
   echo "$input" > out/tmp.c
 
-  gcc -o out/gcc out/tmp.c
+  gcc -I./test -include gcc.h -o out/gcc out/tmp.c
   ./out/gcc
   expected="$?"
 
@@ -72,7 +72,7 @@ assert_with_outer_code() {
 
   echo "$input" > out/tmp.c
 
-  gcc -o out/gcc out/tmp.c "${linkcode[@]}"
+  gcc -I./test -include gcc.h -o out/gcc out/tmp.c "${linkcode[@]}"
   ./out/gcc
   expected="$?"
 
@@ -246,9 +246,9 @@ assert 'int main() {int a= 0; int b = 3; b += (a++, b); b += a++, b; b++, b++; r
 assert 'int main() {int x = 100; void* a = &x; return *(int*)a;}'
 assert_print 'int printf(char *str, ...); int main() {for (int i = 0; i < 10; i++) printf("Hello World!!! %d\n", i); return 0;}'
 assert 'int main() {int k[3]; for (int i = 0; i < 3; i++) k[i] = i; int *ptr = k; int t = *++ptr; int s = *ptr++; return t + s;}'
-assert_print 'int printf(char*tmp, ...); int main() {printf(__func__); return foo();} int foo() {return printf(__func__); }'
+assert_print 'int foo(); int printf(char*tmp, ...); int main() {printf(__func__); return foo();} int foo() {return printf(__func__); }'
 assert_print '#define HOGE "world!!!\n"
-int printf(char*tmp, ...); int main() {printf("hello" "c" "world!!!"); return foo();} int foo() {return printf("hello" HOGE); }'
+int foo();int printf(char*tmp, ...); int main() {printf("hello" "c" "world!!!"); return foo();} int foo() {return printf("hello" HOGE); }'
 assert 'struct HOGE {int x;}; int main() {struct HOGE {int x;}; return sizeof(struct HOGE);}'
 assert 'int foo; int main() {extern int foo; return foo;}'
 assert "int main() {return 'a' + '\n' + '\0';}"

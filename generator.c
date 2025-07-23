@@ -164,8 +164,8 @@ void call_built_in_func(Node *node)
 {
   if (node->token->len == 7 && !strncmp(node->token->str, "__asm__", 7))
   {
-    Node *asm_string = vector_pop(node->expr);
-    if (asm_string->kind != ND_NOP || vector_size(node->expr))
+    Node *asm_string = vector_pop(node->func.expr);
+    if (asm_string->kind != ND_NOP || vector_size(node->func.expr))
       unreachable();
     output_file("%.*s", (int)asm_string->token->len, asm_string->token->str);
     return;
@@ -178,13 +178,15 @@ void gen_global_var(Node *node)
   if (node->kind != ND_VAR)
     unreachable();
   // in order to support name mangling for static variables declared inside
-  // functions we should use node->var->name
-  if (!(node->var->storage_class_specifier & 1 << 2))
-    output_file("    .globl %.*s", (int)node->var->len, node->var->name);
-  output_file("    .type %.*s, @object", (int)node->var->len, node->var->name);
-  output_file("    .size %.*s, %lu", (int)node->var->len, node->var->name,
-              size_of(node->var->type));
-  output_file("%.*s:", (int)node->var->len, node->var->name);
+  // functions we should use node->variable.var->name
+  if (!(node->variable.var->storage_class_specifier & 1 << 2))
+    output_file("    .globl %.*s", (int)node->variable.var->len,
+                node->variable.var->name);
+  output_file("    .type %.*s, @object", (int)node->variable.var->len,
+              node->variable.var->name);
+  output_file("    .size %.*s, %lu", (int)node->variable.var->len,
+              node->variable.var->name, size_of(node->variable.var->type));
+  output_file("%.*s:", (int)node->variable.var->len, node->variable.var->name);
 }
 
 void gen(Node *node);
@@ -194,15 +196,15 @@ void gen_assign(Node *assigned, Node *node, size_t padding, Type *type)
 {
   if (node->kind == ND_INITIALIZER)
   {
-    for (size_t i = 0; i < vector_size(node->init_list); i++)
+    for (size_t i = 0; i < vector_size(node->initialize.init_list); i++)
     {
-      Node *child = vector_peek_at(node->init_list, i + 1);
+      Node *child = vector_peek_at(node->initialize.init_list, i + 1);
       gen_assign(assigned, child, padding + i * size_of(node->type->ptr_to),
                  child->type);
     }
     // Uninitialized array elements are padded with zeros
     size_t done_init =
-        vector_size(node->init_list) * size_of(node->type->ptr_to);
+        vector_size(node->initialize.init_list) * size_of(node->type->ptr_to);
     while (size_of(node->type) - done_init)
     {
       gen_lval(assigned);
@@ -236,11 +238,12 @@ void gen_lval(Node *node)
   switch (node->kind)
   {
     case ND_VAR:
-      if (node->var->is_local && !(node->var->storage_class_specifier & 1 << 1))
-        output_file("    lea rax, [rbp-%d]", (int)node->var->offset);
+      if (node->variable.var->is_local &&
+          !(node->variable.var->storage_class_specifier & 1 << 1))
+        output_file("    lea rax, [rbp-%d]", (int)node->variable.var->offset);
       else
-        output_file("    lea rax,  [rip+%.*s]", (int)node->var->len,
-                    node->var->name);
+        output_file("    lea rax,  [rip+%.*s]", (int)node->variable.var->len,
+                    node->variable.var->name);
       output_file("    push rax");
       break;
     case ND_DEREF: gen(node->lhs); break;
@@ -276,11 +279,12 @@ void gen(Node *node)
       output_debug2("FUNC CALL");
       output_debug("start calling %.*s", (int)node->token->len,
                    node->token->str);
-      for (size_t i =
-               (vector_size(node->expr) > 6 ? 6 : vector_size(node->expr));
+      for (size_t i = (vector_size(node->func.expr) > 6
+                           ? 6
+                           : vector_size(node->func.expr));
            i >= 1; i--)
       {
-        gen(vector_peek_at(node->expr, i));
+        gen(vector_peek_at(node->func.expr, i));
 
         switch (i)
         {
@@ -302,14 +306,15 @@ void gen(Node *node)
       output_file("    sub rsp, 8");
       output_file(".L_%d_aligned:", align_counter);
       size_t stack_args = 0;
-      if (vector_size(node->expr) > 6)
-        stack_args = vector_size(node->expr) - 6;
+      if (vector_size(node->func.expr) > 6)
+        stack_args = vector_size(node->func.expr) - 6;
       if (stack_args)
       {
         // output_file("    sub rsp, %lu", (stack_args + 1) / 2 * 2 * 8);
-        for (size_t i = 7; i <= vector_size(node->expr); i++)
+        for (size_t i = 7; i <= vector_size(node->func.expr); i++)
           // Equivalent to pushing node value to stack
-          gen(vector_peek_at(node->expr, vector_size(node->expr) - i + 7));
+          gen(vector_peek_at(node->func.expr,
+                             vector_size(node->func.expr) - i + 7));
       }
       output_file("    mov rax, 0");
       output_file("    call %.*s", (int)node->token->len, node->token->str);
@@ -331,7 +336,7 @@ void gen(Node *node)
 
     case ND_BLOCK:
       output_debug2("ND_BLOCK");
-      for (NDBlock *pointer = node->stmt; pointer; pointer = pointer->next)
+      for (NDBlock *pointer = node->func.stmt; pointer; pointer = pointer->next)
         gen(pointer->node);
       return;
 
@@ -340,19 +345,19 @@ void gen(Node *node)
     {
       output_debug2("ND_IF ND_ELIF");
       output_debug("start %s block", node->kind == ND_IF ? "if" : "elif");
-      gen(node->condition);
+      gen(node->control.condition);
       output_file("    pop rax");
       output_file("    cmp rax, 0");
       output_file("    je .L%s%s", node->kind == ND_IF ? "endif" : "elseif",
-                  node->name->name);
-      gen(node->true_code);
+                  node->control.label->name);
+      gen(node->control.true_code);
       if (node->kind == ND_ELIF)
       {
-        output_file("    jmp .Lendif%s", node->name->name);
-        output_file(".Lelseif%s:", node->name->name);
-        gen(node->false_code);
+        output_file("    jmp .Lendif%s", node->control.label->name);
+        output_file(".Lelseif%s:", node->control.label->name);
+        gen(node->control.false_code);
       }
-      output_file(".Lendif%s:", node->name->name);
+      output_file(".Lendif%s:", node->control.label->name);
       output_debug("end %s block", node->kind == ND_IF ? "if" : "elif");
     }
       return;
@@ -364,33 +369,35 @@ void gen(Node *node)
       const char *loop_name = node->kind == ND_WHILE ? "while" : "for";
       output_debug("start %s block", loop_name);
       if (node->kind == ND_FOR)
-        gen(node->init);
-      output_file(".Lbegin%s%.*s:", loop_name, (int)node->name->len,
-                  node->name->name);
-      gen(node->condition);
+        gen(node->control.init);
+      output_file(".Lbegin%s%.*s:", loop_name, (int)node->control.label->len,
+                  node->control.label->name);
+      gen(node->control.condition);
       output_file("    pop rax");
       output_file("    cmp rax, 0");
-      output_file("    je .Lend%s%.*s", loop_name, (int)node->name->len,
-                  node->name->name);
-      gen(node->true_code);
+      output_file("    je .Lend%s%.*s", loop_name,
+                  (int)node->control.label->len, node->control.label->name);
+      gen(node->control.true_code);
       if (node->kind == ND_FOR)
-        gen(node->update);
-      output_file("    jmp .Lbegin%s%.*s", loop_name, (int)node->name->len,
-                  node->name->name);
-      output_file(".Lend%s%s:", loop_name, node->name->name);
+        gen(node->control.update);
+      output_file("    jmp .Lbegin%s%.*s", loop_name,
+                  (int)node->control.label->len, node->control.label->name);
+      output_file(".Lend%s%s:", loop_name, node->control.label->name);
       output_debug("end %s block", loop_name);
     }
       return;
     case ND_DO:
       output_debug2("ND_DO");
-      output_file(".Lbegindo%.*s:", (int)node->name->len, node->name->name);
-      gen(node->true_code);
-      gen(node->condition);
+      output_file(".Lbegindo%.*s:", (int)node->control.label->len,
+                  node->control.label->name);
+      gen(node->control.true_code);
+      gen(node->control.condition);
       output_file("    pop rax");
       output_file("    cmp rax, 0");
-      output_file("    jne .Lbegindo%.*s", (int)node->name->len,
-                  node->name->name);
-      output_file(".Lenddo%.*s:", (int)node->name->len, node->name->name);
+      output_file("    jne .Lbegindo%.*s", (int)node->control.label->len,
+                  node->control.label->name);
+      output_file(".Lenddo%.*s:", (int)node->control.label->len,
+                  node->control.label->name);
       return;
     case ND_RETURN:
       output_debug2("ND_RETURN");
@@ -402,7 +409,7 @@ void gen(Node *node)
 
     case ND_NUM:
       output_debug2("ND_NUM");
-      output_file("    push %lld", node->val);
+      output_file("    push %lld", node->num_val);
       return;
 
     case ND_STRING:
@@ -469,12 +476,12 @@ void gen(Node *node)
       return;
     case ND_GOTO:
       output_debug2("ND_GOTO");
-      output_file("    jmp %s", node->label_name);
+      output_file("    jmp %s", node->jump.label_name);
       return;
     case ND_LABEL:
       output_debug2("ND_LABEL");
-      output_file("%s:", node->label_name);
-      gen(node->statement_child);
+      output_file("%s:", node->jump.label_name);
+      gen(node->jump.statement_child);
       return;
     case ND_PREINCREMENT:
     case ND_PREDECREMENT:
@@ -489,12 +496,12 @@ void gen(Node *node)
                   access_size_specifier(size_of(node->lhs->type)));
       if (node->kind == ND_POSTINCREMENT || node->kind == ND_POSTDECREMENT)
         output_file("    mov r11, r10");
-      if (node->val)
+      if (node->num_val)
       {
         if (node->kind == ND_PREINCREMENT || node->kind == ND_POSTINCREMENT)
-          output_file("    add r10, %lld", node->val);
+          output_file("    add r10, %lld", node->num_val);
         else
-          output_file("    sub r10, %lld", node->val);
+          output_file("    sub r10, %lld", node->num_val);
       }
       else
       {
@@ -521,23 +528,23 @@ void gen(Node *node)
     case ND_CASE:
     {
       output_debug2("ND_CASE");
-      output_file(".Lswitch%.*s_%lu:", (int)node->switch_name->len,
-                  node->switch_name->name, node->case_num);
-      gen(node->statement_child);
+      output_file(".Lswitch%.*s_%lu:", (int)node->jump.switch_name->len,
+                  node->jump.switch_name->name, node->jump.case_num);
+      gen(node->jump.statement_child);
       return;
     }
     case ND_SWITCH:
     {
       output_debug2("ND_SWITCH");
-      gen(node->condition);
+      gen(node->control.condition);
       output_file("    pop rdi");
-      GTLabel *switch_label = node->name;
-      for (size_t i = 1; i <= vector_size(node->case_list); i++)
+      GTLabel *switch_label = node->control.label;
+      for (size_t i = 1; i <= vector_size(node->control.case_list); i++)
       {
-        Node *case_child = vector_peek_at(node->case_list, i);
-        if (case_child->is_case)
+        Node *case_child = vector_peek_at(node->control.case_list, i);
+        if (case_child->jump.is_case)
         {
-          output_file("    cmp rdi, %ld", case_child->constant_expression);
+          output_file("    cmp rdi, %ld", case_child->jump.constant_expression);
           output_file("    je .Lswitch%.*s_%lu", (int)switch_label->len,
                       switch_label->name, i - 1);
         }
@@ -545,7 +552,7 @@ void gen(Node *node)
           output_file("    jmp .Lswitch%.*s_%lu", (int)switch_label->len,
                       switch_label->name, i - 1);
       }
-      gen(node->true_code);
+      gen(node->control.true_code);
       output_file(".Lendswitch%.*s:", (int)switch_label->len,
                   switch_label->name);
     }
@@ -556,12 +563,12 @@ void gen(Node *node)
       gen(node->lhs);
       output_file("    pop rax");
       output_file("    cmp rax, 0");
-      output_file("    je .Lfalseternary%s", node->name->name);
-      gen(node->chs);
-      output_file("    jmp .Lendternary%s", node->name->name);
-      output_file(".Lfalseternary%s:", node->name->name);
+      output_file("    je .Lfalseternary%s", node->control.label->name);
+      gen(node->control.ternary_child);
+      output_file("    jmp .Lendternary%s", node->control.label->name);
+      output_file(".Lfalseternary%s:", node->control.label->name);
       gen(node->rhs);
-      output_file(".Lendternary%s:", node->name->name);
+      output_file(".Lendternary%s:", node->control.label->name);
     }
       return;
     case ND_LOGICAL_AND:
@@ -574,18 +581,18 @@ void gen(Node *node)
       output_file("    %s .Lfalselogical%s%s",
                   node->kind == ND_LOGICAL_AND ? "je" : "jne",
                   node->kind == ND_LOGICAL_AND ? "and" : "or",
-                  node->name->name);
+                  node->control.label->name);
       gen(node->rhs);
       output_file("    jmp .Lendlogical%s%s",
                   node->kind == ND_LOGICAL_AND ? "and" : "or",
-                  node->name->name);
+                  node->control.label->name);
       output_file(
           ".Lfalselogical%s%s:", node->kind == ND_LOGICAL_AND ? "and" : "or",
-          node->name->name);
+          node->control.label->name);
       output_file("    push rax");
       output_file(
           ".Lendlogical%s%s:", node->kind == ND_LOGICAL_AND ? "and" : "or",
-          node->name->name);
+          node->control.label->name);
     }
       return;
     case ND_INCLUSIVE_OR:
@@ -702,7 +709,7 @@ void generator(FuncBlock *parsed, char *output_filename)
     if (node->kind == ND_FUNCDEF)
     {
       output_file("\n    .text\n");
-      if (!(node->storage_class_specifier & 1 << 2))
+      if (!(node->func.storage_class_specifier & 1 << 2))
         output_file("    .global %.*s", (int)node->token->len,
                     node->token->str);
       output_file("    .type   %.*s, @function", (int)node->token->len,
@@ -712,47 +719,47 @@ void generator(FuncBlock *parsed, char *output_filename)
       output_file("    mov rbp, rsp");
       output_file("    sub rsp, %lu", pointer->stacksize);
       int j = 0;
-      for (size_t i = 1; i <= vector_size(node->expr); i++)
+      for (size_t i = 1; i <= vector_size(node->func.expr); i++)
       {
-        Node *param = vector_peek_at(node->expr, i);
+        Node *param = vector_peek_at(node->func.expr, i);
         if (param->kind != ND_VAR)
           error_exit_with_guard("invalid function arguments");
         output_debug("argument: %lu", i);
         switch (++j)
         {
           case 1:
-            output_file("    mov [rbp-%lu], %s", param->var->offset,
+            output_file("    mov [rbp-%lu], %s", param->variable.var->offset,
                         chose_register(size_of(param->type), rdi));
             break;
           case 2:
-            output_file("    mov [rbp-%lu], %s", param->var->offset,
+            output_file("    mov [rbp-%lu], %s", param->variable.var->offset,
                         chose_register(size_of(param->type), rsi));
             break;
           case 3:
-            output_file("    mov [rbp-%lu], %s", param->var->offset,
+            output_file("    mov [rbp-%lu], %s", param->variable.var->offset,
                         chose_register(size_of(param->type), rdx));
             break;
           case 4:
-            output_file("    mov [rbp-%lu], %s", param->var->offset,
+            output_file("    mov [rbp-%lu], %s", param->variable.var->offset,
                         chose_register(size_of(param->type), rcx));
             break;
           case 5:
-            output_file("    mov [rbp-%lu], %s", param->var->offset,
+            output_file("    mov [rbp-%lu], %s", param->variable.var->offset,
                         chose_register(size_of(param->type), r8));
             break;
           case 6:
-            output_file("    mov [rbp-%lu], %s", param->var->offset,
+            output_file("    mov [rbp-%lu], %s", param->variable.var->offset,
                         chose_register(size_of(param->type), r9));
             break;
           default:
             output_file("    mov rax, [rbp+%lu]", 8 + 8 * (i - 6));
-            output_file("    mov [rbp-%lu], %s", param->var->offset,
+            output_file("    mov [rbp-%lu], %s", param->variable.var->offset,
                         chose_register(size_of(param->type), rax));
             break;
         }
       }
 
-      for (NDBlock *pointer = node->stmt; pointer; pointer = pointer->next)
+      for (NDBlock *pointer = node->func.stmt; pointer; pointer = pointer->next)
         gen(pointer->node);
       output_file("    pop rax");
       output_file("    leave");
@@ -763,11 +770,11 @@ void generator(FuncBlock *parsed, char *output_filename)
       call_built_in_func(node);
     else if (node->kind == ND_VAR)
     {
-      if (node->var->storage_class_specifier & 1 << 1)
+      if (node->variable.var->storage_class_specifier & 1 << 1)
         continue;
       output_file("\n    .section    .bss");
       gen_global_var(node);
-      output_file("    .zero %lu\n", size_of(node->var->type));
+      output_file("    .zero %lu\n", size_of(node->variable.var->type));
     }
     else if (node->kind == ND_ASSIGN && node->lhs->kind == ND_VAR)
     {
@@ -778,16 +785,16 @@ void generator(FuncBlock *parsed, char *output_filename)
         case ND_NUM:
           switch (size_of(node->lhs->type))
           {
-            case 1: output_file("    .byte %lld", node->rhs->val); break;
-            case 2: output_file("    .word %lld", node->rhs->val); break;
-            case 4: output_file("    .long %lld", node->rhs->val); break;
-            case 8: output_file("    .quad %lld", node->rhs->val); break;
+            case 1: output_file("    .byte %lld", node->rhs->num_val); break;
+            case 2: output_file("    .word %lld", node->rhs->num_val); break;
+            case 4: output_file("    .long %lld", node->rhs->num_val); break;
+            case 8: output_file("    .quad %lld", node->rhs->num_val); break;
             default: unreachable();
           }
           break;
         case ND_ADDR:
-          output_file("    .quad %.*s", (int)node->rhs->lhs->var->len,
-                      node->rhs->lhs->var->name);
+          output_file("    .quad %.*s", (int)node->rhs->lhs->variable.var->len,
+                      node->rhs->lhs->variable.var->name);
           break;
         case ND_STRING:
           output_file("    .quad %s", node->rhs->literal_name);

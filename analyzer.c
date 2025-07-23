@@ -184,7 +184,7 @@ void add_type_for_assignment(Node *node)
 
   // T* = 0
   if (is_pointer_type(lhs_type) && rhs_type->type == TYPE_INT &&
-      node->rhs->kind == ND_NUM && node->rhs->val == 0)
+      node->rhs->kind == ND_NUM && node->rhs->num_val == 0)
   {
     node->type = lhs_type;
     return;
@@ -211,7 +211,8 @@ bool check_initializer_type(Type *type, Node *init_list, bool is_root)
   if (init_list->kind == ND_INITIALIZER)
   {
     init_list->type = type;
-    const size_t initializer_size = vector_size(init_list->init_list);
+    const size_t initializer_size =
+        vector_size(init_list->initialize.init_list);
     if (type->type != TYPE_ARRAY)
       error_at(init_list->token->str, init_list->token->len,
                "array initializer requires an array type");
@@ -227,9 +228,9 @@ bool check_initializer_type(Type *type, Node *init_list, bool is_root)
       error_at(init_list->token->str, init_list->token->len,
                "array size is not specified");
 
-    for (size_t i = 1; i <= vector_size(init_list->init_list); i++)
+    for (size_t i = 1; i <= vector_size(init_list->initialize.init_list); i++)
     {
-      Node *child = vector_peek_at(init_list->init_list, i);
+      Node *child = vector_peek_at(init_list->initialize.init_list, i);
       if (!(check_initializer_type(type->ptr_to, child, false)))
         return false;
     }
@@ -363,7 +364,7 @@ void add_type_internal(Node *node)
                  "Operand must be integer or pointer for inc/dec.");
       node->type = node->lhs->type;
       if (node->lhs->type->ptr_to)
-        node->val = size_of(node->lhs->type->ptr_to);
+        node->num_val = size_of(node->lhs->type->ptr_to);
       return;
     case ND_FUNCDEF: node->type = alloc_type(TYPE_VOID); return;
     case ND_FUNCCALL:
@@ -376,7 +377,7 @@ void add_type_internal(Node *node)
         bool is_variadic = last_param->type == TYPE_VARIABLES;
 
         size_t num_declared_params = vector_size(node->type->param_list) - 1;
-        size_t num_args = vector_size(node->expr);
+        size_t num_args = vector_size(node->func.expr);
 
         if (is_variadic)
         {
@@ -400,7 +401,7 @@ void add_type_internal(Node *node)
 
         for (size_t i = 1; i <= fixed_param_count; i++)
         {
-          Node *arg_node = vector_peek_at(node->expr, i);
+          Node *arg_node = vector_peek_at(node->func.expr, i);
           Node *param_node = calloc(1, sizeof(Node));
           param_node->type = vector_peek_at(node->type->param_list, i + 1);
 
@@ -409,7 +410,7 @@ void add_type_internal(Node *node)
           add_type_for_assignment(assign_node);
 
           if (assign_node->rhs != arg_node)
-            vector_replace_at(node->expr, i, assign_node->rhs);
+            vector_replace_at(node->func.expr, i, assign_node->rhs);
 
           free(param_node);
           free(assign_node);
@@ -435,7 +436,7 @@ void add_type_internal(Node *node)
     case ND_DO: node->type = alloc_type(TYPE_VOID); return;
     case ND_TERNARY:
     {
-      Type *lhs_type = node->chs->type;
+      Type *lhs_type = node->control.ternary_child->type;
       Type *rhs_type = node->rhs->type;
 
       if (is_equal_type(lhs_type, rhs_type))
@@ -502,7 +503,7 @@ void add_type_internal(Node *node)
       node->lhs = node->rhs->lhs;
       add_type_internal(node);
       return;
-    case ND_VAR: node->type = node->var->type; return;
+    case ND_VAR: node->type = node->variable.var->type; return;
     case ND_ARRAY:
       if (node->lhs->type->type != TYPE_ARRAY &&
           node->lhs->type->type != TYPE_PTR)
@@ -512,8 +513,8 @@ void add_type_internal(Node *node)
       node->kind = ND_DEREF;
       node->lhs = new_node(ND_ADD, node->lhs, node->rhs, node->token);
       node->rhs = NULL;
-      if (node->is_top) // add_type internal should call only one time
-        add_type(node);
+      if (node->variable.is_array_top)
+        add_type(node);  // add_type internal should call only one time
       return;
     case ND_DOT:
     case ND_ARROW:
@@ -541,21 +542,23 @@ void add_type_internal(Node *node)
     case ND_CASE:
     {
       size_t num;
-      node->switch_name = switch_add(node, &num);
-      node->case_num = num;
+      node->jump.switch_name = switch_add(node, &num);
+      node->jump.case_num = num;
       node->type = alloc_type(TYPE_VOID);
       return;
     }
     case ND_COMMA: node->type = node->rhs->type; return;
     case ND_INITIALIZER:
-      if (node->is_top)
+      if (node->initialize.is_top_initializer)
       {  // check if the assigned types are correct
-        node->type = node->assigned->type;
-        if (node->assigned->kind != ND_VAR &&
-            node->assigned->type->type == TYPE_ARRAY)
-          error_at(node->assigned->token->str, node->assigned->token->len,
+        node->type = node->initialize.assigned->type;
+        if (node->initialize.assigned->kind != ND_VAR &&
+            node->initialize.assigned->type->type == TYPE_ARRAY)
+          error_at(node->initialize.assigned->token->str,
+                   node->initialize.assigned->token->len,
                    "invalid initializer");
-        if (!(check_initializer_type(node->assigned->type, node, true)))
+        if (!(check_initializer_type(node->initialize.assigned->type, node,
+                                     true)))
           error_at(node->token->str, node->token->len, "invalid initializer");
       }
       break;
@@ -569,34 +572,33 @@ void add_type(Node *node)
   if (!node)
     return;
   if (node->kind == ND_SWITCH)
-    node->case_list = switch_new(node->name);
+    node->control.case_list = switch_new(node->control.label);
   if (node->lhs)
     add_type(node->lhs);
-  if (node->chs)
-    add_type(node->chs);
   if (node->rhs)
     add_type(node->rhs);
-  if (node->condition)
-    add_type(node->condition);
-  if (node->true_code)
-    add_type(node->true_code);
-  if (node->false_code)
-    add_type(node->false_code);
-  if (node->init)
-    add_type(node->init);
-  if (node->update)
-    add_type(node->update);
-  if (node->statement_child)
-    add_type(node->statement_child);
-  if (node->expr)
-    for (size_t i = 1; i <= vector_size(node->expr); i++)
-      add_type(vector_peek_at(node->expr, i));
-  if (node->stmt)
-    for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
+  if (node->kind == ND_TERNARY)
+    add_type(node->control.ternary_child);
+  if (node->kind == ND_IF || node->kind == ND_ELIF || node->kind == ND_FOR ||
+      node->kind == ND_WHILE || node->kind == ND_DO || node->kind == ND_SWITCH)
+  {
+    add_type(node->control.condition);
+    add_type(node->control.true_code);
+    add_type(node->control.false_code);
+    add_type(node->control.init);
+    add_type(node->control.update);
+  }
+  if (node->kind == ND_LABEL || node->kind == ND_CASE)
+    add_type(node->jump.statement_child);
+  if (node->kind == ND_FUNCCALL || node->kind == ND_FUNCDEF)
+    for (size_t i = 1; i <= vector_size(node->func.expr); i++)
+      add_type(vector_peek_at(node->func.expr, i));
+  if (node->kind == ND_BLOCK || node->kind == ND_FUNCDEF)
+    for (NDBlock *tmp = node->func.stmt; tmp; tmp = tmp->next)
       add_type(tmp->node);
-  if (node->init_list)
-    for (size_t i = 1; i <= vector_size(node->init_list); i++)
-      add_type(vector_peek_at(node->init_list, i));
+  if (node->kind == ND_INITIALIZER)
+    for (size_t i = 1; i <= vector_size(node->initialize.init_list); i++)
+      add_type(vector_peek_at(node->initialize.init_list, i));
   if (node->kind == ND_SWITCH)
     switch_end();
 
@@ -611,30 +613,27 @@ Node *analyze_type(Node *node)
     node->lhs = analyze_type(node->lhs);
   if (node->rhs)
     node->rhs = analyze_type(node->rhs);
-  if (node->chs)
-    node->chs = analyze_type(node->chs);
-  if (node->init)
-    node->init = analyze_type(node->init);
-  if (node->condition)
-    node->condition = analyze_type(node->condition);
-  if (node->true_code)
-    node->true_code = analyze_type(node->true_code);
-  if (node->false_code)
-    node->false_code = analyze_type(node->false_code);
-  if (node->init)
-    node->init = analyze_type(node->init);
-  if (node->update)
-    node->update = analyze_type(node->update);
-  if (node->statement_child)
-    node->statement_child = analyze_type(node->statement_child);
-  if (node->expr)
-    for (size_t i = 1; i <= vector_size(node->expr); i++)
-      vector_replace_at(node->expr, i,
-                        analyze_type(vector_peek_at(node->expr, i)));
-  if (node->stmt)
-  {  // When ND_BLOCK
+  if (node->kind == ND_TERNARY)
+    node->control.ternary_child = analyze_type(node->control.ternary_child);
+  if (node->kind == ND_IF || node->kind == ND_ELIF || node->kind == ND_FOR ||
+      node->kind == ND_WHILE || node->kind == ND_DO)
+  {
+    node->control.condition = analyze_type(node->control.condition);
+    node->control.true_code = analyze_type(node->control.true_code);
+    node->control.false_code = analyze_type(node->control.false_code);
+    node->control.init = analyze_type(node->control.init);
+    node->control.update = analyze_type(node->control.update);
+  }
+  if (node->kind == ND_LABEL || node->kind == ND_CASE)
+    node->jump.statement_child = analyze_type(node->jump.statement_child);
+  if (node->kind == ND_FUNCCALL || node->kind == ND_FUNCDEF)
+    for (size_t i = 1; i <= vector_size(node->func.expr); i++)
+      vector_replace_at(node->func.expr, i,
+                        analyze_type(vector_peek_at(node->func.expr, i)));
+  if (node->kind == ND_BLOCK)
+  {
     offset_enter_nest();
-    for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
+    for (NDBlock *tmp = node->func.stmt; tmp; tmp = tmp->next)
       tmp->node = analyze_type(tmp->node);
     offset_exit_nest();
   }
@@ -651,17 +650,18 @@ Node *analyze_type(Node *node)
       break;
     case ND_SIZEOF:
       node->kind = ND_NUM;
-      node->val = size_of(node->lhs->type);
+      node->num_val = size_of(node->lhs->type);
       break;
     case ND_VAR:
-      if (node->var->is_local &&
-          !(node->var->storage_class_specifier & 1 << 1) && node->is_new)
-        node->var->offset = calculate_offset(size_of(node->type));
+      if (node->variable.var->is_local &&
+          !(node->variable.var->storage_class_specifier & 1 << 1) &&
+          node->variable.is_new_var)
+        node->variable.var->offset = calculate_offset(size_of(node->type));
       break;
     case ND_NUM:
       if (node->type->type == TYPE_PTR || node->type->type == TYPE_ARRAY)
       {
-        node->val = node->val * size_of(node->type->ptr_to);
+        node->num_val = node->num_val * size_of(node->type->ptr_to);
       }
       break;
     case ND_STRING:
@@ -684,14 +684,14 @@ FuncBlock *analyzer(FuncBlock *funcblock)
       continue;
     if (node->kind == ND_FUNCDEF)
     {
-      for (size_t i = 1; i <= vector_size(node->expr); i++)
-        add_type(vector_peek_at(node->expr, i));
-      for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
+      for (size_t i = 1; i <= vector_size(node->func.expr); i++)
+        add_type(vector_peek_at(node->func.expr, i));
+      for (NDBlock *tmp = node->func.stmt; tmp; tmp = tmp->next)
         add_type(tmp->node);
     }
     else if (node->kind == ND_VAR)
     {
-      if (node->var->is_local)
+      if (node->variable.var->is_local)
         error_exit("Failed to parse correctly.");
       add_type(node);
     }
@@ -712,10 +712,10 @@ FuncBlock *analyzer(FuncBlock *funcblock)
     if (node->kind == ND_FUNCDEF)
     {
       init_nest();
-      for (size_t i = 1; i <= vector_size(node->expr); i++)
-        vector_replace_at(node->expr, i,
-                          analyze_type(vector_peek_at(node->expr, i)));
-      for (NDBlock *tmp = node->stmt; tmp; tmp = tmp->next)
+      for (size_t i = 1; i <= vector_size(node->func.expr); i++)
+        vector_replace_at(node->func.expr, i,
+                          analyze_type(vector_peek_at(node->func.expr, i)));
+      for (NDBlock *tmp = node->func.stmt; tmp; tmp = tmp->next)
         tmp->node = analyze_type(tmp->node);
       // Align stacksize to 8-byte units
       size_t max_stacksize = get_max_offset();
@@ -745,7 +745,7 @@ FuncBlock *analyzer(FuncBlock *funcblock)
               error_at(node->rhs->lhs->token->str, node->rhs->lhs->token->len,
                        "invalid global variable initializer");
             node->rhs = node->rhs->lhs;
-            node->rhs->val = node->rhs->val ? 1 : 0;
+            node->rhs->num_val = node->rhs->num_val ? 1 : 0;
             break;
           default:
             error_at(node->rhs->token->str, node->rhs->token->len,

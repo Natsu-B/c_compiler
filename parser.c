@@ -191,7 +191,7 @@ Node *new_node_num(long long val)
 {
   Node *node = calloc(1, sizeof(Node));
   node->kind = ND_NUM;
-  node->val = val;
+  node->num_val = val;
   return node;
 }
 
@@ -302,11 +302,11 @@ Node *declaration(Type *type, bool is_external_declaration,
       error_at(node->token->str, node->token->len,
                "invalid function definition");
     new_nest();
-    for (size_t i = 1; i <= vector_size(node->expr); i++)
+    for (size_t i = 1; i <= vector_size(node->func.expr); i++)
     {
-      Node *param = vector_peek_at(node->expr, i);
-      param->var = add_variables(param->token, param->type, 0);
-      param->is_new = true;
+      Node *param = vector_peek_at(node->func.expr, i);
+      param->variable.var = add_variables(param->token, param->type, 0);
+      param->variable.is_new_var = true;
     }
     NDBlock head;
     head.next = NULL;
@@ -319,7 +319,8 @@ Node *declaration(Type *type, bool is_external_declaration,
       next->node = block_item();
       pointer = next;
     }
-    node->stmt = head.next;
+    node->func.stmt = head.next;
+    node->func.storage_class_specifier = storage_class_specifier;
     exit_nest();
     return node;
   }
@@ -384,9 +385,9 @@ Node *declarator_internal(Type **type, Token *token,
     Type *new = alloc_type(TYPE_FUNC);
     new->param_list = vector_new();
     node->type = new;
-    node->expr =
+    node->func.expr =
         parameter_type_list(&new->param_list, *type, storage_class_specifier);
-    node->storage_class_specifier = storage_class_specifier;
+    node->func.storage_class_specifier = storage_class_specifier;
     if (!add_function_name(new->param_list, token, storage_class_specifier,
                            false))
       error_at(token->str, token->len, "invalid name");
@@ -422,9 +423,9 @@ Node *declarator(Type *type, uint8_t storage_class_specifier)
     Var *var = add_variables(token, type, storage_class_specifier);
     if (!var)
       return new_node(ND_NOP, NULL, NULL, NULL);
-    node->var = var;
+    node->variable.var = var;
     if (type)
-      node->is_new = true;
+      node->variable.is_new_var = true;
   }
   return node;
 }
@@ -529,17 +530,17 @@ Node *initializer(Node *assigned)
   {
     Node *node = calloc(1, sizeof(Node));
     node->kind = ND_INITIALIZER;
-    node->init_list = vector_new();
-    node->is_top = true;
-    node->assigned = assigned;
+    node->initialize.init_list = vector_new();
+    node->initialize.is_top_initializer = true;
+    node->initialize.assigned = assigned;
     node->token = get_old_token();
 
     while (!consume("}", TK_RESERVED))
     {
       Node *list = initializer(node);
       if (list->kind == ND_INITIALIZER)
-        list->is_top = false;
-      vector_push(node->init_list, list);
+        list->initialize.is_top_initializer = false;
+      vector_push(node->initialize.init_list, list);
       if (!consume(",", TK_RESERVED) && !peek("}", TK_RESERVED))
         error_at(get_token()->str, get_token()->len, "invalid initializer");
     }
@@ -565,13 +566,13 @@ Node *labeled_statement()
     node = new_node(ND_CASE, NULL, NULL, get_old_token());
     if (get_old_token()->len == 4)  // case
     {
-      node->is_case = true;
-      node->constant_expression = eval_constant_expression();
+      node->jump.is_case = true;
+      node->jump.constant_expression = eval_constant_expression();
     }
     else
-      node->is_case = false;
+      node->jump.is_case = false;
     expect(":", TK_RESERVED);
-    node->statement_child = statement();
+    node->jump.statement_child = statement();
     return node;
   }
   Token *token_ident = consume_token_if_next_matches(TK_IDENT, ':');
@@ -579,8 +580,8 @@ Node *labeled_statement()
   {
     expect(":", TK_RESERVED);
     node = new_node(ND_LABEL, NULL, NULL, token_ident);
-    node->label_name = mangle_goto_label(token_ident);
-    node->statement_child = statement();
+    node->jump.label_name = mangle_goto_label(token_ident);
+    node->jump.statement_child = statement();
     return node;
   }
   return node;
@@ -611,7 +612,7 @@ Node *statement()
       pointer = next;
     }
     exit_nest();
-    node->stmt = head.next;
+    node->func.stmt = head.next;
     return node;
   }
 
@@ -621,15 +622,15 @@ Node *statement()
   {
     Node *node = calloc(1, sizeof(Node));
     new_nest();
-    node->name = generate_label_name(ND_IF);
+    node->control.label = generate_label_name(ND_IF);
     expect("(", TK_RESERVED);
-    node->condition = expression();
+    node->control.condition = expression();
     expect(")", TK_RESERVED);
-    node->true_code = statement();
+    node->control.true_code = statement();
     if (consume("else", TK_IDENT))
     {
       node->kind = ND_ELIF;
-      node->false_code = statement();
+      node->control.false_code = statement();
     }
     else
     {
@@ -644,10 +645,10 @@ Node *statement()
     node->kind = ND_SWITCH;
     new_nest();
     expect("(", TK_RESERVED);
-    node->name = generate_label_name(ND_SWITCH);
-    node->condition = expression();
+    node->control.label = generate_label_name(ND_SWITCH);
+    node->control.condition = expression();
     expect(")", TK_RESERVED);
-    node->true_code = statement();
+    node->control.true_code = statement();
     exit_nest();
     return node;
   }
@@ -659,11 +660,11 @@ Node *statement()
     Node *node = calloc(1, sizeof(Node));
     node->kind = ND_WHILE;
     new_nest();
-    node->name = generate_label_name(ND_WHILE);
+    node->control.label = generate_label_name(ND_WHILE);
     expect("(", TK_RESERVED);
-    node->condition = expression();
+    node->control.condition = expression();
     expect(")", TK_RESERVED);
-    node->true_code = statement();
+    node->control.true_code = statement();
     exit_nest();
     return node;
   }
@@ -672,12 +673,12 @@ Node *statement()
   {
     new_nest();
     Node *node = calloc(1, sizeof(Node));
-    node->name = generate_label_name(ND_DO);
-    node->true_code = statement();
+    node->control.label = generate_label_name(ND_DO);
+    node->control.true_code = statement();
     node->kind = ND_DO;
     expect("while", TK_IDENT);
     expect("(", TK_RESERVED);
-    node->condition = expression();
+    node->control.condition = expression();
     expect(")", TK_RESERVED);
     expect(";", TK_RESERVED);
     exit_nest();
@@ -689,35 +690,35 @@ Node *statement()
     Node *node = calloc(1, sizeof(Node));
     node->kind = ND_FOR;
     new_nest();
-    node->name = generate_label_name(ND_FOR);
+    node->control.label = generate_label_name(ND_FOR);
     expect("(", TK_RESERVED);
     // Whether it is a declaration
     uint8_t storage_class_specifier = 0;
     Type *type = declaration_specifiers(&storage_class_specifier);
     if (type)
-      node->init = declaration(type, false, storage_class_specifier);
+      node->control.init = declaration(type, false, storage_class_specifier);
     else if (!consume(";", TK_RESERVED))
     {
       Node *new = calloc(1, sizeof(Node));
-      node->init = new;
+      node->control.init = new;
       new->kind = ND_DISCARD_EXPR;
       new->lhs = expression();
       expect(";", TK_RESERVED);
     }
     if (!consume(";", TK_RESERVED))
     {
-      node->condition = expression();
+      node->control.condition = expression();
       expect(";", TK_RESERVED);
     }
     if (!consume(")", TK_RESERVED))
     {
       Node *new = calloc(1, sizeof(Node));
-      node->update = new;
+      node->control.update = new;
       new->kind = ND_DISCARD_EXPR;
       new->lhs = expression();
       expect(")", TK_RESERVED);
     }
-    node->true_code = statement();
+    node->control.true_code = statement();
     exit_nest();
     return node;
   }
@@ -730,17 +731,17 @@ Node *statement()
   else if (consume("continue", TK_IDENT))
   {
     node = new_node(ND_GOTO, NULL, NULL, get_old_token());
-    node->label_name = find_jmp_target(1);
+    node->jump.label_name = find_jmp_target(1);
   }
   else if (consume("break", TK_IDENT))
   {
     node = new_node(ND_GOTO, NULL, NULL, get_old_token());
-    node->label_name = find_jmp_target(2);
+    node->jump.label_name = find_jmp_target(2);
   }
   else if (consume("goto", TK_IDENT))
   {
     node = new_node(ND_GOTO, NULL, NULL, get_old_token());
-    node->label_name = mangle_goto_label(expect_ident());
+    node->jump.label_name = mangle_goto_label(expect_ident());
   }
   else
     node = new_node(ND_DISCARD_EXPR, expression(), NULL, get_token());
@@ -824,8 +825,8 @@ Node *conditional_expression()
     Node *chs = expression();
     expect(":", TK_RESERVED);
     node = new_node(ND_TERNARY, node, expression(), old);
-    node->name = generate_label_name(ND_TERNARY);
-    node->chs = chs;
+    node->control.label = generate_label_name(ND_TERNARY);
+    node->control.ternary_child = chs;
   }
   return node;
 }
@@ -837,7 +838,7 @@ Node *logical_OR_expression()
   {
     Token *old = get_old_token();
     node = new_node(ND_LOGICAL_OR, node, logical_AND_expression(), old);
-    node->name = generate_label_name(ND_LOGICAL_OR);
+    node->control.label = generate_label_name(ND_LOGICAL_OR);
   }
   return node;
 }
@@ -849,7 +850,7 @@ Node *logical_AND_expression()
   {
     Token *old = get_old_token();
     node = new_node(ND_LOGICAL_AND, node, equality_expression(), old);
-    node->name = generate_label_name(ND_LOGICAL_AND);
+    node->control.label = generate_label_name(ND_LOGICAL_AND);
   }
   return node;
 }
@@ -1055,9 +1056,9 @@ Node *postfix_expression()
     if (consume("[", TK_RESERVED))
     {
       node = new_node(ND_ARRAY, node, expression(), old_token);
-      node->is_top = true;
+      node->variable.is_array_top = true;
       if (node->lhs->kind == ND_ARRAY)
-        node->lhs->is_top = false;
+        node->lhs->variable.is_array_top = false;
       expect("]", TK_RESERVED);
     }
     else if (consume(".", TK_RESERVED))
@@ -1116,13 +1117,13 @@ Node *primary_expression()
       expect("(", TK_RESERVED);
       node->token = token;
       node->kind = ND_FUNCCALL;
-      node->expr = vector_new();
+      node->func.expr = vector_new();
       while (!consume(")", TK_RESERVED))
       {
         Node *child_node = assignment_expression();
         if (!child_node)
           error_exit("invalid node");
-        vector_push(node->expr, child_node);
+        vector_push(node->func.expr, child_node);
         if (!consume(",", TK_RESERVED))
         {
           expect(")", TK_RESERVED);
@@ -1149,8 +1150,8 @@ Node *primary_expression()
         Node *node = calloc(1, sizeof(Node));
         node->token = token;
         node->kind = ND_VAR;
-        node->is_new = false;
-        node->var = var;
+        node->variable.is_new_var = false;
+        node->variable.var = var;
         return node;
       }
       default:
@@ -1189,20 +1190,20 @@ Node *primary_expression()
     {
       switch (char_token->str[1])
       {
-        case 'n': node->val = '\n'; break;
-        case 't': node->val = '\t'; break;
-        case '\\': node->val = '\\'; break;
-        case '\'': node->val = '\''; break;
-        case '"': node->val = '\"'; break;
-        case '0': node->val = '\0'; break;
-        case 'e': node->val = '\e'; break;
+        case 'n': node->num_val = '\n'; break;
+        case 't': node->num_val = '\t'; break;
+        case '\\': node->num_val = '\\'; break;
+        case '\'': node->num_val = '\''; break;
+        case '"': node->num_val = '"'; break;
+        case '0': node->num_val = '\0'; break;
+        case 'e': node->num_val = '\e'; break;
         default:
           error_at(node->token->str, node->token->len,
                    "unknown control character found");
       }
     }
     else
-      node->val = char_token->str[0];
+      node->num_val = char_token->str[0];
     return node;
   }
   long long num;

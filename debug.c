@@ -54,8 +54,8 @@ void print_tokenize_result(Token *token)
   {
     if (token->kind == TK_EOF)
       break;
-    fprintf(stdout, "%.*s\t: %s\n", (int)token->len, token->str,
-            tokenkindlist[token->kind]);
+    printf("%.*s\t: %s\n", (int)token->len, token->str,
+           tokenkindlist[token->kind]);
     token = token->next;
   }
 }
@@ -63,7 +63,7 @@ void print_tokenize_result(Token *token)
 void make_space(int nest)
 {
   for (int i = 0; i < nest; i++)
-    fprintf(stdout, "|   ");
+    printf("|   ");
 }
 
 void _print_parse_result(Node *node, int nest);
@@ -72,57 +72,53 @@ void print_type(Type *type)
 {
   if (!type)
   {
-    fprintf(stdout, "(null type)");
+    printf("(null type)");
     return;
   }
 
   switch (type->type)
   {
-    case TYPE_INT: fprintf(stdout, "int(signed:%d)", type->is_signed); break;
-    case TYPE_BOOL: fprintf(stdout, "bool"); break;
-    case TYPE_CHAR: fprintf(stdout, "char(signed:%d)", type->is_signed); break;
-    case TYPE_LONG: fprintf(stdout, "long(signed:%d)", type->is_signed); break;
-    case TYPE_LONGLONG:
-      fprintf(stdout, "long long(signed:%d)", type->is_signed);
-      break;
-    case TYPE_SHORT:
-      fprintf(stdout, "short(signed:%d)", type->is_signed);
-      break;
-    case TYPE_VOID: fprintf(stdout, "void"); break;
-    case TYPE_STR: fprintf(stdout, "char*"); break;
+    case TYPE_INT: printf("int(signed:%d)", type->is_signed); break;
+    case TYPE_BOOL: printf("bool"); break;
+    case TYPE_CHAR: printf("char(signed:%d)", type->is_signed); break;
+    case TYPE_LONG: printf("long(signed:%d)", type->is_signed); break;
+    case TYPE_LONGLONG: printf("long long(signed:%d)", type->is_signed); break;
+    case TYPE_SHORT: printf("short(signed:%d)", type->is_signed); break;
+    case TYPE_VOID: printf("void"); break;
+    case TYPE_STR: printf("char*"); break;
     case TYPE_STRUCT:
     {
       tag_list *tag = vector_peek_at(get_enum_struct_list(), type->type_num);
-      fprintf(stdout, "struct %.*s", (int)tag->name->len, tag->name->str);
+      printf("struct %.*s", (int)tag->name->len, tag->name->str);
       break;
     }
     case TYPE_ENUM:
     {
       tag_list *tag = vector_peek_at(get_enum_struct_list(), type->type_num);
-      fprintf(stdout, "enum %.*s", (int)tag->name->len, tag->name->str);
+      printf("enum %.*s", (int)tag->name->len, tag->name->str);
       break;
     }
     case TYPE_PTR:
       print_type(type->ptr_to);
-      fprintf(stdout, "*");
+      printf("*");
       break;
     case TYPE_ARRAY:
-      fprintf(stdout, "[%zu]", type->size);
+      printf("[%zu]", type->size);
       print_type(type->ptr_to);
       break;
     case TYPE_FUNC:
-      fprintf(stdout, "func(");
+      printf("func(");
       for (size_t i = 2; i <= vector_size(type->param_list); i++)
       {
         print_type(vector_peek_at(type->param_list, i));
         if (i + 1 <= vector_size(type->param_list))
-          fprintf(stdout, ",");
+          printf(",");
       }
-      fprintf(stdout, ") -> ");
+      printf(") -> ");
       print_type(vector_peek_at(type->param_list, 1));
       break;
-    case TYPE_VARIABLES: fprintf(stdout, "..."); break;
-    case TYPE_NULL: fprintf(stdout, "NULL"); break;
+    case TYPE_VARIABLES: printf("..."); break;
+    case TYPE_NULL: printf("NULL"); break;
     default: unreachable();
   }
 }
@@ -133,134 +129,197 @@ void _print_parse_result(Node *node, int nest)
     return;
 
   make_space(nest);
-  fprintf(stdout, "NodeKind: %s", nodekindlist[node->kind]);
+  printf("NodeKind: %s", nodekindlist[node->kind]);
 
   if (node->token)
   {
-    fprintf(stdout, " (%.*s)", (int)node->token->len, node->token->str);
-  }
-
-  // Print specific fields based on node kind
-  switch (node->kind)
-  {
-    case ND_NUM: fprintf(stdout, " | value: %lld", node->val); break;
-    case ND_VAR:
-      fprintf(stdout, " | offset: %zu | is_new: %d | is_local: %d",
-              node->var->offset, node->is_new, node->var->is_local);
-      break;
-    case ND_IF:
-    case ND_ELIF:
-    case ND_WHILE:
-    case ND_DO:
-    case ND_FOR:
-    case ND_SWITCH:
-    case ND_TERNARY:
-    case ND_LOGICAL_OR:
-    case ND_LOGICAL_AND:
-      if (node->name)
-        fprintf(stdout, " | label: %s", node->name->name);
-      break;
-    case ND_GOTO:
-    case ND_LABEL: fprintf(stdout, " | label: %s", node->label_name); break;
-    case ND_CASE:
-      fprintf(stdout, " | %s", node->is_case ? "case" : "default");
-      if (node->is_case)
-        fprintf(stdout, " %ld", node->constant_expression);
-      break;
-    case ND_FIELD: fprintf(stdout, " | offset: %lu", node->child_offset); break;
-    case ND_INITIALIZER: break;
-    case ND_FUNCDEF:
-      fprintf(stdout, " | storage: %u", node->storage_class_specifier);
-      break;
-    default: break;
+    printf(" (%.*s)", (int)node->token->len, node->token->str);
   }
 
   if (node->type)
   {
-    fprintf(stdout, " | type: ");
+    printf(" | type: ");
     print_type(node->type);
   }
 
-  fprintf(stdout, "\n");
-
-  if (node->init)
+  // Print specific fields and recurse based on node kind
+  switch (node->kind)
   {
-    make_space(nest);
-    fprintf(stdout, "|-init:\n");
-    _print_parse_result(node->init, nest + 1);
-  }
-  if (node->condition)
-  {
-    make_space(nest);
-    fprintf(stdout, "|-cond:\n");
-    _print_parse_result(node->condition, nest + 1);
-  }
-  if (node->lhs)
-  {
-    make_space(nest);
-    fprintf(stdout, "|-lhs:\n");
-    _print_parse_result(node->lhs, nest + 1);
-  }
-  if (node->chs)
-  {
-    make_space(nest);
-    fprintf(stdout, "|-chs:\n");
-    _print_parse_result(node->chs, nest + 1);
-  }
-  if (node->rhs)
-  {
-    make_space(nest);
-    fprintf(stdout, "|-rhs:\n");
-    _print_parse_result(node->rhs, nest + 1);
-  }
-  if (node->true_code)
-  {
-    make_space(nest);
-    fprintf(stdout, "|-then:\n");
-    _print_parse_result(node->true_code, nest + 1);
-  }
-  if (node->false_code)
-  {
-    make_space(nest);
-    fprintf(stdout, "|-else:\n");
-    _print_parse_result(node->false_code, nest + 1);
-  }
-  if (node->update)
-  {
-    make_space(nest);
-    fprintf(stdout, "|-update:\n");
-    _print_parse_result(node->update, nest + 1);
-  }
-  if (node->statement_child)
-  {
-    _print_parse_result(node->statement_child, nest + 1);
-  }
-  if (node->expr)
-  {
-    make_space(nest);
-    fprintf(stdout, "|-exprs:\n");
-    for (size_t i = 1; i <= vector_size(node->expr); i++)
-    {
-      _print_parse_result(vector_peek_at(node->expr, i), nest + 1);
-    }
-  }
-  if (node->init_list)
-  {
-    make_space(nest);
-    fprintf(stdout, "|-init_list:\n");
-    for (size_t i = 1; i <= vector_size(node->init_list); i++)
-    {
-      _print_parse_result(vector_peek_at(node->init_list, i), nest + 1);
-    }
-  }
-  if (node->stmt)
-  {
-    make_space(nest);
-    fprintf(stdout, "|-block:\n");
-    for (NDBlock *p = node->stmt; p; p = p->next)
-    {
-      _print_parse_result(p->node, nest + 1);
-    }
+    case ND_NUM: printf("| value: %lld\n", node->num_val); break;
+    case ND_VAR:
+      printf("| offset: %zu | is_new: %d | is_local: %d\n",
+             node->variable.var->offset, node->variable.is_new_var,
+             node->variable.var->is_local);
+      break;
+    case ND_ADD:
+    case ND_SUB:
+    case ND_MUL:
+    case ND_DIV:
+    case ND_IDIV:
+    case ND_EQ:
+    case ND_NEQ:
+    case ND_LT:
+    case ND_LTE:
+    case ND_ASSIGN:
+    case ND_ADDR:
+    case ND_DEREF:
+    case ND_LOGICAL_NOT:
+    case ND_NOT:
+    case ND_UNARY_PLUS:
+    case ND_UNARY_MINUS:
+    case ND_PREINCREMENT:
+    case ND_PREDECREMENT:
+    case ND_POSTINCREMENT:
+    case ND_POSTDECREMENT:
+    case ND_CAST:
+    case ND_EVAL:
+    case ND_COMMA:  // Comma operator has lhs and rhs
+      printf("\n");
+      make_space(nest);
+      printf("|-lhs:\n");
+      _print_parse_result(node->lhs, nest + 1);
+      make_space(nest);
+      printf("|-rhs:\n");
+      _print_parse_result(node->rhs, nest + 1);
+      break;
+    case ND_FUNCDEF:
+      make_space(nest);
+      printf("| storage class: %u", node->func.storage_class_specifier);
+      // Fallthrough to ND_FUNCCALL for expr and stmt
+    case ND_FUNCCALL:
+    case ND_BUILTINFUNC:
+      if (node->func.expr)
+      {
+        printf("\n");
+        make_space(nest);
+        printf("|-exprs:\n");
+        for (size_t i = 1; i <= vector_size(node->func.expr); i++)
+        {
+          _print_parse_result(vector_peek_at(node->func.expr, i), nest + 1);
+        }
+      }
+      if (node->func.stmt)
+      {  // For ND_FUNCDEF and ND_BLOCK
+        printf("\n");
+        make_space(nest);
+        printf("|-block:\n");
+        for (NDBlock *p = node->func.stmt; p; p = p->next)
+        {
+          _print_parse_result(p->node, nest + 1);
+        }
+      }
+      break;
+    case ND_RETURN:
+    case ND_SIZEOF:
+    case ND_DISCARD_EXPR:
+      printf("\n");
+      make_space(nest);
+      printf("|-lhs:\n");
+      _print_parse_result(node->lhs, nest + 1);
+      break;
+    case ND_TYPE_NAME:
+      // No child nodes to print directly from Node structure
+      break;
+    case ND_IF:
+    case ND_ELIF:
+    case ND_FOR:
+    case ND_WHILE:
+    case ND_DO:
+    case ND_TERNARY:
+    case ND_LOGICAL_OR:
+    case ND_LOGICAL_AND:
+    case ND_SWITCH:
+      if (node->control.label)
+        printf(" | label: %s\n", node->control.label->name);
+      if (node->control.init)
+      {
+        make_space(nest);
+        printf("|-init:\n");
+        _print_parse_result(node->control.init, nest + 1);
+      }
+      if (node->control.condition)
+      {
+        make_space(nest);
+        printf("|-cond:\n");
+        _print_parse_result(node->control.condition, nest + 1);
+      }
+      if (node->control.true_code)
+      {
+        make_space(nest);
+        printf("|-then:\n");
+        _print_parse_result(node->control.true_code, nest + 1);
+      }
+      if (node->control.false_code)
+      {
+        make_space(nest);
+        printf("|-else:\n");
+        _print_parse_result(node->control.false_code, nest + 1);
+      }
+      if (node->control.update)
+      {
+        make_space(nest);
+        printf("|-update:\n");
+        _print_parse_result(node->control.update, nest + 1);
+      }
+      if (node->control.ternary_child)
+      {  // For ternary
+        make_space(nest);
+        printf("|-chs:\n");
+        _print_parse_result(node->control.ternary_child, nest + 1);
+      }
+      // For switch, case_list is handled separately in analyzer/generator, not
+      // directly here.
+      break;
+    case ND_GOTO:
+    case ND_LABEL:
+      printf("| label: %s\n", node->jump.label_name);
+      if (node->jump.statement_child)
+      {
+        _print_parse_result(node->jump.statement_child, nest + 1);
+      }
+      break;
+    case ND_CASE:
+      printf("| %s", node->jump.is_case ? "case" : "default\n");
+      if (node->jump.is_case)
+        printf(" %ld\n", node->jump.constant_expression);
+      if (node->jump.statement_child)
+      {
+        _print_parse_result(node->jump.statement_child, nest + 1);
+      }
+      break;
+    case ND_FIELD:
+      make_space(nest);
+      printf("| offset: %lu\n", node->child_offset);
+      break;
+    case ND_BLOCK:
+      if (node->func.stmt)
+      {  // ND_BLOCK uses func.stmt
+        printf("\n");
+        make_space(nest);
+        printf("|-block:\n");
+        for (NDBlock *p = node->func.stmt; p; p = p->next)
+        {
+          _print_parse_result(p->node, nest + 1);
+        }
+      }
+      break;
+    case ND_STRING:
+      // No child nodes to print directly from Node structure
+      break;
+    case ND_INITIALIZER:
+      if (node->initialize.init_list)
+      {
+        printf("\n");
+        make_space(nest);
+        printf("|-init_list:\n");
+        for (size_t i = 1; i <= vector_size(node->initialize.init_list); i++)
+        {
+          _print_parse_result(vector_peek_at(node->initialize.init_list, i),
+                              nest + 1);
+        }
+      }
+      break;
+    default: return;
   }
 }
 
@@ -272,8 +331,9 @@ void print_parse_result(FuncBlock *node)
   {
     if (pointer->node && pointer->node->kind != ND_NOP)
     {
-      fprintf(stdout, "--- node[%d] ---\n", i++);
+      printf("--- node[%d] ---\n", i++);
       _print_parse_result(pointer->node, 0);
+      printf("\n");
     }
   }
 }
@@ -281,38 +341,37 @@ void print_parse_result(FuncBlock *node)
 void print_definition()
 {
   pr_debug("Definition:");
-  fprintf(stdout, "Object-like macro:\n");
+  printf("Object-like macro:\n");
   for (size_t i = 1; i <= vector_size(object_like_macro_list); i++)
   {
     object_like_macro_storage *tmp = vector_peek_at(object_like_macro_list, i);
-    fprintf(stdout, "  %.*s: ", (int)tmp->identifier->len,
-            tmp->identifier->str);
+    printf("  %.*s: ", (int)tmp->identifier->len, tmp->identifier->str);
     for (size_t j = 1; j <= vector_size(tmp->token_string); j++)
     {
       Token *token = vector_peek_at(tmp->token_string, j);
-      fprintf(stdout, "%.*s ", (int)token->len, token->str);
+      printf("%.*s ", (int)token->len, token->str);
     }
-    fprintf(stdout, "\n");
+    printf("\n");
   }
-  fprintf(stdout, "Function-like macro:\n");
+  printf("Function-like macro:\n");
   for (size_t i = 1; i <= vector_size(function_like_macro_list); i++)
   {
     function_like_macro_storage *tmp =
         vector_peek_at(function_like_macro_list, i);
-    fprintf(stdout, "  %.*s(", (int)tmp->identifier->len, tmp->identifier->str);
+    printf("  %.*s(", (int)tmp->identifier->len, tmp->identifier->str);
     for (size_t j = 1; j <= vector_size(tmp->arguments); j++)
     {
       Token *token = vector_peek_at(tmp->arguments, j);
-      fprintf(stdout, "%.*s", (int)token->len, token->str);
+      printf("%.*s", (int)token->len, token->str);
       if (j < vector_size(tmp->arguments))
-        fprintf(stdout, ", ");
+        printf(", ");
     }
-    fprintf(stdout, "): ");
+    printf("): ");
     for (size_t j = 1; j <= vector_size(tmp->token_string); j++)
     {
       Token *token = vector_peek_at(tmp->token_string, j);
-      fprintf(stdout, "%.*s ", (int)token->len, token->str);
+      printf("%.*s ", (int)token->len, token->str);
     }
-    fprintf(stdout, "\n");
+    printf("\n");
   }
 }

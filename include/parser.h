@@ -129,54 +129,72 @@ extern const char *nodekindlist[ND_END];
 
 struct Node
 {
-  NodeKind kind;  // Type of node
-  Type *type;     // Type
-  Token *token;   // Token from which it was parsed
+  NodeKind kind;
+  Type *type;
+  Token *token;
 
-  Node *lhs;  // Left-hand side
-  Node *rhs;  // Right-hand side
+  Node *lhs;
+  Node *rhs;
 
-  // For loop
-  Node *chs;            // Used only for ternary operator
-  size_t child_offset;  // Used for ND_DOT, ND_ARROW, offset of its child
+  union
+  {
+    // if, for, while, do-while, switch, ternary, logical or/and
+    struct
+    {
+      GTLabel *label;
+      Node *condition;
+      Node *true_code;
+      Node *false_code;     // for if-else
+      Node *init;           // for for-loop
+      Node *update;         // for for-loop
+      Node *ternary_child;  // for ternary
+      Vector *case_list;    // for switch
+    } control;
 
-  bool is_top;  // For ND_ARRAY
+    // function definition/call
+    struct
+    {
+      Vector *expr;
+      NDBlock *stmt;
+      uint8_t storage_class_specifier;
+    } func;
 
-  // For if, for, while, switch statements
-  GTLabel *name;     // Label name, also used for goto
-  Node *condition;   // Condition for judgment
-  Node *true_code;   // Code executed when true
-  Node *false_code;  // Code executed when false in if-else statements
-                     // For loop
-  Node *init;        // Initialization code, e.g., int i = 0
-  Node *update;      // Code executed at each step, e.g., i++
+    // variable
+    struct
+    {
+      Var *var;
+      bool is_new_var;
+      bool is_array_top;
+    } variable;
 
-  Vector *case_list;  // ND_SWITCH Contains Node* of cases in switch statement
-  Vector *init_list;  // ND_INITIALIZER
-  Node *assigned;     // ND_INITIALIZER this node isn't used for type analysis
+    // number literal
+    long long num_val;
 
-  // For ND_BLOCK, ND_FUNCCALL, ND_FUNCDEF
-  Vector *expr;                     // Used in ND_FUNCCALL, ND_FUNCDEF
-  NDBlock *stmt;                    // Used in ND_BLOCK, ND_FUNCDEF
-  uint8_t storage_class_specifier;  // Used in ND_FUNCDEF only
-  // name
+    // string literal
+    char *literal_name;
 
-  long long val;  // Value for ND_NUM, size of pointer type for ND_POST/PRE
-                  // INCREMENT/DECREMENT, 0 for numeric type
-                  // For variables (ND_VAR)
-  bool is_new;    // Whether it's a newly defined variable
-  Var *var;       // Variable information
+    // goto, label, case
+    struct
+    {
+      Node *statement_child;
+      char *label_name;
+      bool is_case;
+      size_t case_num;
+      GTLabel *switch_name;
+      long constant_expression;
+    } jump;
 
-  // For string type ND_STRING
-  char *literal_name;  // Name to access string literal
+    // struct/union member access
+    size_t child_offset;
 
-  // For ND_GOTO, ND_LABEL, ND_CASE, ND_DEFAULT
-  Node *statement_child;  // statement
-  char *label_name;       // Label name (not used in ND_CASE, ND_DEFAULT)
-  bool is_case;           // For ND_CASE, ND_DEFAULT
-  size_t case_num;        // Which case number in switch statement (0-indexed)
-  GTLabel *switch_name;   // Label name of switch statement
-  long constant_expression;  // The 'n' part of 'case n:'
+    // initializer
+    struct
+    {
+      Vector *init_list;
+      Node *assigned;
+      bool is_top_initializer;
+    } initialize;
+  };
 };
 
 // Struct to manage expressions within arguments or blocks

@@ -25,7 +25,7 @@ long long _eval_constant_expression(Node* node)
     case ND_DIV:
       return _eval_constant_expression(node->lhs) /
              _eval_constant_expression(node->rhs);
-    case ND_NUM: return node->val;
+    case ND_NUM: return node->num_val;
     case ND_SIZEOF:
         return size_of(node->lhs->type);
     default:

@@ -660,7 +660,8 @@ Node *analyze_type(Node *node, bool is_root)
       if (node->variable.var->is_local &&
           !(node->variable.var->storage_class_specifier & 1 << 1) &&
           node->variable.is_new_var)
-        node->variable.var->offset = calculate_offset(size_of(node->type));
+        node->variable.var->offset =
+            calculate_offset(size_of(node->type), align_of(node->type));
       if (is_root)
         node->kind = ND_NOP;
       break;

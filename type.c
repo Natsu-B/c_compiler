@@ -659,21 +659,10 @@ size_t align_of(Type* type)
     case TYPE_ARRAY: return 8;
     case TYPE_STRUCT:
     {
-      for (size_t i = 1; i <= vector_size(TagNamespaceList); i++)
-      {
-        Vector* struct_nest = vector_peek_at(TagNamespaceList, i);
-        for (size_t j = 1; j <= vector_size(struct_nest); j++)
-        {
-          tag_list* tmp = vector_peek_at(struct_nest, j);
-          if (tmp->type == type)
-          {
-            if (tmp->struct_alignment)
-              return tmp->struct_alignment;
-            error_at(tmp->name->str, tmp->name->len, "Struct not defined.");
-          }
-        }
-      }
-      error_exit("Struct not found.");
+      tag_list* peek_type = vector_peek_at(EnumStructList, type->type_num);
+      if (type->type_num != peek_type->type->type_num)
+        unreachable();
+      return peek_type->struct_alignment;
     }
     break;
     default: return size_of(type);

@@ -34,8 +34,9 @@ void offset_exit_nest()
   free(tmp);
 }
 
-size_t calculate_offset(size_t size)
+size_t calculate_offset(size_t size, size_t align)
 {
+  current_offset->offset = (current_offset->offset + align - 1) / align * align;
   current_offset->offset += size;
   if (current_offset->offset > max_offset)
     max_offset = current_offset->offset;

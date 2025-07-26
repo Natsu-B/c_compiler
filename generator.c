@@ -4,15 +4,19 @@
 
 #include "include/generator.h"
 
+#include "include/common.h"
 #ifdef SELF_HOST
 #include "test/compiler_header.h"
 #else
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #endif
 
+#include "include/builtin.h"
 #include "include/error.h"
+#include "include/ir_generator.h"
 #include "include/type.h"
 #include "include/vector.h"
 
@@ -31,7 +35,7 @@
   output_file("# %s:%d:%s()" fmt, __FILE__, __LINE__, __func__, ##__VA_ARGS__);
 #elif defined(DEBUG)
 #define output_debug(fmt, ...) output_file("# " fmt, ##__VA_ARGS__);
-#define output_debug2(fmt, ...)
+#define output_debug2(fmt, ...) output_file("# " fmt, ##__VA_ARGS__);
 #else
 #define output_debug(fmt, ...)
 #define output_debug2(fmt, ...)
@@ -60,624 +64,357 @@ char *access_size_specifier(int size)
   return tmp;
 }
 
-typedef enum
+enum register_name
 {
-  rax,
-  rcx,
+  rdi,
+  rsi,
   rdx,
+  rcx,
+  r8,
+  r9,
+  rax,
   rbx,
   rsp,
   rbp,
-  rsi,
-  rdi,
-  r8,
-  r9,
   r10,
   r11,
   r12,
   r13,
   r14,
   r15,
-} register_type;
+};
 
-char *chose_register(int size, register_type reg_type)
+// Registers used for general purpose, arguments, and return values
+static char *regs_64[] = {"rdi", "rsi", "rdx", "rcx", "r8",  "r9",
+                          "rax", "rbx", "rsp", "rbp", "r10", "r11",
+                          "r12", "r13", "r14", "r15"};
+static char *regs_32[] = {"edi",  "esi",  "edx",  "ecx", "r8d",  "r9d",
+                          "eax",  "ebx",  "esp",  "ebp", "r10d", "r11d",
+                          "r12d", "r13d", "r14d", "r15d"};
+static char *regs_16[] = {"di",   "si",   "dx",   "cx",  "r8w",  "r9w",
+                          "ax",   "bx",   "sp",   "bp",  "r10w", "r11w",
+                          "r12w", "r13w", "r14w", "r15w"};
+static char *regs_8[] = {"dil",  "sil",  "dl",   "cl",  "r8b",  "r9b",
+                         "al",   "bl",   "spl",  "bpl", "r10b", "r11b",
+                         "r12b", "r13b", "r14b", "r15b"};
+
+size_t function_variables_stack_size;
+size_t function_max_stack_size;
+
+// Simple stack-based allocation: all virtual registers are on the stack.
+// Get the stack offset for a given virtual register.
+static int get_stack_offset(int virtual_reg)
 {
+  // +1 because rbp points to the old rbp, stack grows downwards.
+  if (function_variables_stack_size + (virtual_reg + 1) * 8 >
+      function_max_stack_size)
+    unreachable();
+  return function_variables_stack_size + (virtual_reg + 1) * 8;
+}
+
+char *get_physical_reg_name(int reg_type, int size)
+{
+  // This function is now repurposed to get argument register names
+  // A better name would be get_arg_reg_name
   switch (size)
   {
-    case 1:
-    case 2: break;
-    case 4: size = 3; break;
-    case 8: size = 4; break;
-    default: error_exit_with_guard("unknown register size"); break;
+    case 1: return regs_8[reg_type];
+    case 2: return regs_16[reg_type];
+    case 4: return regs_32[reg_type];
+    case 8: return regs_64[reg_type];
+    default: error_exit_with_guard("Unsupported register size: %d", size);
   }
-  char *tmp;
-  int type = reg_type * 4 + size;
-  char *register_names[64] = {
-      "al",   "ax",   "eax",  "rax", "cl",   "cx",   "ecx",  "rcx",
-      "dl",   "dx",   "edx",  "rdx", "bl",   "bx",   "ebx",  "rbx",
-      "spl",  "sp",   "esp",  "rsp", "bpl",  "bp",   "ebp",  "rbp",
-      "sil",  "si",   "esi",  "rsi", "dil",  "di",   "edi",  "rdi",
-      "r8b",  "r8w",  "r8d",  "r8",  "r9b",  "r9w",  "r9d",  "r9",
-      "r10b", "r10w", "r10d", "r10", "r11b", "r11w", "r11d", "r11",
-      "r12b", "r12w", "r12d", "r12", "r13b", "r13w", "r13d", "r13",
-      "r14b", "r14w", "r14d", "r14", "r15b", "r15w", "r15d", "r15"};
-  if (type <= 64)
-    tmp = register_names[type - 1];
-  else
-    error_exit_with_guard("unknown register type");
-
-  return tmp;
+  return NULL;  // Should not reach here
 }
 
-// Changes the mv instruction depending on the size to be moved
-// Output up to mv rax
-char *mv_instruction_specifier(int size, bool is_sighed, register_type reg)
+int call_id = 0;  // function call id
+
+// Function to generate x64 assembly for a single IR instruction
+void gen_ir_instruction(IR *ir)
 {
-  char *tmp = calloc(1, 11 /* movsxd rax */);
-  size_t copied = 0;
-  if (is_sighed)
+  // In this simple model, most operations use rax and rcx as scratch registers.
+  switch (ir->kind)
   {
-    switch (size)
+    case IR_MOV:
     {
-      case 1:
-      case 2:
-        strcpy(tmp, "movsx");
-        copied += 5;
-        break;
-      case 4:
-        strcpy(tmp, "movsxd");
-        copied += 6;
-        break;
-      case 8:
-        strcpy(tmp, "mov");
-        copied += 3;
-        break;
-      default: error_exit("unknown access size specifier"); break;
-    }
-  }
-  else
-  {
-    switch (size)
-    {
-      case 1:
-      case 2:
-        strcpy(tmp, "movzx");
-        copied += 5;
-        break;
-      case 4:
-      case 8:
-        strcpy(tmp, "mov");
-        copied += 3;
-        break;
-      default: error_exit("unknown access size specifier"); break;
-    }
-  }
-  tmp[copied] = ' ';
-  if (!is_sighed && size == 4)
-    strcpy(tmp + copied + 1, chose_register(size, reg));
-  else
-    strcpy(tmp + copied + 1, chose_register(8, reg));
-  return tmp;
-}
-
-void call_built_in_func(Node *node)
-{
-  if (node->token->len == 7 && !strncmp(node->token->str, "__asm__", 7))
-  {
-    Node *asm_string = vector_pop(node->func.expr);
-    if (asm_string->kind != ND_NOP || vector_size(node->func.expr))
-      unreachable();
-    output_file("%.*s", (int)asm_string->token->len, asm_string->token->str);
-    return;
-  }
-  unreachable();
-}
-
-void gen_global_var(Node *node)
-{
-  if (node->kind != ND_VAR)
-    unreachable();
-  // in order to support name mangling for static variables declared inside
-  // functions we should use node->variable.var->name
-  if (!(node->variable.var->storage_class_specifier & 1 << 2))
-    output_file("    .globl %.*s", (int)node->variable.var->len,
-                node->variable.var->name);
-  output_file("    .type %.*s, @object", (int)node->variable.var->len,
-              node->variable.var->name);
-  output_file("    .size %.*s, %lu", (int)node->variable.var->len,
-              node->variable.var->name, size_of(node->variable.var->type));
-  output_file("%.*s:", (int)node->variable.var->len, node->variable.var->name);
-}
-
-void gen(Node *node);
-void gen_lval(Node *node);
-
-void gen_assign(Node *assigned, Node *node, size_t padding, Type *type)
-{
-  if (node->kind == ND_INITIALIZER)
-  {
-    for (size_t i = 0; i < vector_size(node->initialize.init_list); i++)
-    {
-      Node *child = vector_peek_at(node->initialize.init_list, i + 1);
-      gen_assign(assigned, child, padding + i * size_of(node->type->ptr_to),
-                 child->type);
-    }
-    // Uninitialized array elements are padded with zeros
-    size_t done_init =
-        vector_size(node->initialize.init_list) * size_of(node->type->ptr_to);
-    while (size_of(node->type) - done_init)
-    {
-      gen_lval(assigned);
-      output_file("    pop rax");
-      output_file("    add rax, %lu", padding + done_init);
-      size_t size = size_of(node->type) - done_init > 8
-                        ? 8
-                        : size_of(node->type) - done_init;
-      done_init += size;
-      output_file("    mov %s [rax], %d", access_size_specifier(size), 0);
-    }
-  }
-  else
-  {
-    gen_lval(assigned);
-    gen(node);
-    output_file("    pop rdi");
-    output_file("    pop rax");
-    if (padding)
-      output_file("    add rax, %lu", padding);
-    output_file("    mov %s [rax], %s", access_size_specifier(size_of(type)),
-                chose_register(size_of(type), rdi));
-    output_file("    push rdi");
-  }
-}
-
-// Function to output lvalue to rax. Be careful as rax will be destroyed.
-void gen_lval(Node *node)
-{
-  output_debug2("enter gen_lval");
-  switch (node->kind)
-  {
-    case ND_VAR:
-      if (node->variable.var->is_local &&
-          !(node->variable.var->storage_class_specifier & 1 << 1))
-        output_file("    lea rax, [rbp-%d]", (int)node->variable.var->offset);
-      else
-        output_file("    lea rax,  [rip+%.*s]", (int)node->variable.var->len,
-                    node->variable.var->name);
-      output_file("    push rax");
-      break;
-    case ND_DEREF: gen(node->lhs); break;
-    case ND_DOT:
-    case ND_ARROW:
-      gen_lval(node->lhs);
-      output_file("    pop rax");
-      if (node->kind == ND_ARROW)
-        output_file("    mov rax, QWORD PTR [rax]");  // dereference
-      output_file("    add rax, %lu", node->child_offset);
-      output_file("    push rax");
-      break;
-    default:
-      error_exit_with_guard(
-          "The left-hand side of the assignment is not a variable.");
-  }
-  output_debug2("exit gen_lval");
-}
-
-int align_counter;
-
-void gen(Node *node)
-{
-  output_debug2("enter gen");
-  if (!node)
-    return;
-
-  switch (node->kind)
-  {
-    case ND_NOP: return;
-    case ND_FUNCCALL:
-    {
-      output_debug2("FUNC CALL");
-      output_debug("start calling %.*s", (int)node->token->len,
-                   node->token->str);
-      for (size_t i = (vector_size(node->func.expr) > 6
-                           ? 6
-                           : vector_size(node->func.expr));
-           i >= 1; i--)
+      if (ir->mov.is_imm)
       {
-        gen(vector_peek_at(node->func.expr, i));
-
-        switch (i)
-        {
-          case 1: output_file("    pop rdi"); break;
-          case 2: output_file("    pop rsi"); break;
-          case 3: output_file("    pop rdx"); break;
-          case 4: output_file("    pop rcx"); break;
-          case 5: output_file("    pop r8"); break;
-          case 6: output_file("    pop r9"); break;
-          default: break;
-        }
+        output_file("    mov rax, %lld", ir->mov.imm_val);
       }
+      else
+      {
+        output_file("    mov rax, [rbp-%d]", get_stack_offset(ir->mov.src_reg));
+      }
+      output_file("    mov [rbp-%d], rax", get_stack_offset(ir->mov.dst_reg));
+      break;
+    }
+    case IR_ADD:
+    case IR_SUB:
+    case IR_MUL:
+    case IR_OR:
+    case IR_XOR:
+    case IR_AND:
+    case IR_SHL:
+    case IR_SHR:
+    case IR_SAL:
+    case IR_SAR:
+    case IR_OP_DIV:
+    case IR_OP_IDIV:
+    case IR_EQ:
+    case IR_NEQ:
+    case IR_LT:
+    case IR_LTE:
+    {
+      output_file("    mov rax, [rbp-%d]",
+                  get_stack_offset(ir->bin_op.lhs_reg));
+      output_file("    mov rcx, [rbp-%d]",
+                  get_stack_offset(ir->bin_op.rhs_reg));
+
+      switch (ir->kind)
+      {
+        case IR_ADD: output_file("    add rax, rcx"); break;
+        case IR_SUB: output_file("    sub rax, rcx"); break;
+        case IR_MUL: output_file("    imul rax, rcx"); break;
+        case IR_OR: output_file("    or rax, rcx"); break;
+        case IR_XOR: output_file("    xor rax, rcx"); break;
+        case IR_AND: output_file("    and rax, rcx"); break;
+        case IR_SHL:
+          output_file("    shl %s, cl",
+                      get_physical_reg_name(rax, ir->bin_op.lhs_size));
+          break;
+        case IR_SHR:
+          output_file("    shr %s, cl",
+                      get_physical_reg_name(rax, ir->bin_op.lhs_size));
+          break;
+        case IR_SAL:
+          output_file("    sal %s, cl",
+                      get_physical_reg_name(rax, ir->bin_op.lhs_size));
+          break;
+        case IR_SAR:
+          output_file("    sar %s, cl",
+                      get_physical_reg_name(rax, ir->bin_op.lhs_size));
+          break;
+        case IR_OP_DIV:
+        case IR_OP_IDIV:
+          output_file("    cqo");  // Sign-extend RAX to RDX:RAX
+          output_file("    idiv rcx");
+          if (ir->kind == IR_OP_IDIV)
+          {
+            output_file("    mov rax, rdx");  // Remainder in RDX
+          }
+          break;
+        case IR_EQ:
+          output_file("    cmp rax, rcx");
+          output_file("    sete al");
+          output_file("    movzx rax, al");
+          break;
+        case IR_NEQ:
+          output_file("    cmp rax, rcx");
+          output_file("    setne al");
+          output_file("    movzx rax, al");
+          break;
+        case IR_LT:
+          output_file("    cmp rax, rcx");
+          output_file("    setl al");
+          output_file("    movzx rax, al");
+          break;
+        case IR_LTE:
+          output_file("    cmp rax, rcx");
+          output_file("    setle al");
+          output_file("    movzx rax, al");
+          break;
+        default:
+          error_exit_with_guard("Unhandled binary operation IR kind: %d",
+                                ir->kind);
+      }
+      output_file("    mov [rbp-%d], rax",
+                  get_stack_offset(ir->bin_op.dst_reg));
+      break;
+    }
+    case IR_NEG:
+    {
+      output_file("    mov rax, [rbp-%d]", get_stack_offset(ir->un_op.src_reg));
+      output_file("    neg rax");
+      output_file("    mov [rbp-%d], rax", get_stack_offset(ir->un_op.dst_reg));
+      break;
+    }
+    case IR_BIT_NOT:
+    {
+      output_file("    mov rax, [rbp-%d]", get_stack_offset(ir->un_op.src_reg));
+      output_file("    not rax");
+      output_file("    mov [rbp-%d], rax", get_stack_offset(ir->un_op.dst_reg));
+      break;
+    }
+    case IR_RET:
+    {
+      output_file("    mov rax, [rbp-%d]", get_stack_offset(ir->ret.src_reg));
+      output_file("    leave");
+      output_file("    ret");
+      break;
+    }
+    case IR_FUNC_PROLOGUE:
+    case IR_FUNC_EPILOGUE:
+      // These are handled in the main generator loop.
+      break;
+    case IR_CALL:
+    {
+      size_t num_args = vector_size(ir->call.args);
+      size_t stack_arg_count = (num_args > 6) ? (num_args - 6) : 0;
+
+      // Load arguments 1-6 into registers
+      for (size_t i = 0; i < (num_args < 6 ? num_args : 6); i++)
+      {
+        int arg_vreg = *(int *)vector_peek_at(ir->call.args, i + 1);
+        output_file("    mov %s, [rbp-%d]", get_physical_reg_name(i, 8),
+                    get_stack_offset(arg_vreg));
+      }
+
+      // Align stack to 16 bytes before call
       output_file("    mov rax, rsp");
       output_file("    and rax, 15");
       output_file("    push r12");
       output_file("    mov r12, 0");
-      output_file("    jz .L_%d_aligned", align_counter);
+      output_file("    jz .Lcall_aligned_%d",
+                  call_id);  // Use a unique id for the label
       output_file("    mov r12, 8");
       output_file("    sub rsp, 8");
-      output_file(".L_%d_aligned:", align_counter);
-      size_t stack_args = 0;
-      if (vector_size(node->func.expr) > 6)
-        stack_args = vector_size(node->func.expr) - 6;
-      if (stack_args)
+      output_file(".Lcall_aligned_%d:", call_id);
+      // Push arguments 7+ onto the stack in reverse order
+      if (stack_arg_count)
       {
-        // output_file("    sub rsp, %lu", (stack_args + 1) / 2 * 2 * 8);
-        for (size_t i = 7; i <= vector_size(node->func.expr); i++)
-          // Equivalent to pushing node value to stack
-          gen(vector_peek_at(node->func.expr,
-                             vector_size(node->func.expr) - i + 7));
+        for (size_t i = 0; i < stack_arg_count; i++)
+        {
+          int arg_vreg = *(int *)vector_peek_at(ir->call.args, num_args - i);
+          output_file("    push QWORD PTR [rbp-%d]",
+                      get_stack_offset(arg_vreg));
+        }
       }
-      output_file("    mov rax, 0");
-      output_file("    call %.*s", (int)node->token->len, node->token->str);
+      output_file("    mov rax, 0");  // Number of XMM registers used
+      output_file("    call %.*s", (int)ir->call.func_name_size,
+                  ir->call.func_name);
       output_file("    add rsp, r12");
-      if (stack_args)
-        output_file("    add rsp, %lu", stack_args * 8);
+      if (stack_arg_count)  // Clean up stack arguments
+        output_file("    add rsp, %lu", stack_arg_count * 8);
       output_file("    pop r12");
-      output_file("    push rax");
-      align_counter++;
-      output_debug("end calling %.*s", (int)node->token->len, node->token->str);
-      return;
+      call_id++;
+      // Store return value
+      output_file("    mov [rbp-%d], rax", get_stack_offset(ir->call.dst_reg));
+      break;
     }
-    case ND_BUILTINFUNC: call_built_in_func(node); return;
-    case ND_DISCARD_EXPR:
-      output_debug2("ND_DISCARD_EXPR");
-      gen(node->lhs);
-      output_file("    add rsp, 8");
-      return;
-
-    case ND_BLOCK:
-      output_debug2("ND_BLOCK");
-      for (NDBlock *pointer = node->func.stmt; pointer; pointer = pointer->next)
-        gen(pointer->node);
-      return;
-
-    case ND_IF:
-    case ND_ELIF:
+    case IR_JMP:
     {
-      output_debug2("ND_IF ND_ELIF");
-      output_debug("start %s block", node->kind == ND_IF ? "if" : "elif");
-      gen(node->control.condition);
-      output_file("    pop rax");
-      output_file("    cmp rax, 0");
-      output_file("    je .L%s%s", node->kind == ND_IF ? "endif" : "elseif",
-                  node->control.label->name);
-      gen(node->control.true_code);
-      if (node->kind == ND_ELIF)
-      {
-        output_file("    jmp .Lendif%s", node->control.label->name);
-        output_file(".Lelseif%s:", node->control.label->name);
-        gen(node->control.false_code);
-      }
-      output_file(".Lendif%s:", node->control.label->name);
-      output_debug("end %s block", node->kind == ND_IF ? "if" : "elif");
+      output_file("    jmp %s", ir->jmp.label);
+      break;
     }
-      return;
-
-    case ND_WHILE:
-    case ND_FOR:
+    case IR_JE:
+    case IR_JNE:
     {
-      output_debug2("ND_WHILE ND_FOR");
-      const char *loop_name = node->kind == ND_WHILE ? "while" : "for";
-      output_debug("start %s block", loop_name);
-      if (node->kind == ND_FOR)
-        gen(node->control.init);
-      output_file(".Lbegin%s%.*s:", loop_name, (int)node->control.label->len,
-                  node->control.label->name);
-      gen(node->control.condition);
-      output_file("    pop rax");
+      output_file("    mov rax, [rbp-%d]", get_stack_offset(ir->jmp.cond_reg));
       output_file("    cmp rax, 0");
-      output_file("    je .Lend%s%.*s", loop_name,
-                  (int)node->control.label->len, node->control.label->name);
-      gen(node->control.true_code);
-      if (node->kind == ND_FOR)
-        gen(node->control.update);
-      output_file("    jmp .Lbegin%s%.*s", loop_name,
-                  (int)node->control.label->len, node->control.label->name);
-      output_file(".Lend%s%s:", loop_name, node->control.label->name);
-      output_debug("end %s block", loop_name);
+      if (ir->kind == IR_JE)
+        output_file("    je %s", ir->jmp.label);
+      else
+        output_file("    jne %s", ir->jmp.label);
+      break;
     }
-      return;
-    case ND_DO:
-      output_debug2("ND_DO");
-      output_file(".Lbegindo%.*s:", (int)node->control.label->len,
-                  node->control.label->name);
-      gen(node->control.true_code);
-      gen(node->control.condition);
-      output_file("    pop rax");
-      output_file("    cmp rax, 0");
-      output_file("    jne .Lbegindo%.*s", (int)node->control.label->len,
-                  node->control.label->name);
-      output_file(".Lenddo%.*s:", (int)node->control.label->len,
-                  node->control.label->name);
-      return;
-    case ND_RETURN:
-      output_debug2("ND_RETURN");
-      gen(node->lhs);
-      output_file("    pop rax");
-      output_file("    leave");
-      output_file("    ret");
-      return;
-
-    case ND_NUM:
-      output_debug2("ND_NUM");
-      output_file("    push %lld", node->num_val);
-      return;
-
-    case ND_STRING:
-      output_file("    lea rax, [rip+OFFSET FLAT:%s]", node->literal_name);
-      output_file("    push rax");
-      return;
-    case ND_VAR:
-    case ND_DOT:
-    case ND_ARROW:
-      output_debug2("ND_STIRNG ND_VAR ND_DOT ND_ARROW");
-      if (node->kind == ND_DOT || node->kind == ND_ARROW ||
-          node->type->type != TYPE_STRUCT)
+    case IR_LABEL:
+    {
+      output_file("%s:", ir->label.name);
+      break;
+    }
+    case IR_LOAD:
+    {
+      // Get address from memory register's stack slot
+      output_file("    mov rax, [rbp-%d]", get_stack_offset(ir->mem.mem_reg));
+      // Load value from that address
+      // Note: The size of the value loaded is determined by the size of the
+      // register we move it to. We use rax for 8-byte, eax for 4-byte etc. A
+      // more robust implementation would use different registers based on size.
+      switch (ir->mem.size)
       {
-        gen_lval(node);
-        if (node->type->type != TYPE_ARRAY && node->type->type != TYPE_STR)
-        {
-          output_file("    pop rax");
-          output_file("    %s, %s [rax]",
-                      mv_instruction_specifier(size_of(node->type),
-                                               node->type->is_signed, rax),
-                      access_size_specifier(size_of(node->type)));
-          output_file("    push rax");
-        }
+        case 1:
+          output_file("    movsx rax, BYTE PTR [rax + %d]", ir->mem.offset);
+          break;
+        case 2:
+          output_file("    movsx rax, WORD PTR [rax + %d]", ir->mem.offset);
+          break;
+        case 4:
+          output_file("    movsxd rax, DWORD PTR [rax + %d]", ir->mem.offset);
+          break;
+        case 8:
+          output_file("    mov rax, QWORD PTR [rax + %d]", ir->mem.offset);
+          break;
+        default:
+          error_exit_with_guard("Unsupported load size: %d", ir->mem.size);
       }
-      return;
-
-    case ND_ASSIGN:
-      output_debug2("ND_ASSIGN");
-      gen_assign(node->lhs, node->rhs, 0, node->type);
-      return;
-    case ND_ADDR:
-      output_debug2("ND_ADDR");
-      gen_lval(node->lhs);
-      return;
-
-    case ND_DEREF:
-      output_debug2("ND_DEREF");
-      gen(node->lhs);
-      output_file("    pop rax");
-      output_file("    %s, %s [rax]",
-                  mv_instruction_specifier(size_of(node->type),
-                                           node->type->is_signed, rax),
-                  access_size_specifier(size_of(node->type)));
-      output_file("    push rax");
-      return;
-    case ND_UNARY_PLUS: gen(node->lhs); return;
-    case ND_UNARY_MINUS:
-      gen(node->lhs);
-      output_file("    pop rax");
-      output_file("    neg rax");
-      output_file("    push rax");
-      return;
-    case ND_LOGICAL_NOT:
-      output_file("    pop rax");
-      output_file("    cmp rax, 0");
-      output_file("    sete al");
-      output_file("    movzx rax, al");
-      output_file("    push rax");
-      return;
-    case ND_NOT:
-      output_file("    pop rax");
-      output_file("    not rax");
-      output_file("    push rax");
-      return;
-    case ND_GOTO:
-      output_debug2("ND_GOTO");
-      output_file("    jmp %s", node->jump.label_name);
-      return;
-    case ND_LABEL:
-      output_debug2("ND_LABEL");
-      output_file("%s:", node->jump.label_name);
-      gen(node->jump.statement_child);
-      return;
-    case ND_PREINCREMENT:
-    case ND_PREDECREMENT:
-    case ND_POSTINCREMENT:
-    case ND_POSTDECREMENT:
-      output_debug2("ND '++' or '--'");
-      gen_lval(node->lhs);
-      output_file("    pop rax");
-      output_file("    %s, %s [rax]",
-                  mv_instruction_specifier(size_of(node->lhs->type),
-                                           node->lhs->type->is_signed, r10),
-                  access_size_specifier(size_of(node->lhs->type)));
-      if (node->kind == ND_POSTINCREMENT || node->kind == ND_POSTDECREMENT)
-        output_file("    mov r11, r10");
-      if (node->num_val)
+      // Store it in the destination register's stack slot
+      output_file("    mov [rbp-%d], rax", get_stack_offset(ir->mem.reg));
+      break;
+    }
+    case IR_STORE:
+    {
+      // Get address from memory register's stack slot
+      output_file("    mov rax, [rbp-%d]", get_stack_offset(ir->mem.mem_reg));
+      // Get value from source register's stack slot
+      output_file("    mov rcx, [rbp-%d]", get_stack_offset(ir->mem.reg));
+      // Store value at the address
+      output_file("    mov [rax + %d], %s", ir->mem.offset,
+                  get_physical_reg_name(rcx, ir->mem.size));
+      break;
+    }
+    case IR_LEA:
+    {
+      if (ir->lea.is_local)
+        output_file("    lea rax, [rbp-%lu]", ir->lea.var_offset);
+      else
+        output_file("    lea rax, [rip+%.*s]", (int)ir->lea.var_name_len,
+                    ir->lea.var_name);
+      output_file("    mov [rbp-%d], rax", get_stack_offset(ir->lea.dst_reg));
+      break;
+    }
+    case IR_STORE_ARG:
+    {
+      if (ir->store_arg.arg_index >= 6)
       {
-        if (node->kind == ND_PREINCREMENT || node->kind == ND_POSTINCREMENT)
-          output_file("    add r10, %lld", node->num_val);
-        else
-          output_file("    sub r10, %lld", node->num_val);
+        // Arguments 7+ are on the caller's stack.
+        // Calculate offset: 16 (for ret addr and old rbp) + (index - 6) * 8
+        int offset = 16 + (ir->store_arg.arg_index - 6) * 8;
+        // Move argument from caller's stack to rax
+        output_file("    mov rax, [rbp+%d]", offset);
+        // Get the address of the local variable (where we store the arg) into
+        // rcx
+        output_file("    mov rcx, [rbp-%d]",
+                    get_stack_offset(ir->store_arg.dst_reg));
+        // Store the argument value into the local variable's address
+        output_file("    mov [rcx], %s",
+                    get_physical_reg_name(rax, ir->store_arg.size));
       }
       else
       {
-        if (node->kind == ND_PREINCREMENT || node->kind == ND_POSTINCREMENT)
-          output_file("    inc r10");
-        else
-          output_file("    dec r10");
-
-        if (node->type->type == TYPE_BOOL)
-        {
-          output_file("    cmp r10, 0");
-          output_file("    setne dil");
-          output_file("    movzx r10, dil");
-        }
+        // Arguments 1-6 are in registers.
+        // Get the address of the local variable from its stack slot into rax
+        output_file("    mov rax, [rbp-%d]",
+                    get_stack_offset(ir->store_arg.dst_reg));
+        // Store the argument register's value into that address
+        output_file(
+            "    mov [rax], %s",
+            get_physical_reg_name(ir->store_arg.arg_index, ir->store_arg.size));
       }
-      output_file("    mov %s [rax], %s",
-                  access_size_specifier(size_of(node->type)),
-                  chose_register(size_of(node->type), r10));
-      if (node->kind == ND_POSTINCREMENT || node->kind == ND_POSTDECREMENT)
-        output_file("    push r11");
-      else
-        output_file("    push r10");
-      return;
-    case ND_CASE:
-    {
-      output_debug2("ND_CASE");
-      output_file(".Lswitch%.*s_%lu:", (int)node->jump.switch_name->len,
-                  node->jump.switch_name->name, node->jump.case_num);
-      gen(node->jump.statement_child);
-      return;
-    }
-    case ND_SWITCH:
-    {
-      output_debug2("ND_SWITCH");
-      gen(node->control.condition);
-      output_file("    pop rdi");
-      GTLabel *switch_label = node->control.label;
-      for (size_t i = 1; i <= vector_size(node->control.case_list); i++)
-      {
-        Node *case_child = vector_peek_at(node->control.case_list, i);
-        if (case_child->jump.is_case)
-        {
-          output_file("    cmp rdi, %ld", case_child->jump.constant_expression);
-          output_file("    je .Lswitch%.*s_%lu", (int)switch_label->len,
-                      switch_label->name, i - 1);
-        }
-        else
-          output_file("    jmp .Lswitch%.*s_%lu", (int)switch_label->len,
-                      switch_label->name, i - 1);
-      }
-      gen(node->control.true_code);
-      output_file(".Lendswitch%.*s:", (int)switch_label->len,
-                  switch_label->name);
-    }
-      return;
-    case ND_TERNARY:
-    {
-      output_debug2("ND_TERNARY");
-      gen(node->lhs);
-      output_file("    pop rax");
-      output_file("    cmp rax, 0");
-      output_file("    je .Lfalseternary%s", node->control.label->name);
-      gen(node->control.ternary_child);
-      output_file("    jmp .Lendternary%s", node->control.label->name);
-      output_file(".Lfalseternary%s:", node->control.label->name);
-      gen(node->rhs);
-      output_file(".Lendternary%s:", node->control.label->name);
-    }
-      return;
-    case ND_LOGICAL_AND:
-    case ND_LOGICAL_OR:
-    {
-      output_debug2("ND_LOGICAL AND/OR");
-      gen(node->lhs);
-      output_file("    pop rax");
-      output_file("    cmp rax, 0");
-      output_file("    %s .Lfalselogical%s%s",
-                  node->kind == ND_LOGICAL_AND ? "je" : "jne",
-                  node->kind == ND_LOGICAL_AND ? "and" : "or",
-                  node->control.label->name);
-      gen(node->rhs);
-      output_file("    jmp .Lendlogical%s%s",
-                  node->kind == ND_LOGICAL_AND ? "and" : "or",
-                  node->control.label->name);
-      output_file(
-          ".Lfalselogical%s%s:", node->kind == ND_LOGICAL_AND ? "and" : "or",
-          node->control.label->name);
-      output_file("    push rax");
-      output_file(
-          ".Lendlogical%s%s:", node->kind == ND_LOGICAL_AND ? "and" : "or",
-          node->control.label->name);
-    }
-      return;
-    case ND_INCLUSIVE_OR:
-    case ND_AND:
-    case ND_EXCLUSIVE_OR:
-    {
-      output_debug2("ND_INCLUSIVE_OR / ND_AND");
-      gen(node->lhs);
-      gen(node->rhs);
-      output_file("    pop rax");
-      output_file("    pop r10");
-      output_file("    %s rax, r10", node->kind == ND_INCLUSIVE_OR ? "or"
-                                     : node->kind == ND_AND        ? "and"
-                                                                   : "xor");
-      output_file("    push rax");
-    }
-      return;
-    case ND_LEFT_SHIFT:
-    case ND_RIGHT_SHIFT:
-    {
-      output_debug2("ND_LEFT/RIGHT_SHIFT");
-      gen(node->lhs);
-      gen(node->rhs);
-      output_file("    pop rcx");
-      output_file("    pop rax");
-      output_file("    %s rax, cl",
-                  node->lhs->type->is_signed
-                      ? node->kind == ND_LEFT_SHIFT ? "sal" : "sar"
-                  : node->kind == ND_LEFT_SHIFT ? "shl"
-                                                : "shr");
-      output_file("    push rax");
-    }
-      return;
-    case ND_COMMA:
-      gen(node->lhs);
-      output_file("    add rsp, 8");
-      gen(node->rhs);
-      return;
-    case ND_CAST: gen(node->lhs); return;
-    case ND_EVAL:
-      gen(node->lhs);
-      output_file("    pop rax");
-      output_file("    cmp rax, 0");
-      output_file("    setne al");
-      output_file("    movzx rax, al");
-      output_file("    push rax");
-      return;
-    default: break;
-  }
-
-  output_debug2("arithmetic operands");
-  gen(node->lhs);
-  gen(node->rhs);
-
-  output_file("    pop r10");
-  output_file("    pop rax");
-  switch (node->kind)
-  {
-    case ND_ADD: output_file("    add rax, r10"); break;
-    case ND_SUB: output_file("    sub rax, r10"); break;
-    case ND_MUL: output_file("    imul rax, r10"); break;
-    case ND_DIV:
-    case ND_IDIV:
-      output_file("    cqo");
-      output_file("    idiv r10");
-      if (node->kind == ND_IDIV)
-        output_file("    mov rax, rdx");
       break;
-    case ND_EQ:
-    case ND_NEQ:
-    case ND_LT:
-    case ND_LTE:
-      output_file("    cmp rax, r10");
-      output_file("    set%s al", node->kind == ND_EQ    ? "e"
-                                  : node->kind == ND_NEQ ? "ne"
-                                  : node->kind == ND_LT  ? "l"
-                                                         : "le");
-      output_file("    movzb rax, al");
+    }
+    case IR_BUILTIN_ASM:
+    {
+      size_t len = ir->builtin_asm.asm_len;
+      char *str = parse_string_literal(ir->builtin_asm.asm_str, &len);
+      output_file("%.*s", (int)len, str);
       break;
-    default: error_exit_with_guard("unreachable"); break;
+    }
+    // TODO: Implement other IR kinds (bitwise, unary, builtins)
+    default: error_exit_with_guard("Unhandled IR kind: %d", ir->kind);
   }
-  output_file("    push rax");
 }
 
-void generator(FuncBlock *parsed, char *output_filename)
+void generator(IRProgram *program, char *output_filename)
 {
   pr_debug("start generator");
 
@@ -688,122 +425,119 @@ void generator(FuncBlock *parsed, char *output_filename)
   pr_debug("output file open");
   output_file("    .intel_syntax noprefix\n");
 
-  // strings
-  Vector *string_list = get_string_list();
-  for (size_t i = 1; i <= vector_size(string_list); i++)
+  // Global variables
+  if (vector_size(program->global_vars))
   {
-    if (i == 1)
-      output_file("    .section .rodata");
-    Var *string = vector_peek_at(string_list, i);
-    output_file("%.*s:", (int)string->len, string->name);
-    output_file("    .string \"%.*s\"", (int)string->token->len,
-                string->token->str);
-  }
-
-  // Write functions
-  for (FuncBlock *pointer = parsed; pointer; pointer = pointer->next)
-  {
-    Node *node = pointer->node;
-    if (!node)
-      continue;
-    if (node->kind == ND_FUNCDEF)
+    for (size_t i = 0; i < vector_size(program->global_vars); i++)
     {
-      output_file("\n    .text\n");
-      if (!(node->func.storage_class_specifier & 1 << 2))
-        output_file("    .global %.*s", (int)node->token->len,
-                    node->token->str);
-      output_file("    .type   %.*s, @function", (int)node->token->len,
-                  node->token->str);
-      output_file("%.*s:", (int)node->token->len, node->token->str);
-      output_file("    push rbp");
-      output_file("    mov rbp, rsp");
-      output_file("    sub rsp, %lu", pointer->stacksize);
-      int j = 0;
-      for (size_t i = 1; i <= vector_size(node->func.expr); i++)
+      GlobalVar *gvar = vector_peek_at(program->global_vars, i + 1);
+      if (gvar->how2_init == init_zero)
+        output_file("    .section .bss");
+      else
+        output_file("    .section .data");
+      if (!gvar->is_static)
+        output_file("    .globl %.*s", (int)gvar->var_name_len, gvar->var_name);
+      output_file("    .type %.*s, @object", (int)gvar->var_name_len,
+                  gvar->var_name);
+      output_file("    .size %.*s, %lu", (int)gvar->var_name_len,
+                  gvar->var_name, gvar->var_size);
+      output_file("%.*s:", (int)gvar->var_name_len, gvar->var_name);
+      switch (gvar->how2_init)
       {
-        Node *param = vector_peek_at(node->func.expr, i);
-        if (param->kind != ND_VAR)
-          error_exit_with_guard("invalid function arguments");
-        output_debug("argument: %lu", i);
-        switch (++j)
-        {
-          case 1:
-            output_file("    mov [rbp-%lu], %s", param->variable.var->offset,
-                        chose_register(size_of(param->type), rdi));
-            break;
-          case 2:
-            output_file("    mov [rbp-%lu], %s", param->variable.var->offset,
-                        chose_register(size_of(param->type), rsi));
-            break;
-          case 3:
-            output_file("    mov [rbp-%lu], %s", param->variable.var->offset,
-                        chose_register(size_of(param->type), rdx));
-            break;
-          case 4:
-            output_file("    mov [rbp-%lu], %s", param->variable.var->offset,
-                        chose_register(size_of(param->type), rcx));
-            break;
-          case 5:
-            output_file("    mov [rbp-%lu], %s", param->variable.var->offset,
-                        chose_register(size_of(param->type), r8));
-            break;
-          case 6:
-            output_file("    mov [rbp-%lu], %s", param->variable.var->offset,
-                        chose_register(size_of(param->type), r9));
-            break;
-          default:
-            output_file("    mov rax, [rbp+%lu]", 8 + 8 * (i - 6));
-            output_file("    mov [rbp-%lu], %s", param->variable.var->offset,
-                        chose_register(size_of(param->type), rax));
-            break;
-        }
-      }
-
-      for (NDBlock *pointer = node->func.stmt; pointer; pointer = pointer->next)
-        gen(pointer->node);
-      output_file("    pop rax");
-      output_file("    leave");
-      output_file("    ret");
-      continue;
-    }
-    else if (node->kind == ND_BUILTINFUNC)
-      call_built_in_func(node);
-    else if (node->kind == ND_VAR)
-    {
-      if (node->variable.var->storage_class_specifier & 1 << 1)
-        continue;
-      output_file("\n    .section    .bss");
-      gen_global_var(node);
-      output_file("    .zero %lu\n", size_of(node->variable.var->type));
-    }
-    else if (node->kind == ND_ASSIGN && node->lhs->kind == ND_VAR)
-    {
-      output_file("\n    .section .data");
-      gen_global_var(node->lhs);
-      switch (node->rhs->kind)
-      {
-        case ND_NUM:
-          switch (size_of(node->lhs->type))
+        case init_zero: output_file("    .zero %zu", gvar->var_size); break;
+        case init_val:
+          switch (gvar->var_size)
           {
-            case 1: output_file("    .byte %lld", node->rhs->num_val); break;
-            case 2: output_file("    .word %lld", node->rhs->num_val); break;
-            case 4: output_file("    .long %lld", node->rhs->num_val); break;
-            case 8: output_file("    .quad %lld", node->rhs->num_val); break;
+            case 1: output_file("    .byte %lld", gvar->init_val); break;
+            case 2: output_file("    .word %lld", gvar->init_val); break;
+            case 4: output_file("    .long %lld", gvar->init_val); break;
+            case 8: output_file("    .quad %lld", gvar->init_val); break;
             default: unreachable();
           }
           break;
-        case ND_ADDR:
-          output_file("    .quad %.*s", (int)node->rhs->lhs->variable.var->len,
-                      node->rhs->lhs->variable.var->name);
+        case init_pointer:
+          output_file("    .quad %.*s", (int)gvar->assigned_var.var_name_len,
+                      gvar->assigned_var.var_name);
           break;
-        case ND_STRING:
-          output_file("    .quad %s", node->rhs->literal_name);
+        case init_string:
+          output_file("    .quad %s", gvar->literal_name);
           break;
-        default: unimplemented();
+        default: unreachable(); break;
       }
     }
-    else if (node->kind != ND_NOP)
-      error_exit_with_guard("Unreachable");
+  }
+
+  // strings
+  if (vector_size(program->strings))
+  {
+    output_file("    .section .rodata");
+    for (size_t i = 1; i <= vector_size(program->strings); i++)
+    {
+      Var *string = vector_peek_at(program->strings, i);
+      output_file("%.*s:", (int)string->len, string->name);
+      output_file("    .string \"%.*s\"", (int)string->token->len,
+                  string->token->str);
+    }
+  }
+
+  // Write functions
+  for (size_t i = 0; i < vector_size(program->functions); i++)
+  {
+    IRFunc *func = vector_peek_at(program->functions, i + 1);
+    switch (func->builtin_func)
+    {
+      case FUNC_USER_DEFINED:
+      {
+        output_file("\n    .text\n");
+        if (!func->user_defined.is_static)
+          output_file("    .global %.*s",
+                      (int)func->user_defined.function_name_size,
+                      func->user_defined.function_name);
+        output_file("    .type   %.*s, @function",
+                    (int)func->user_defined.function_name_size,
+                    func->user_defined.function_name);
+        output_file("%.*s:", (int)func->user_defined.function_name_size,
+                    func->user_defined.function_name);
+
+        // Function prologue
+        output_file("    push rbp");
+        output_file("    mov rbp, rsp");
+        // Allocate space for all virtual registers and local variables on the
+        // stack Align to 16 bytes
+        size_t stack_size = (func->user_defined.num_virtual_regs * 8) +
+                            func->user_defined.stack_size;
+        stack_size = (stack_size + 15) & ~15;
+        output_file("    sub rsp, %lu", stack_size);
+        function_variables_stack_size = func->user_defined.stack_size;
+        function_max_stack_size = stack_size;
+
+        // Generate code for each IR instruction
+        for (size_t j = 0; j < vector_size(func->IR_Blocks); j++)
+        {
+          IR *ir = vector_peek_at(func->IR_Blocks, j + 1);
+          gen_ir_instruction(ir);
+        }
+
+        // Function epilogue (if not already handled by IR_RET)
+        // If the last instruction is not IR_RET, add a default return.
+        // This might be problematic if the function has multiple return points.
+        // A better approach would be to ensure IR_RET is always the last
+        // instruction of a basic block that ends a function.
+        IR *last_ir =
+            vector_peek_at(func->IR_Blocks, vector_size(func->IR_Blocks));
+        if (last_ir->kind != IR_RET)
+        {
+          output_file("    leave");
+          output_file("    ret");
+        }
+        break;
+      }
+      case FUNC_ASM:
+      {
+        gen_ir_instruction(vector_pop(func->IR_Blocks));
+        break;
+      }
+    }
   }
 
   fclose(fout);

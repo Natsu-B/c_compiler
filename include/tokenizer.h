@@ -54,7 +54,6 @@ Token *get_token();
 Token *peek_ident();
 Token *consume_ident();
 Token *expect_ident();
-Token *parse_string_literal(Token *token);
 Token *consume_string();
 Token *consume_char();
 bool is_number(long long *result);

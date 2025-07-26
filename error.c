@@ -62,7 +62,6 @@ void error_init(char *name, char *input)
 }
 
 // Function to output logs and exit on error, called from error
-[[noreturn]]
 void _error(char *file, int line, const char *func, char *fmt, ...)
 {
   va_list ap;
@@ -126,7 +125,6 @@ void _info_at_(size_t log_level, char *location, size_t len, char *file,
   }
 }
 
-[[noreturn]]
 void _error_at(char *error_location, size_t error_len, char *file, int line,
                const char *func, char *fmt, ...)
 {
@@ -134,8 +132,10 @@ void _error_at(char *error_location, size_t error_len, char *file, int line,
   va_start(args, fmt);
   _info_at_(0, error_location, error_len, file, line, func, fmt, args);
 
+#ifndef INTERPRETER
   printf("\n\n--- BackTrace ---\n\n\n");
   print_parse_result(get_funcblock_head());
+#endif
   exit(1);
 }
 
@@ -204,6 +204,7 @@ void handle_signal(int signum, siginfo_t *info, void *ucontext)
     write(STDERR_FILENO, no_backtrace_msg, strlen(no_backtrace_msg));
   }
 
+  #ifndef INTERPRETER
   // Display global variables and token stream as much as possible at that time
   const char *print_progress = "\n\n\e[31m--- Program Progress ---\e[37m\n\n";
   write(STDERR_FILENO, print_progress, strlen(print_progress));
@@ -222,6 +223,7 @@ void handle_signal(int signum, siginfo_t *info, void *ucontext)
     write(STDERR_FILENO, buffer, len);
     token = token->next;
   }
+#endif
   const char *msg_footer = "\n\n\e[31m--- Program Aborting ---\e[37m\n\n";
   write(STDERR_FILENO, msg_footer, strlen(msg_footer));
 

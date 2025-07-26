@@ -12,9 +12,11 @@
 #include "include/parser.h"
 #include "include/preprocessor.h"
 #include "include/tokenizer.h"
+#include "include/ir_generator.h"
 
 bool output_preprocess;
 bool gcc_compatible;
+bool output_ir;
 
 // Argument processing
 // -E: Execute preprocessor and output
@@ -22,6 +24,7 @@ bool gcc_compatible;
 // -o: Specify output file
 // -i: Specify input file
 // -I: Use standard input after this argument as input
+// -emit-ir: Output IR
 int main(int argc, char **argv)
 {
   fprintf(stdout, "\e[32mc_compiler\e[37m\n");
@@ -50,6 +53,8 @@ int main(int argc, char **argv)
         output_preprocess = true;
       else if (!strcmp(argv[i], "-g"))
         gcc_compatible = true;
+      else if (!strcmp(argv[i], "-emit-ir"))
+        output_ir = true;
       else if (!strcmp(argv[i], "-o") && ++i < argc)
         output_file_name = argv[i];
       else if (!strcmp(argv[i], "-i") && ++i < argc)
@@ -80,8 +85,16 @@ int main(int argc, char **argv)
   FuncBlock *parse_result = parser();
   // Analyzer (semantic analysis)
   FuncBlock *analyze_result = analyzer(parse_result);
+  // IR generator
+  IRProgram *ir_program = gen_ir(analyze_result);
+
+  if (output_ir)
+  {
+    dump_ir(ir_program, output_file_name);
+    return 0;
+  }
   // Code generator
-  generator(analyze_result, output_file_name);
+  generator(ir_program, output_file_name);
 
   return 0;
 }

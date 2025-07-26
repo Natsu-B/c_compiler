@@ -185,7 +185,7 @@ void _print_parse_result(Node *node, int nest)
     case ND_FUNCDEF:
       make_space(nest);
       printf("| storage class: %u", node->func.storage_class_specifier);
-      // Fallthrough to ND_FUNCCALL for expr and stmt
+      // fall through
     case ND_FUNCCALL:
     case ND_BUILTINFUNC:
       if (node->func.expr)

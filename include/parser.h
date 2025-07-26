@@ -111,6 +111,12 @@ struct GTLabel
   size_t len;     // Length of variable name
 };
 
+enum function_type
+{
+  FUNC_USER_DEFINED,  // non builtin functions
+  FUNC_ASM,           // builtin __asm__
+};
+
 // For debug use. Must be added if NodeKind is added.
 #define NodeKindTable                                                         \
   "ND_NOP", "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_IDIV", "ND_EQ",       \
@@ -157,6 +163,7 @@ struct Node
       Vector *expr;
       NDBlock *stmt;
       uint8_t storage_class_specifier;
+      enum function_type builtin_func;
     } func;
 
     // variable

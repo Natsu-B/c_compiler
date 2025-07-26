@@ -140,37 +140,6 @@ Token *expect_ident()
   return expect;
 }
 
-// parse escape sequences
-Token *parse_string_literal(Token *token)
-{
-  char *string = malloc(token->len);
-  size_t string_len = 0;
-  for (size_t i = 0; i < token->len; i++)
-  {
-    if (*(token->str + i) == '\\')
-    {
-      switch ((token->str + i)[1])
-      {
-        case 'n': *(string + string_len) = '\n'; break;
-        case 't': *(string + string_len) = '\t'; break;
-        case '\\': *(string + string_len) = '\\'; break;
-        case '\'': *(string + string_len) = '\''; break;
-        case '"': *(string + string_len) = '\"'; break;
-        case '0': *(string + string_len) = '\0'; break;
-        case 'e': *(string + string_len) = '\e'; break;
-        default: error_at(token->str + i, 2, "unknown control character found");
-      }
-      ++i;
-      ++string_len;
-    }
-    else
-      *(string + string_len++) = *(token->str + i);
-  }
-  token->str = string;
-  token->len = string_len;
-  return token;
-}
-
 Token *consume_string()
 {
   Token *return_token = NULL;

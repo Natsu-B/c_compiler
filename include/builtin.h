@@ -11,5 +11,6 @@
 #include "tokenizer.h"
 
 bool is_builtin_function(Node** node, Token* token, bool is_root);
+char* parse_string_literal(char* str, size_t* len);
 
 #endif

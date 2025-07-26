@@ -31,8 +31,6 @@ struct Var
   // Whether the 4th bit is register
   uint8_t storage_class_specifier;
   bool is_local;      // Whether it is a local or global variable
-  char *global_name;  // Variable name for global variable
-                      // May change from original name due to static, etc.
   size_t offset;      // For local variables, the variable is at RBP - offset
 };
 

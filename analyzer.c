@@ -365,6 +365,8 @@ void add_type_internal(Node *node)
       node->type = node->lhs->type;
       if (node->lhs->type->ptr_to)
         node->num_val = size_of(node->lhs->type->ptr_to);
+      else
+        node->num_val = 1;
       return;
     case ND_FUNCDEF: node->type = alloc_type(TYPE_VOID); return;
     case ND_FUNCCALL:
@@ -605,39 +607,41 @@ void add_type(Node *node)
   add_type_internal(node);
 }
 
-Node *analyze_type(Node *node)
+Node *analyze_type(Node *node, bool is_root)
 {
   if (!node)
     return NULL;
   if (node->lhs)
-    node->lhs = analyze_type(node->lhs);
+    node->lhs = analyze_type(node->lhs, false);
   if (node->rhs)
-    node->rhs = analyze_type(node->rhs);
+    node->rhs = analyze_type(node->rhs, false);
   if (node->kind == ND_TERNARY)
-    node->control.ternary_child = analyze_type(node->control.ternary_child);
+    node->control.ternary_child =
+        analyze_type(node->control.ternary_child, false);
   if (node->kind == ND_IF || node->kind == ND_ELIF || node->kind == ND_FOR ||
       node->kind == ND_WHILE || node->kind == ND_DO)
   {
-    node->control.condition = analyze_type(node->control.condition);
-    node->control.true_code = analyze_type(node->control.true_code);
-    node->control.false_code = analyze_type(node->control.false_code);
-    node->control.init = analyze_type(node->control.init);
-    node->control.update = analyze_type(node->control.update);
+    node->control.condition = analyze_type(node->control.condition, false);
+    node->control.true_code = analyze_type(node->control.true_code, false);
+    node->control.false_code = analyze_type(node->control.false_code, false);
+    node->control.init = analyze_type(node->control.init, false);
+    node->control.update = analyze_type(node->control.update, false);
   }
   if (node->kind == ND_LABEL || node->kind == ND_CASE)
-    node->jump.statement_child = analyze_type(node->jump.statement_child);
+    node->jump.statement_child =
+        analyze_type(node->jump.statement_child, false);
   if (node->kind == ND_FUNCCALL || node->kind == ND_FUNCDEF)
     for (size_t i = 1; i <= vector_size(node->func.expr); i++)
-      vector_replace_at(node->func.expr, i,
-                        analyze_type(vector_peek_at(node->func.expr, i)));
+      vector_replace_at(
+          node->func.expr, i,
+          analyze_type(vector_peek_at(node->func.expr, i), false));
   if (node->kind == ND_BLOCK)
   {
     offset_enter_nest();
     for (NDBlock *tmp = node->func.stmt; tmp; tmp = tmp->next)
-      tmp->node = analyze_type(tmp->node);
+      tmp->node = analyze_type(tmp->node, true);
     offset_exit_nest();
   }
-
   switch (node->kind)
   {
     case ND_DEREF:
@@ -657,6 +661,8 @@ Node *analyze_type(Node *node)
           !(node->variable.var->storage_class_specifier & 1 << 1) &&
           node->variable.is_new_var)
         node->variable.var->offset = calculate_offset(size_of(node->type));
+      if (is_root)
+        node->kind = ND_NOP;
       break;
     case ND_NUM:
       if (node->type->type == TYPE_PTR || node->type->type == TYPE_ARRAY)
@@ -667,6 +673,10 @@ Node *analyze_type(Node *node)
     case ND_STRING:
       // TODO: Behavior is different for ND_ARRAY
       node->literal_name = add_string_literal(node->token);
+      break;
+    case ND_CAST:
+      node->lhs->type = node->type;
+      memcpy(node, node->lhs, sizeof(Node));
       break;
     default: break;
   }
@@ -713,17 +723,18 @@ FuncBlock *analyzer(FuncBlock *funcblock)
     {
       init_nest();
       for (size_t i = 1; i <= vector_size(node->func.expr); i++)
-        vector_replace_at(node->func.expr, i,
-                          analyze_type(vector_peek_at(node->func.expr, i)));
+        vector_replace_at(
+            node->func.expr, i,
+            analyze_type(vector_peek_at(node->func.expr, i), false));
       for (NDBlock *tmp = node->func.stmt; tmp; tmp = tmp->next)
-        tmp->node = analyze_type(tmp->node);
+        tmp->node = analyze_type(tmp->node, true);
       // Align stacksize to 8-byte units
       size_t max_stacksize = get_max_offset();
       pointer->stacksize = (max_stacksize + 7) / 8 * 8;
     }
     else if (node->kind != ND_NOP && node->kind != ND_BUILTINFUNC)
     {
-      pointer->node = analyze_type(node);
+      pointer->node = analyze_type(node, false);
       node = pointer->node;
       // global variables initializer only allows constant value
       if (node->kind != ND_ASSIGN && node->kind != ND_VAR)
@@ -731,6 +742,10 @@ FuncBlock *analyzer(FuncBlock *funcblock)
                  "invalid global variable initializer");
       if (node->kind == ND_ASSIGN)
       {
+        if (node->lhs->kind != ND_VAR ||
+            node->lhs->variable.var->storage_class_specifier & !1 << 2)
+          error_at(node->token->str, node->token->len,
+                   "invalid global variable initializer");
         switch (node->rhs->kind)
         {
           case ND_NUM:
@@ -752,6 +767,10 @@ FuncBlock *analyzer(FuncBlock *funcblock)
                      "invalid global variable initializer");
         }
       }
+      else if (node->variable.var->storage_class_specifier &
+               !((1 << 1) + (1 << 2)))
+        error_at(node->token->str, node->token->len,
+                 "invalid global variable initializer");
     }
   }
 #ifdef DEBUG

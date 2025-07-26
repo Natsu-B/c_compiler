@@ -89,7 +89,10 @@ void print_type(Type *type)
     case TYPE_STRUCT:
     {
       tag_list *tag = vector_peek_at(get_enum_struct_list(), type->type_num);
-      printf("struct %.*s", (int)tag->name->len, tag->name->str);
+      if (tag->name)
+        printf("struct %.*s", (int)tag->name->len, tag->name->str);
+      else
+        printf("struct (unknown)");
       break;
     }
     case TYPE_ENUM:

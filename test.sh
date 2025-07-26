@@ -1,8 +1,30 @@
 #!/bin/bash
 COMPILER=${1:-./main}
 
+show_compiler_output_and_exit() {
+  local message="$1"
+  local stdout_file="$2"
+  local input_code="$3"
+
+  if [ -s "$stdout_file" ]; then
+    echo "--- Compiler (./main) debug stdout ---"
+    cat "$stdout_file"
+    echo "--------------------------------------"
+  fi
+
+  echo
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  echo "!! TEST FAILED for input: '$input_code'"
+  echo "!! Reason: $message"
+  echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+
+  exit 1
+}
+
 assert_print() {
   input="$1"
+  local compiler_stdout="out/compiler.stdout"
+
   echo "$input" > out/tmp.c
   if ! gcc -I./test -include gcc.h -o out/gcc out/tmp.c; then
     echo "ERROR: Reference build with GCC failed for input: '$input'"
@@ -11,26 +33,22 @@ assert_print() {
   ./out/gcc > out/gcc.txt
   expected_exit_code="$?"
 
-  if ! "$COMPILER" -i out/tmp.c -o out/out.s; then
-    echo "COMPILATION FAILED: '$COMPILER' failed for input: '$input'"
-    exit 1
+  if ! "$COMPILER" -i out/tmp.c -o out/out.s > "$compiler_stdout"; then
+    show_compiler_output_and_exit "COMPILATION FAILED" "$compiler_stdout" "$input"
   fi
 
   if ! gcc -z noexecstack -o out/out out/out.s; then
-    echo "LINKING FAILED: GCC could not link 'out/out.s' for input: '$input'"
-    exit 1
+    show_compiler_output_and_exit "LINKING FAILED" "$compiler_stdout" "$input"
   fi
 
   ./out/out > out/out.txt
   actual_exit_code="$?"
 
   if [ "$actual_exit_code" != "$expected_exit_code" ]; then
-    echo "$input => $expected_exit_code expected, but got $actual_exit_code"
-    exit 1
+    show_compiler_output_and_exit "EXIT CODE MISMATCH: Expected $expected_exit_code, but got $actual_exit_code" "$compiler_stdout" "$input"
   fi
   if ! cmp -s "out/out.txt" "out/gcc.txt"; then
-    echo "ERROR: For input '$input', compiler output does not match GCC output"
-    exit 1
+    show_compiler_output_and_exit "OUTPUT MISMATCH" "$compiler_stdout" "$input"
   fi
 
   echo "$input => $actual_exit_code"
@@ -38,20 +56,20 @@ assert_print() {
 
 assert() {
   input="$1"
+  local compiler_stdout="out/compiler.stdout"
+
   echo "$input" > out/tmp.c
 
   gcc -I./test -include gcc.h -o out/gcc out/tmp.c
   ./out/gcc
   expected="$?"
 
-  if ! "$COMPILER" -i out/tmp.c -o out/out.s; then
-    echo "COMPILATION FAILED: '$COMPILER' failed for input: '$input'"
-    exit 1
+  if ! "$COMPILER" -i out/tmp.c -o out/out.s > "$compiler_stdout"; then
+    show_compiler_output_and_exit "COMPILATION FAILED" "$compiler_stdout" "$input"
   fi
 
   if ! gcc -z noexecstack -o out/out out/out.s; then
-    echo "LINKING FAILED: GCC could not link 'out/out.s' for input: '$input'"
-    exit 1
+    show_compiler_output_and_exit "LINKING FAILED" "$compiler_stdout" "$input"
   fi
 
   ./out/out
@@ -60,8 +78,7 @@ assert() {
   if [ "$actual" = "$expected" ]; then
     echo "$input => $actual"
   else
-    echo "$input => $expected expected, but got $actual"
-    exit 1
+    show_compiler_output_and_exit "$expected expected, but got $actual" "$compiler_stdout" "$input"
   fi
 }
 
@@ -69,6 +86,7 @@ assert_with_outer_code() {
   input="$1"
   shift
   linkcode=("$@")
+  local compiler_stdout="out/compiler.stdout"
 
   echo "$input" > out/tmp.c
 
@@ -76,14 +94,12 @@ assert_with_outer_code() {
   ./out/gcc
   expected="$?"
 
-  if ! "$COMPILER" -i out/tmp.c -o out/out.s; then
-    echo "COMPILATION FAILED: '$COMPILER' failed for input: '$input'"
-    exit 1
+  if ! "$COMPILER" -i out/tmp.c -o out/out.s > "$compiler_stdout"; then
+    show_compiler_output_and_exit "COMPILATION FAILED" "$compiler_stdout" "$input"
   fi
 
   if ! gcc -z noexecstack -o out/out out/out.s "${linkcode[@]}"; then
-    echo "LINKING FAILED: GCC could not link 'out/out.s' for input: '$input'"
-    exit 1
+    show_compiler_output_and_exit "LINKING FAILED" "$compiler_stdout" "$input"
   fi
 
   ./out/out
@@ -92,8 +108,7 @@ assert_with_outer_code() {
   if [ "$actual" = "$expected" ]; then
     echo "$input => $actual"
   else
-    echo "$input => $expected expected, but got $actual"
-    exit 1
+    show_compiler_output_and_exit "$expected expected, but got $actual" "$compiler_stdout" "$input"
   fi
 }
 
@@ -185,12 +200,12 @@ assert '#include <stdbool.h>
 bool f; int main() {if (f) return 1; f = 1; if (f) f; else return 2; f = f + 1; if (f) f; else return 4; return 3;}'
 assert 'typedef int hoge; int main() {hoge a = 1; return a;}'
 assert 'int main() { typedef long long fuga; fuga x; return sizeof(x); }'
-assert 'typedef int *hoge; int main() {hoge x; *x = 1; return *x;}'
+assert 'typedef int *hoge; int main() {int y; hoge x = &y; *x = 1; return *x;}'
 assert 'typedef int hoge[2]; int main() {hoge x; x[1] = 10; x[0] = 2; return x[1];}'
 assert 'struct HOGE { int x; int y; }; int main() {struct HOGE x; return sizeof(x);}'
 assert '#include <stdbool.h>
 struct HOGE { int x; int y; }; struct FUGA { bool x; bool y; }; typedef struct FUGA HOGE; int main() {HOGE x; return sizeof(x);}'
-assert 'typedef int hoge; int main() {hoge* a; *a = 1; return *a;}'
+assert 'typedef int hoge; int b; int main() {hoge* a = &b; *a = 1; return *a;}'
 assert '#include <stdbool.h>
 struct HOGE { int x; int y; }; struct FUGA { bool x; bool y; }; typedef struct FUGA HOGE; int main() {HOGE x; return sizeof(x.x);}'
 assert 'int main() { int x = 0; for(int i = 0; i <= 10; i = i+ 1) { x = x + i; if (x > 10) break; } return x;}'
@@ -199,6 +214,7 @@ assert 'enum tmp { a, b, c = 8, d,}; int main() {return b + d;}'
 assert 'enum tmp { a, b = a + 1, c = 2 * 2, d,}; int main() {return b + d;}'
 assert 'int main () { int x = 0; int y = 0; return ++x + y++;}'
 assert 'int main () { int x = 0; int y = 0; return x-- - --y;}'
+assert 'int main() {int x = 0; switch (x) { case 0: x = x + 10; break; case 1: x--; break;default: break;} return x;}'
 assert 'int main() {int x = 0; switch (x) { case 0: x = x + 10; break; case 1: x--; break;default: break;} switch(x) {case 0: return 255; default: return x;}}'
 assert 'int main() {int x = 1; void *y = &x; return 0;}'
 assert 'int main() {int i = 0; do {i =i+ 5;}while(0); return i;}'
@@ -218,8 +234,8 @@ assert 'enum tmp {tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8, tmp9, tmp10 };
 assert 'int foo(); int main() { return foo(); } int foo() { return 123; }'
 assert_with_outer_code 'int main() { int x = piyo(1, 2, 3, 4, 5, 6, 7, 8); return x; }' './test/piyo.o'
 assert_with_outer_code 'int main() { int g = 7; int x = piyo(1, 2, 3, 4, 5, 6, g, 8); return x; }' './test/piyo.o'
-assert 'int hoge(int a, int b, int c, int d, int e, int f, int g, int h){return h;} int main() { int g = 7; int x = hoge(1, 2, 3, 4, 5, 6, g, 8); return x; }'
-assert 'int hoge(int a, int b, int c, int d, int e, int f, int g, int h){return g;} int main() { int g = 7; int x = hoge(1, 2, 3, 4, 5, 6, g, 8); return x; }'
+assert_print 'int hoge(int a, int b, int c, int d, int e, int f, int g, int h){if (g!=7||h!=8)return 1;printf("%d,%d,%d,%d,%d,%d,%d,%d",a,b,c,d,e,f,g,h);return h;} int main() { int g = 7; int x = hoge(1, 2, 3, 4, 5, 6, g, 8); return x; }'
+assert_print 'int hoge(int a, int b, int c, int d, int e, int f, int g, int h){if (g!=7||h!=8)return 1; printf("%d,%d,%d,%d,%d,%d,%d,%d",a,b,c,d,e,f,g,h);return g;} int main() { int g = 7; int x = hoge(1, 2, 3, 4, 5, 6, g, 8); return x; }'
 assert 'int main() { typedef int hoge; return sizeof(hoge); }'
 assert 'int main() { typedef int hoge; return sizeof(hoge*); }'
 assert 'int main() { typedef int hoge[2]; return sizeof(hoge); }'
@@ -277,6 +293,9 @@ assert 'int main() {int a[2][5] = {{1, 2,3, 4, 5}, {6, 7},}; return a[0][4];}'
 assert 'int main() {int a[3][5] = {{1, 2,3, 4, 5}, {6, 7, 12, 13, 14},{11, 10, 9, 8}}; return a[2][1];}'
 assert 'int main() {int a[2][3] = {{1, 2,3}, {4, 5},}; return a[0][2];}'
 assert 'int main() {int a[2][3] = {{1, 2,3}, {4, 5},}; return a[1][2];}'
+assert 'int main() { struct {int a; int b;} x; return sizeof(x); }'
+assert 'int main() { struct {int a; int b;} x; x.a = 10; x.b = 20; return x.a + x.b; }'
+assert 'int main() { typedef struct {int a; int b;} HOGE; HOGE x; x.a = 5; return sizeof(x) + x.a; }'
 # assert '#include "../test/compiler_header.h"
 # int foo(int x, ...);int main(){ return foo(1, 2, 4, 7, 8, 9, 11, 15, 18, 20, 19, 0); } int foo(int x, ...){ va_list ap; va_start(ap, x); int tmp = x; int result; while (tmp) { result = tmp; tmp = va_arg(ap, int); } va_end(ap); return result; }'
 

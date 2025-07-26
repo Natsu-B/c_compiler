@@ -672,39 +672,34 @@ size_t align_of(Type* type)
 }
 
 Type* find_struct_child(Node* parent, Node* child, size_t* offset)
-{  // Find the child of the struct and return its type
+{
+  // Find the child of the struct and return its type
   // Also return the offset of the child
   Type* type = parent->type;
   if (type->type == TYPE_PTR || type->type == TYPE_ARRAY)
     type = type->ptr_to;
-  for (size_t i = 1; i <= vector_size(TagNamespaceList); i++)
+
+  tag_list* tmp = vector_peek_at(EnumStructList, type->type_num);
+  if (tmp->type == type)
   {
-    Vector* struct_nest = vector_peek_at(TagNamespaceList, i);
-    for (size_t j = 1; j <= vector_size(struct_nest); j++)
+    if (tmp->struct_size)
     {
-      tag_list* tmp = vector_peek_at(struct_nest, j);
-      if (tmp->type == type)
+      Vector* child_list = tmp->data_list;
+      for (size_t k = 1; k <= vector_size(child_list); k++)
       {
-        if (tmp->struct_size)
+        tag_data_list* child_data = vector_peek_at(child_list, k);
+        if (child->token->len == child_data->name->len &&
+            !strncmp(child->token->str, child_data->name->str,
+                     child->token->len))
         {
-          Vector* child_list = tmp->data_list;
-          for (size_t k = 1; k <= vector_size(child_list); k++)
-          {
-            tag_data_list* child_data = vector_peek_at(child_list, k);
-            if (child->token->len == child_data->name->len &&
-                !strncmp(child->token->str, child_data->name->str,
-                         child->token->len))
-            {
-              *offset = child_data->offset;
-              return child_data->type;
-            }
-          }
-          error_at(child->token->str, child->token->len,
-                   "Unknown child name (parent: %.*s).");
+          *offset = child_data->offset;
+          return child_data->type;
         }
-        error_at(tmp->name->str, tmp->name->len, "Struct not defined.");
       }
+      error_at(child->token->str, child->token->len,
+               "Unknown child name (parent: %.*s).");
     }
+    error_at(tmp->name->str, tmp->name->len, "Struct not defined.");
   }
   error_at(parent->token->str, parent->token->len, "Unknown struct type.");
   return NULL;

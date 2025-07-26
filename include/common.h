@@ -1,7 +1,6 @@
 #ifndef COMMON_C_COMPILER
 #define COMMON_C_COMPILER
 
-#include "linked_list.h"
 #include "parser.h"
 #include "type.h"
 #include "vector.h"

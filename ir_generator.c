@@ -4,12 +4,11 @@
 
 #include "include/ir_generator.h"
 
-#include <stdint.h>
-
 #include "include/common.h"
 #ifdef SELF_HOST
 #include "test/compiler_header.h"
 #else
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #endif
@@ -707,12 +706,19 @@ static int *gen_stmt(Vector *v, Node *node)
       // Address-of `&v`.
       return gen_addr(v, node->lhs);
     }
+    case ND_LOGICAL_NOT:
+    case ND_NOT:
     case ND_UNARY_MINUS:
     {
-      // Unary minus `-x`.
       int *src_reg_ptr = gen_stmt(v, node->lhs);
       IR *ir = calloc(1, sizeof(IR));
-      ir->kind = IR_NEG;  // Negate sign
+      switch (node->kind)
+      {
+        case ND_LOGICAL_NOT: ir->kind = IR_NOT; break;
+        case ND_NOT: ir->kind = IR_BIT_NOT; break;
+        case ND_UNARY_MINUS: ir->kind = IR_NEG; break;
+        default: unreachable(); break;
+      }
       ir->un_op.src_reg = *src_reg_ptr;
       int *dst_reg_ptr = gen_reg();
       ir->un_op.dst_reg = *dst_reg_ptr;
@@ -840,6 +846,8 @@ static int *gen_stmt(Vector *v, Node *node)
           break;
         default: unreachable();
       }
+      if (!lhs_ptr || !rhs_ptr)
+        error_at(node->token->str, node->token->len, "invalid operator");
       ir->bin_op.lhs_reg = *lhs_ptr;
       ir->bin_op.rhs_reg = *rhs_ptr;
       ir->bin_op.lhs_size = size_of(node->lhs->type);
@@ -1126,7 +1134,8 @@ static void dump_ir_fp(IRProgram *program, FILE *fp)
                   ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
           break;
         case IR_BIT_NOT:
-          fprintf(fp, "  NOT r%d, r%d\n", ir->un_op.dst_reg, ir->un_op.src_reg);
+          fprintf(fp, "  BNOT r%d, r%d\n", ir->un_op.dst_reg,
+                  ir->un_op.src_reg);
           break;
         case IR_JMP: fprintf(fp, "  JMP %s\n", ir->jmp.label); break;
         case IR_JNE:
@@ -1173,6 +1182,9 @@ static void dump_ir_fp(IRProgram *program, FILE *fp)
         case IR_LABEL: fprintf(fp, "%s:\n", ir->label.name); break;
         case IR_NEG:
           fprintf(fp, "  NEG r%d, r%d\n", ir->un_op.dst_reg, ir->un_op.src_reg);
+          break;
+        case IR_NOT:
+          fprintf(fp, "  NOT r%d, r%d\n", ir->un_op.dst_reg, ir->un_op.src_reg);
           break;
         case IR_BUILTIN_ASM:
           fprintf(fp, "  ASM \"%.*s\"", (int)ir->builtin_asm.asm_len,

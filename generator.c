@@ -245,6 +245,15 @@ void gen_ir_instruction(IR *ir)
       output_file("    mov [rbp-%d], rax", get_stack_offset(ir->un_op.dst_reg));
       break;
     }
+    case IR_NOT:
+    {
+      output_file("    mov rax, [rbp-%d]", get_stack_offset(ir->un_op.src_reg));
+      output_file("    cmp rax, 0");
+      output_file("    sete al");
+      output_file("    movzx rax, al");
+      output_file("    mov [rbp-%d], rax", get_stack_offset(ir->un_op.dst_reg));
+      break;
+    }
     case IR_RET:
     {
       output_file("    mov rax, [rbp-%d]", get_stack_offset(ir->ret.src_reg));

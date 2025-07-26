@@ -30,8 +30,8 @@ struct Var
   // Whether the 3rd bit is auto
   // Whether the 4th bit is register
   uint8_t storage_class_specifier;
-  bool is_local;      // Whether it is a local or global variable
-  size_t offset;      // For local variables, the variable is at RBP - offset
+  bool is_local;  // Whether it is a local or global variable
+  size_t offset;  // For local variables, the variable is at RBP - offset
 };
 
 Var *add_variables(Token *token, Type *type, uint8_t storage_class_specifier);
@@ -88,9 +88,9 @@ typedef struct
 {
   enum
   {
-    is_struct,
-    is_union,
-    is_enum,
+    struct_type,
+    union_type,
+    enum_type,
   } tagkind;    // whether it is a union, struct, or enum
   Token *name;  // name, NULL if not present
   Vector
@@ -124,6 +124,6 @@ Type *find_struct_child(Node *parent, Node *child, size_t *offset);
 void init_types();
 void new_nest_type();
 void exit_nest_type();
-Vector* get_enum_struct_list();
+Vector *get_enum_struct_list();
 
 #endif

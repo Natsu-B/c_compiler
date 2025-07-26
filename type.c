@@ -177,9 +177,9 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
             if (tmp->name && tmp->name->len == tag_name->len &&
                 !strncmp(tmp->name->str, tag_name->str, tag_name->len))
             {
-              if ((is_struct && tmp->tagkind != is_struct) ||
-                  (is_union && tmp->tagkind != is_union) ||
-                  (is_enum && tmp->tagkind != is_enum))
+              if ((is_struct && tmp->tagkind != struct_type) ||
+                  (is_union && tmp->tagkind != union_type) ||
+                  (is_enum && tmp->tagkind != enum_type))
                 error_at(tag_name->str, tag_name->len, "Invalid type.");
               new = tmp;
               break;
@@ -209,11 +209,11 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
       {
         new = calloc(1, sizeof(tag_list));
         if (is_struct)
-          new->tagkind = is_struct;
+          new->tagkind = struct_type;
         else if (is_union)
-          new->tagkind = is_union;
+          new->tagkind = union_type;
         else
-          new->tagkind = is_enum;
+          new->tagkind = enum_type;
         new->name = tag_name;
         new->type = alloc_type(is_enum ? TYPE_ENUM : TYPE_STRUCT);
         new->type->type_num = ++tag_id;
@@ -274,24 +274,24 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
           {
             uint8_t storage_class_specifier = 0;
             Type* child_type = declaration_specifiers(&storage_class_specifier);
-            Node* node =
-                declarator_no_side_effect(&child_type, storage_class_specifier);
-            if (!node || !node->type)
+            if (!child_type)
               error_at(get_token()->str, get_token()->len,
                        "Invalid struct definition.");
+            Node* node =
+                declarator_no_side_effect(&child_type, storage_class_specifier);
             tag_data_list* new_data = malloc(sizeof(tag_data_list));
-            new_data->name = node->token;
-            new_data->type = node->type;
-            new_data->offset = struct_size;
+            new_data->name = node ? node->token : NULL;
+            new_data->type = child_type;
+            new_data->offset = is_struct ? struct_size : 0;
             vector_push(new->data_list, new_data);
-            size_t alignment = align_of(node->type);
-            if (new->tagkind == is_struct)
+            size_t alignment = align_of(child_type);
+            if (is_struct)
               struct_size = (struct_size % alignment
                                  ? (struct_size / alignment + 1) * alignment
                                  : struct_size) +
-                            size_of(node->type);
-            else if (struct_size < size_of(node->type))
-              struct_size = size_of(node->type);
+                            size_of(child_type);
+            else if (struct_size < size_of(child_type))
+              struct_size = size_of(child_type);
             if (struct_alignment < alignment)
               struct_alignment = alignment;
             expect(";", TK_RESERVED);
@@ -671,16 +671,15 @@ size_t align_of(Type* type)
   return 0;
 }
 
-Type* find_struct_child(Node* parent, Node* child, size_t* offset)
+Type* find_struct_child_internal(Type* parent, Node* child, size_t* offset)
 {
   // Find the child of the struct and return its type
   // Also return the offset of the child
-  Type* type = parent->type;
-  if (type->type == TYPE_PTR || type->type == TYPE_ARRAY)
-    type = type->ptr_to;
+  if (parent->type == TYPE_PTR || parent->type == TYPE_ARRAY)
+    parent = parent->ptr_to;
 
-  tag_list* tmp = vector_peek_at(EnumStructList, type->type_num);
-  if (tmp->type == type)
+  tag_list* tmp = vector_peek_at(EnumStructList, parent->type_num);
+  if (tmp->type == parent)
   {
     if (tmp->struct_size)
     {
@@ -688,21 +687,42 @@ Type* find_struct_child(Node* parent, Node* child, size_t* offset)
       for (size_t k = 1; k <= vector_size(child_list); k++)
       {
         tag_data_list* child_data = vector_peek_at(child_list, k);
-        if (child->token->len == child_data->name->len &&
-            !strncmp(child->token->str, child_data->name->str,
-                     child->token->len))
+        if (child_data->name)
         {
-          *offset = child_data->offset;
-          return child_data->type;
+          if (child->token->len == child_data->name->len &&
+              !strncmp(child->token->str, child_data->name->str,
+                       child->token->len))
+          {
+            *offset = child_data->offset;
+            return child_data->type;
+          }
+        }
+        else
+        {  // For anonymous child struct
+          Type* result =
+              find_struct_child_internal(child_data->type, child, offset);
+          if (result)
+          {
+            *offset += child_data->offset;
+            return result;
+          }
         }
       }
-      error_at(child->token->str, child->token->len,
-               "Unknown child name (parent: %.*s).");
     }
-    error_at(tmp->name->str, tmp->name->len, "Struct not defined.");
   }
-  error_at(parent->token->str, parent->token->len, "Unknown struct type.");
+  else
+    unreachable();
   return NULL;
+}
+
+Type* find_struct_child(Node* parent, Node* child, size_t* offset)
+{
+  Type* result = find_struct_child_internal(parent->type, child, offset);
+  if (!result)
+    error_at(child->token->str, child->token->len,
+             "Unknown child name (parent: %.*s).", (int)parent->token->len,
+             parent->token->str);
+  return result;
 }
 
 void init_types()

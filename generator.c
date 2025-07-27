@@ -440,7 +440,9 @@ void generator(IRProgram *program, char *output_filename)
     for (size_t i = 0; i < vector_size(program->global_vars); i++)
     {
       GlobalVar *gvar = vector_peek_at(program->global_vars, i + 1);
-      if (gvar->how2_init == init_zero)
+      if (vector_size(gvar->initializer) == 1 &&
+          ((GVarInitializer *)vector_peek(gvar->initializer))->how2_init ==
+              init_zero)
         output_file("    .section .bss");
       else
         output_file("    .section .data");
@@ -451,27 +453,39 @@ void generator(IRProgram *program, char *output_filename)
       output_file("    .size %.*s, %lu", (int)gvar->var_name_len,
                   gvar->var_name, gvar->var_size);
       output_file("%.*s:", (int)gvar->var_name_len, gvar->var_name);
-      switch (gvar->how2_init)
+      for (size_t j = 1; j <= vector_size(gvar->initializer); j++)
       {
-        case init_zero: output_file("    .zero %zu", gvar->var_size); break;
-        case init_val:
-          switch (gvar->var_size)
-          {
-            case 1: output_file("    .byte %lld", gvar->init_val); break;
-            case 2: output_file("    .word %lld", gvar->init_val); break;
-            case 4: output_file("    .long %lld", gvar->init_val); break;
-            case 8: output_file("    .quad %lld", gvar->init_val); break;
-            default: unreachable();
-          }
-          break;
-        case init_pointer:
-          output_file("    .quad %.*s", (int)gvar->assigned_var.var_name_len,
-                      gvar->assigned_var.var_name);
-          break;
-        case init_string:
-          output_file("    .quad %s", gvar->literal_name);
-          break;
-        default: unreachable(); break;
+        GVarInitializer *init = vector_peek_at(gvar->initializer, j);
+        switch (init->how2_init)
+        {
+          case init_zero: output_file("    .zero %zu", init->zero_len); break;
+          case init_val:
+            switch (init->value.value_size)
+            {
+              case 1:
+                output_file("    .byte %lld", init->value.init_val);
+                break;
+              case 2:
+                output_file("    .word %lld", init->value.init_val);
+                break;
+              case 4:
+                output_file("    .long %lld", init->value.init_val);
+                break;
+              case 8:
+                output_file("    .quad %lld", init->value.init_val);
+                break;
+              default: unreachable();
+            }
+            break;
+          case init_pointer:
+            output_file("    .quad %.*s", (int)init->assigned_var.var_name_len,
+                        init->assigned_var.var_name);
+            break;
+          case init_string:
+            output_file("    .quad %s", init->literal_name);
+            break;
+          default: unreachable(); break;
+        }
       }
     }
   }

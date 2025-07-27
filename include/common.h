@@ -211,19 +211,21 @@ typedef struct
 
 typedef struct
 {
-  char *var_name;
-  size_t var_name_len;
-  size_t var_size;
-  bool is_static;
   union
   {
-    long long init_val;  // Used when how2_init is init_val
+    size_t zero_len;  // Used when how2_init is init_zero
+    struct
+    {
+      long long init_val;
+      size_t value_size;
+    } value;  // Used when how2_init is init_val
     struct
     {
       char *var_name;
       size_t var_name_len;
     } assigned_var;      // Used when how2_init is init_pointer
     char *literal_name;  // Used when how2_init is init_string
+    Vector *init_list;   // Used when how2_init is init_list
   };
   enum
   {                // How to initialize when it's a global variable
@@ -233,6 +235,15 @@ typedef struct
     init_pointer,  // Initialize with a pointer
     init_string,   // Initialize with a string
   } how2_init;
+} GVarInitializer;
+
+typedef struct
+{
+  char *var_name;
+  size_t var_name_len;
+  size_t var_size;
+  bool is_static;
+  Vector *initializer;
 } GlobalVar;
 
 typedef struct

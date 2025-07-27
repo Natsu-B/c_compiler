@@ -64,6 +64,51 @@ IRFunc *call_builtin_func(Node *node)
   return func;
 }
 
+void gen_gvar_assign(Vector *v, Type *assigned, Node *node, size_t assign_size)
+{
+  GVarInitializer *init = calloc(1, sizeof(GVarInitializer));
+  switch (node->kind)
+  {
+    case ND_NUM:
+      init->how2_init = init_val;
+      init->value.init_val = node->num_val;
+      init->value.value_size = assign_size;
+      break;
+    case ND_ADDR:
+      if (assign_size != 8)
+        unreachable();
+      init->how2_init = init_pointer;
+      init->assigned_var.var_name = node->lhs->variable.var->name;
+      init->assigned_var.var_name_len = node->lhs->variable.var->len;
+      break;
+    case ND_STRING:
+      if (assign_size != 8)
+        unreachable();
+      init->how2_init = init_string;
+      init->literal_name = node->literal_name;
+      break;
+    case ND_INITIALIZER:
+      for (size_t i = 0; i < vector_size(node->initialize.init_list); i++)
+      {
+        Node *child = vector_peek_at(node->initialize.init_list, i + 1);
+        gen_gvar_assign(v, assigned->ptr_to, child, size_of(child->type));
+      }
+      size_t zero_padding =
+          size_of(node->type) -
+          vector_size(node->initialize.init_list) * size_of(node->type->ptr_to);
+      if (zero_padding)
+      {
+        GVarInitializer *zero = calloc(1, sizeof(GVarInitializer));
+        zero->how2_init = init_zero;
+        zero->zero_len = zero_padding;
+        vector_push(v, zero);
+      }
+      return;
+    default: unreachable(); break;
+  }
+  vector_push(v, init);
+}
+
 IRProgram *gen_ir(FuncBlock *parsed)
 {
   IRProgram *program = calloc(1, sizeof(IRProgram));
@@ -110,9 +155,13 @@ IRProgram *gen_ir(FuncBlock *parsed)
         gvar->var_name = fb->node->variable.var->name;
         gvar->var_name_len = fb->node->variable.var->len;
         gvar->var_size = size_of(fb->node->variable.var->type);
-        gvar->how2_init = init_zero;  // Default to zero-initialization
+        gvar->initializer = vector_new();
         gvar->is_static =
             fb->node->variable.var->storage_class_specifier & 1 << 2;
+        GVarInitializer *init = calloc(1, sizeof(GVarInitializer));
+        init->how2_init = init_zero;  // Default to zero-initialization
+        init->zero_len = size_of(fb->node->variable.var->type);
+        vector_push(gvar->initializer, init);
         vector_push(program->global_vars, gvar);
         break;
       }
@@ -124,25 +173,9 @@ IRProgram *gen_ir(FuncBlock *parsed)
         gvar->var_size = size_of(fb->node->lhs->variable.var->type);
         gvar->is_static =
             fb->node->lhs->variable.var->storage_class_specifier & 1 << 2;
-        switch (fb->node->rhs->kind)
-        {
-          case ND_NUM:
-            gvar->how2_init = init_val;
-            gvar->init_val = fb->node->rhs->num_val;
-            break;
-          case ND_ADDR:
-            gvar->how2_init = init_pointer;
-            gvar->assigned_var.var_name =
-                fb->node->rhs->lhs->variable.var->name;
-            gvar->assigned_var.var_name_len =
-                fb->node->rhs->lhs->variable.var->len;
-            break;
-          case ND_STRING:
-            gvar->how2_init = init_string;
-            gvar->literal_name = fb->node->rhs->literal_name;
-            break;
-          default: unreachable(); break;
-        }
+        gvar->initializer = vector_new();
+        gen_gvar_assign(gvar->initializer, fb->node->lhs->type, fb->node->rhs,
+                        size_of(fb->node->type));
         vector_push(program->global_vars, gvar);
         break;
       }
@@ -188,16 +221,6 @@ static int *gen_assign(Vector *v, Node *assigned, Node *node, size_t padding,
         vector_size(node->initialize.init_list) * size_of(node->type->ptr_to);
     while (size_of(node->type) - done_init)
     {
-      // int *lhs_ptr = gen_addr(v, assigned);
-      // IR *ir = calloc(1, sizeof(IR));
-      // ir->kind = IR_ADD;
-      // ir->bin_op.lhs_reg = *lhs_ptr;
-      // ir->bin_op.rhs_reg = *gen_stmt(v, new_node_num(padding + done_init));
-      // ir->bin_op.lhs_size = 8;  // *ptr
-      // ir->bin_op.rhs_size = 8;
-      // int *dst_ptr = gen_reg();
-      // ir->bin_op.dst_reg = *dst_ptr;
-      // vector_push(v, ir);
       size_t size = size_of(node->type) - done_init > 8
                         ? 8
                         : size_of(node->type) - done_init;
@@ -220,18 +243,6 @@ static int *gen_assign(Vector *v, Node *assigned, Node *node, size_t padding,
     // the LHS.
     int *rhs_ptr = gen_stmt(v, node);
     int *lhs_addr_ptr = gen_addr(v, assigned);
-    // if (padding)
-    // {
-    //   IR *ir = calloc(1, sizeof(IR));
-    //   ir->kind = IR_ADD;
-    //   ir->bin_op.lhs_reg = *rhs_ptr;
-    //   ir->bin_op.rhs_reg = *gen_stmt(v, new_node_num(padding));
-    //   ir->bin_op.lhs_size = 8;  // *ptr
-    //   ir->bin_op.rhs_size = 8;
-    //   rhs_ptr = gen_reg();
-    //   ir->bin_op.dst_reg = *rhs_ptr;
-    //   vector_push(v, ir);
-    // }
     IR *ir = calloc(1, sizeof(IR));
     ir->kind = IR_STORE;
     ir->mem.reg = *rhs_ptr;
@@ -994,16 +1005,25 @@ static void dump_ir_fp(IRProgram *program, FILE *fp)
     GlobalVar *gvar = vector_peek_at(program->global_vars, i + 1);
     fprintf(fp, "GVAR %.*s %zu", (int)gvar->var_name_len, gvar->var_name,
             gvar->var_size);
-    switch (gvar->how2_init)
+    for (size_t j = 1; j <= vector_size(gvar->initializer); j++)
     {
-      case init_zero: fprintf(fp, " ZERO\n"); break;
-      case init_val: fprintf(fp, " VAL %lld\n", gvar->init_val); break;
-      case init_pointer:
-        fprintf(fp, " VAR %.*s\n", (int)gvar->assigned_var.var_name_len,
-                gvar->assigned_var.var_name);
-        break;
-      case init_string: fprintf(fp, " STRING %s\n", gvar->literal_name); break;
-      default: unreachable(); break;
+      GVarInitializer *init = vector_peek_at(gvar->initializer, j);
+      switch (init->how2_init)
+      {
+        case init_zero: fprintf(fp, " ZERO %lu\n", init->zero_len); break;
+        case init_val:
+          fprintf(fp, " VAL %lu %lld\n", init->value.value_size,
+                  init->value.init_val);
+          break;
+        case init_pointer:
+          fprintf(fp, " VAR %.*s\n", (int)init->assigned_var.var_name_len,
+                  init->assigned_var.var_name);
+          break;
+        case init_string:
+          fprintf(fp, " STRING %s\n", init->literal_name);
+          break;
+        default: unreachable(); break;
+      }
     }
   }
 

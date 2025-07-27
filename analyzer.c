@@ -564,8 +564,8 @@ void add_type_internal(Node *const node)
           error_at(node->initialize.assigned->token->str,
                    node->initialize.assigned->token->len,
                    "invalid initializer");
-        if (!(check_initializer_type(node->initialize.assigned->type, node,
-                                     true)))
+        if (!(check_initializer_type(
+                node->initialize.assigned->variable.var->type, node, true)))
           error_at(node->token->str, node->token->len, "invalid initializer");
       }
       break;
@@ -675,7 +675,14 @@ Node *analyze_type(Node *node, bool is_root)
       // TODO: Behavior is different for ND_ARRAY
       node->literal_name = add_string_literal(node->token);
       break;
-    case ND_CAST: node->lhs->type = node->type; return node->lhs;
+    case ND_CAST:
+      if (node->type->type == TYPE_VOID)
+      {
+        node->kind = ND_NOP;
+        return node;
+      }
+      node->lhs->type = node->type;
+      return node->lhs;
     default: break;
   }
   return node;
@@ -761,6 +768,7 @@ FuncBlock *analyzer(FuncBlock *funcblock)
             node->rhs = node->rhs->lhs;
             node->rhs->num_val = node->rhs->num_val ? 1 : 0;
             break;
+          case ND_INITIALIZER: break;
           default:
             error_at(node->rhs->token->str, node->rhs->token->len,
                      "invalid global variable initializer");

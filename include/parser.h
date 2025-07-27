@@ -20,66 +20,67 @@ typedef struct FuncBlock FuncBlock;
 
 typedef enum
 {
-  ND_NOP,            // Expected to be skipped
-  ND_ADD,            // +
-  ND_SUB,            // -
-  ND_MUL,            // *
-  ND_DIV,            // /
-  ND_IDIV,           // %
-  ND_EQ,             // ==
-  ND_NEQ,            // !=
-  ND_LT,             // <
-  ND_LTE,            // <=
-  ND_ASSIGN,         // =
-  ND_ADDR,           // &
-  ND_DEREF,          // *
-  ND_LOGICAL_NOT,    // !
-  ND_NOT,            // ~
-  ND_UNARY_PLUS,     // + (unary)
-  ND_UNARY_MINUS,    // - (unary)
-  ND_PREINCREMENT,   // ++ ident
-  ND_PREDECREMENT,   // -- ident
-  ND_POSTINCREMENT,  // ident ++
-  ND_POSTDECREMENT,  // ident --
-  ND_FUNCDEF,        // Function definition
-  ND_FUNCCALL,       // Function call
-  ND_BUILTINFUNC,    // Built in function call
-  ND_RETURN,         // Return statement
-  ND_SIZEOF,         // sizeof unary-expression
-  ND_TYPE_NAME,      // type-name
-  ND_IF,             // if
-  ND_ELIF,           // if else
-  ND_FOR,            // for
-  ND_WHILE,          // while
-  ND_DO,             // do while
-  ND_TERNARY,        // Ternary operator
-  ND_LOGICAL_OR,     // ||
-  ND_LOGICAL_AND,    // &&
-  ND_INCLUSIVE_OR,   // |
-  ND_EXCLUSIVE_OR,   // ^
-  ND_AND,            // &
-  ND_LEFT_SHIFT,     // <<
-  ND_RIGHT_SHIFT,    // >>
-  ND_ASSIGNMENT,     // Compound assignment (e.g., +=, -=)
-  ND_VAR,            // Variable
-  ND_ARRAY,          // Array
-  ND_DOT,            // .
-  ND_ARROW,          // ->
-  ND_FIELD,          // Child of struct
-  ND_NUM,            // Integer
-  ND_BLOCK,          // Block
-  ND_DISCARD_EXPR,   // Expression statement
-  ND_STRING,         // String literal
-  ND_GOTO,           // goto, continue, break
-  ND_LABEL,          // goto label
-  ND_CASE,           // Case statement
-  ND_SWITCH,         // Switch statement
-  ND_COMMA,          // Comma operator
-  ND_INITIALIZER,    // array or struct initializer
-  ND_CAST,           // Type cast
-  ND_EVAL,           // Cast to bool
-  ND_VARIABLE_ARGS,  // Variadic arguments
-  ND_END,            // For debug use
+  ND_NOP,              // Expected to be skipped
+  ND_ADD,              // +
+  ND_SUB,              // -
+  ND_MUL,              // *
+  ND_DIV,              // /
+  ND_IDIV,             // %
+  ND_EQ,               // ==
+  ND_NEQ,              // !=
+  ND_LT,               // <
+  ND_LTE,              // <=
+  ND_ASSIGN,           // =
+  ND_ADDR,             // &
+  ND_DEREF,            // *
+  ND_LOGICAL_NOT,      // !
+  ND_NOT,              // ~
+  ND_UNARY_PLUS,       // + (unary)
+  ND_UNARY_MINUS,      // - (unary)
+  ND_PREINCREMENT,     // ++ ident
+  ND_PREDECREMENT,     // -- ident
+  ND_POSTINCREMENT,    // ident ++
+  ND_POSTDECREMENT,    // ident --
+  ND_FUNCDEF,          // Function definition
+  ND_FUNCCALL,         // Function call
+  ND_BUILTINFUNC,      // Built in function call
+  ND_RETURN,           // Return statement
+  ND_SIZEOF,           // sizeof unary-expression
+  ND_TYPE_NAME,        // type-name
+  ND_IF,               // if
+  ND_ELIF,             // if else
+  ND_FOR,              // for
+  ND_WHILE,            // while
+  ND_DO,               // do while
+  ND_TERNARY,          // Ternary operator
+  ND_LOGICAL_OR,       // ||
+  ND_LOGICAL_AND,      // &&
+  ND_INCLUSIVE_OR,     // |
+  ND_EXCLUSIVE_OR,     // ^
+  ND_AND,              // &
+  ND_LEFT_SHIFT,       // <<
+  ND_RIGHT_SHIFT,      // >>
+  ND_ASSIGNMENT,       // Compound assignment (e.g., +=, -=)
+  ND_VAR,              // Variable
+  ND_ARRAY,            // Array
+  ND_DOT,              // .
+  ND_ARROW,            // ->
+  ND_FIELD,            // Child of struct
+  ND_NUM,              // Integer
+  ND_BLOCK,            // Block
+  ND_DISCARD_EXPR,     // Expression statement
+  ND_STRING,           // String literal
+  ND_GOTO,             // goto, continue, break
+  ND_LABEL,            // goto label
+  ND_CASE,             // Case statement
+  ND_SWITCH,           // Switch statement
+  ND_COMMA,            // Comma operator
+  ND_INITIALIZER,      // array or struct initializer
+  ND_CAST,             // Type cast
+  ND_EVAL,             // Cast to bool
+  ND_DECLARATOR_LIST,  // declarator list
+  ND_VARIABLE_ARGS,    // Variadic arguments
+  ND_END,              // For debug use
 } NodeKind;
 
 /**
@@ -130,7 +131,8 @@ enum function_type
       "ND_RIGHT_SHIFT", "ND_ASSIGNMENT", "ND_VAR", "ND_ARRAY", "ND_DOT",      \
       "ND_ARROW", "ND_FIELD", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR",        \
       "ND_STIRNG", "ND_GOTO", "ND_LABEL", "ND_CASE", "ND_SWITCH", "ND_COMMA", \
-      "ND_INITIALIZER", "ND_CAST", "ND_EVAL", "ND_VARIABLE_ARGS"
+      "ND_INITIALIZER", "ND_CAST", "ND_EVAL", "ND_DECLARATOR_LIST",           \
+      "ND_VARIABLE_ARGS"
 extern const char *nodekindlist[ND_END];
 
 struct Node

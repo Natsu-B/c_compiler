@@ -52,7 +52,7 @@ jump-statement
 
 (* DECLARATIONS *)
 declaration
-        = declaration-specifiers, init-declarator, ";";
+        = declaration-specifiers, [ init-declarator, [ ",", init-declarator ] ], ";";
 
 declaration-specifiers
         = { storage-class-specifier | type-specifier | type-qualifier | function-specifier };
@@ -246,7 +246,7 @@ postfix-expression
         | "->", identifier );
 
 primary-expression
-        = identifier [ "(", { assignment-expression }, ")" ]
+        = identifier, [ "(", { assignment-expression }, ")" ]
         | constant
         | string-literal
         | "(", expression, ")";

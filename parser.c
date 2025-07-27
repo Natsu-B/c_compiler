@@ -291,6 +291,19 @@ Node *declaration(Type *type, bool is_external_declaration,
                   uint8_t storage_class_specifier)
 {
   Node *node = init_declarator(type, storage_class_specifier);
+  if (node && consume(",", TK_RESERVED))
+  {
+    for (;;)
+    {
+      Token *old = get_old_token();
+      Node *new = init_declarator(type, storage_class_specifier);
+      if (!new)
+        error_at(old->str, old->len, "invalid declarator");
+      node = new_node(ND_DECLARATOR_LIST, node, new, old);
+      if (!consume(",", TK_RESERVED))
+        break;
+    }
+  }
   // funcdef
   if (is_external_declaration && node && node->kind == ND_FUNCDEF &&
       consume("{", TK_RESERVED))
@@ -1111,6 +1124,8 @@ Node *primary_expression()
 
     if (result == function_name || result == none_of_them)
     {
+      if (type && !type->param_list)
+        error_at(token->str, token->len, "invalid function call");
       Node *node = calloc(1, sizeof(Node));
       node->type = type;
       // Function call

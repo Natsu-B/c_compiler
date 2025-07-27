@@ -54,7 +54,7 @@ jump-statement
 
 (* DECLARATIONS *)
 declaration
-        = declaration-specifiers, [ init-declarator, [ ",", init-declarator ] ] ";";
+        = declaration-specifiers, [ init-declarator, [ ",", init-declarator ] ], ";";
 
 declaration-specifiers
         = storage-class-specifier, [ declaration-specifiers ]
@@ -132,7 +132,7 @@ direct-declarator
         | direct-declarator, "[", { type-qualifier }, [ assignment-expression ], "]"
         | direct-declarator, "[", "static", type-qualifier, { type-qualifier }, assignment-expression, "]"
         | direct-declarator, "[", { type-qualifier }, "*", "]"
-        | direct-declarator, "(", parameter-type-list, ")"constant
+        | direct-declarator, "(", parameter-type-list, ")", constant
         | direct-declarator, "(", [ identifier, { ",", identifier } ], ")";
 
 pointer
@@ -183,7 +183,7 @@ constant-expression
         = conditional-expression;
 
 expression
-        = assignment-expression, { "," assignment-expression };
+        = assignment-expression, { ",", assignment-expression };
 
 assignment-expression
         = conditional-expression

@@ -377,6 +377,8 @@ void add_type_internal(Node *const node)
         node->type = alloc_type(TYPE_INT);
       else
       {
+        if (!node->type->param_list)
+          unreachable();
         Type *last_param = vector_peek(node->type->param_list);
         bool is_variadic = last_param->type == TYPE_VARIABLES;
 
@@ -570,6 +572,7 @@ void add_type_internal(Node *const node)
       }
       break;
     case ND_CAST: node->type = node->rhs->type; return;
+    case ND_DECLARATOR_LIST: node->type = alloc_type(TYPE_VOID); return;
     default: unreachable();
   }
 }
@@ -617,9 +620,9 @@ Node *analyze_type(Node *node, bool is_root)
   if (!node)
     return NULL;
   if (node->lhs)
-    node->lhs = analyze_type(node->lhs, false);
+    node->lhs = analyze_type(node->lhs, node->kind == ND_DECLARATOR_LIST);
   if (node->rhs)
-    node->rhs = analyze_type(node->rhs, false);
+    node->rhs = analyze_type(node->rhs, node->kind == ND_DECLARATOR_LIST);
   if (node->kind == ND_TERNARY)
     node->control.ternary_child =
         analyze_type(node->control.ternary_child, false);

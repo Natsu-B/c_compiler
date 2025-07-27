@@ -991,6 +991,12 @@ static int *gen_stmt(Vector *v, Node *node)
       vector_push(v, builtin);
       return NULL;
     }
+    case ND_DECLARATOR_LIST:
+    {
+      gen_stmt(v, node->lhs);
+      gen_stmt(v, node->rhs);
+      return NULL;
+    }
     default:
       error_exit("unexpected node kind: %d", node->kind);
       return 0;  // Unreachable

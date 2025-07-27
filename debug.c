@@ -98,7 +98,10 @@ void print_type(Type *type)
     case TYPE_ENUM:
     {
       tag_list *tag = vector_peek_at(get_enum_struct_list(), type->type_num);
-      printf("enum %.*s", (int)tag->name->len, tag->name->str);
+      if (tag->name)
+        printf("enum %.*s", (int)tag->name->len, tag->name->str);
+      else
+        printf("enum (unknown)");
       break;
     }
     case TYPE_PTR:
@@ -145,55 +148,60 @@ void _print_parse_result(Node *node, int nest)
     print_type(node->type);
   }
 
-  // Print specific fields and recurse based on node kind
   switch (node->kind)
   {
-    case ND_NUM: printf("| value: %lld\n", node->num_val); break;
+    case ND_NUM: printf("| value: %lld", node->num_val); break;
     case ND_VAR:
-      printf("| offset: %zu | is_new: %d | is_local: %d\n",
+      printf("| offset: %zu | is_new: %d | is_local: %d",
              node->variable.var->offset, node->variable.is_new_var,
              node->variable.var->is_local);
       break;
-    case ND_ADD:
-    case ND_SUB:
-    case ND_MUL:
-    case ND_DIV:
-    case ND_IDIV:
-    case ND_EQ:
-    case ND_NEQ:
-    case ND_LT:
-    case ND_LTE:
-    case ND_ASSIGN:
-    case ND_ADDR:
-    case ND_DEREF:
-    case ND_LOGICAL_NOT:
-    case ND_NOT:
-    case ND_UNARY_PLUS:
-    case ND_UNARY_MINUS:
-    case ND_PREINCREMENT:
-    case ND_PREDECREMENT:
-    case ND_POSTINCREMENT:
-    case ND_POSTDECREMENT:
-    case ND_CAST:
-    case ND_EVAL:
-    case ND_COMMA:  // Comma operator has lhs and rhs
-      printf("\n");
-      make_space(nest);
-      printf("|-lhs:\n");
-      _print_parse_result(node->lhs, nest + 1);
-      make_space(nest);
-      printf("|-rhs:\n");
-      _print_parse_result(node->rhs, nest + 1);
-      break;
     case ND_FUNCDEF:
-      make_space(nest);
       printf("| storage class: %u", node->func.storage_class_specifier);
-      // fall through
+      break;
+    case ND_IF:
+    case ND_ELIF:
+    case ND_FOR:
+    case ND_WHILE:
+    case ND_DO:
+    case ND_TERNARY:
+    case ND_LOGICAL_OR:
+    case ND_LOGICAL_AND:
+    case ND_SWITCH:
+      if (node->control.label)
+        printf(" | label: %s", node->control.label->name);
+      break;
+    case ND_GOTO:
+    case ND_LABEL: printf("| label: %s\n", node->jump.label_name); break;
+    case ND_CASE:
+      printf("| %s", node->jump.is_case ? "case" : "default\n");
+      break;
+    case ND_FIELD: printf("| offset: %lu\n", node->child_offset); break;
+    default: break;
+  }
+
+  printf("\n");
+  if (node->lhs)
+  {
+    make_space(nest);
+    printf("|-lhs:\n");
+    _print_parse_result(node->lhs, nest + 1);
+  }
+  if (node->rhs)
+  {
+    make_space(nest);
+    printf("|-rhs:\n");
+    _print_parse_result(node->rhs, nest + 1);
+  }
+
+  // Print specific fields and recurse based on node kind
+  switch (node->kind)
+  {
+    case ND_FUNCDEF:
     case ND_FUNCCALL:
     case ND_BUILTINFUNC:
       if (node->func.expr)
       {
-        printf("\n");
         make_space(nest);
         printf("|-exprs:\n");
         for (size_t i = 1; i <= vector_size(node->func.expr); i++)
@@ -203,7 +211,6 @@ void _print_parse_result(Node *node, int nest)
       }
       if (node->func.stmt)
       {  // For ND_FUNCDEF and ND_BLOCK
-        printf("\n");
         make_space(nest);
         printf("|-block:\n");
         for (NDBlock *p = node->func.stmt; p; p = p->next)
@@ -211,14 +218,6 @@ void _print_parse_result(Node *node, int nest)
           _print_parse_result(p->node, nest + 1);
         }
       }
-      break;
-    case ND_RETURN:
-    case ND_SIZEOF:
-    case ND_DISCARD_EXPR:
-      printf("\n");
-      make_space(nest);
-      printf("|-lhs:\n");
-      _print_parse_result(node->lhs, nest + 1);
       break;
     case ND_TYPE_NAME:
       // No child nodes to print directly from Node structure
@@ -232,8 +231,6 @@ void _print_parse_result(Node *node, int nest)
     case ND_LOGICAL_OR:
     case ND_LOGICAL_AND:
     case ND_SWITCH:
-      if (node->control.label)
-        printf(" | label: %s\n", node->control.label->name);
       if (node->control.init)
       {
         make_space(nest);
@@ -275,14 +272,12 @@ void _print_parse_result(Node *node, int nest)
       break;
     case ND_GOTO:
     case ND_LABEL:
-      printf("| label: %s\n", node->jump.label_name);
       if (node->jump.statement_child)
       {
         _print_parse_result(node->jump.statement_child, nest + 1);
       }
       break;
     case ND_CASE:
-      printf("| %s", node->jump.is_case ? "case" : "default\n");
       if (node->jump.is_case)
         printf(" %ld\n", node->jump.constant_expression);
       if (node->jump.statement_child)
@@ -290,14 +285,10 @@ void _print_parse_result(Node *node, int nest)
         _print_parse_result(node->jump.statement_child, nest + 1);
       }
       break;
-    case ND_FIELD:
-      make_space(nest);
-      printf("| offset: %lu\n", node->child_offset);
       break;
     case ND_BLOCK:
       if (node->func.stmt)
       {  // ND_BLOCK uses func.stmt
-        printf("\n");
         make_space(nest);
         printf("|-block:\n");
         for (NDBlock *p = node->func.stmt; p; p = p->next)

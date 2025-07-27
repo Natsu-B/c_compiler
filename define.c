@@ -144,10 +144,8 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
     if (!strncmp(token->str, "__FILE__", 8))
     {
       size_t file_name_len = strlen(File_Name);
-      char *file_name =
-          malloc(file_name_len + 2);  // no need for NULL terminator
-      strncpy(file_name + 1, File_Name, file_name_len);
-      file_name[0] = file_name[file_name_len + 1] = '"';
+      char *file_name = malloc(file_name_len);  // no need for NULL terminator
+      strncpy(file_name, File_Name, file_name_len);
       token->kind = TK_STRING;
       token->len = file_name_len + 2;
       token->str = file_name;

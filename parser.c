@@ -325,7 +325,7 @@ Node *declaration(Type *type, bool is_external_declaration,
     return node;
   }
   else if (node && node->kind == ND_FUNCDEF)
-    memset(node, 0, sizeof(Node));
+    node->kind = ND_NOP;
 
   expect(";", TK_RESERVED);
   return node;

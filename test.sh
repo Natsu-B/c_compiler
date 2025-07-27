@@ -296,6 +296,7 @@ assert 'int main() {int a[2][3] = {{1, 2,3}, {4, 5},}; return a[1][2];}'
 assert 'int main() { struct {int a; int b;} x; return sizeof(x); }'
 assert 'int main() { struct {int a; int b;} x; x.a = 10; x.b = 20; return x.a + x.b; }'
 assert 'struct {union{int x; int y;}; long z;} x; int main() {x.z = 10; x.x = 1; x.y = 2; return x.x + x.y + x.z;}'
+assert_print 'int hoge() {printf("hello world!!!%s:%d:%s",__FILE__, __LINE__, __func__); return 0;} int main() { printf("Hello World!!!%s:%d:%s",__FILE__,__LINE__,__func__); return hoge(); }'
 # assert '#include "../test/compiler_header.h"
 # int foo(int x, ...);int main(){ return foo(1, 2, 4, 7, 8, 9, 11, 15, 18, 20, 19, 0); } int foo(int x, ...){ va_list ap; va_start(ap, x); int tmp = x; int result; while (tmp) { result = tmp; tmp = va_arg(ap, int); } va_end(ap); return result; }'
 

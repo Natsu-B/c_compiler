@@ -58,7 +58,7 @@ static size_t operator_precedence(conditional_inclusion_type type)
     case CPPTK_NOT:         // !
     case CPPTK_Bitwise:     // ~
       return 11;
-    default: unreachable(); return __UINT32_MAX__;  // unreachable
+    default: unreachable(); return 0;  // unreachable
   }
 }
 

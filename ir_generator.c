@@ -346,6 +346,8 @@ static int *gen_stmt(Vector *v, Node *node)
       ir->lea.is_local = false;
       ir->lea.is_static = true;
       ir->lea.var_name = node->literal_name;
+      if (!node->literal_name)
+        unreachable();
       ir->lea.var_name_len = strlen(node->literal_name);
       int *dst_reg_ptr = gen_reg();
       ir->lea.dst_reg = *dst_reg_ptr;

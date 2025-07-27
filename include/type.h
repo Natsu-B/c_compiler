@@ -100,6 +100,8 @@ typedef struct
   size_t struct_alignment;  // alignment of the struct
 } tag_list;
 
+Token *print_struct_type(size_t tag_id);
+
 bool is_type_specifier(Token *token);
 bool is_typedef(uint8_t storage_class_specifier);
 Type *alloc_type(TypeKind kind);

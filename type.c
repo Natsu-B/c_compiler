@@ -37,6 +37,22 @@ typedef struct
   bool is_defined;     // used for functions
 } ordinary_data_list;
 
+// For debug use
+Token* print_struct_type(size_t tag_id)
+{
+  tag_list* tmp = vector_peek_at(EnumStructList, tag_id);
+  switch (tmp->tagkind)
+  {
+    case struct_type: printf("struct: "); break;
+    case union_type: printf("union: "); break;
+    case enum_type: printf("enum: "); break;
+    default: unreachable(); break;
+  }
+  if (tmp->name)
+    printf("%.*s", (int)tmp->name->len, tmp->name->str);
+  return tmp->name;
+}
+
 static Type* find_typedef_type(Token* token)
 {
   if (!token)
@@ -494,8 +510,7 @@ char* add_string_literal(Token* token)
         !strncmp(token->str, pointer->name, pointer->len))
       return pointer->literal_name;
   literal_list* new = calloc(1, sizeof(literal_list));
-  if (literal_top)
-    literal_top->next = new;
+  new->next = literal_top;
   literal_top = new;
   literal_top->name = token->str;
   literal_top->len = token->len;

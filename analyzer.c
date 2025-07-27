@@ -242,7 +242,7 @@ bool check_initializer_type(Type *type, Node *init_list, bool is_root)
   return true;
 }
 
-void add_type_internal(Node *node)
+void add_type_internal(Node *const node)
 {
   switch (node->kind)
   {
@@ -282,9 +282,11 @@ void add_type_internal(Node *node)
         // ptr - ptr
         Node *n = new_node(ND_SUB, node->lhs, node->rhs, node->token);
         n->type = alloc_type(TYPE_LONG);  // sizeof(TYPE_LONG) == sizeof(void*)
-        node =
+        Node *new =
             new_node(ND_DIV, n, new_node_num(size_of(node->lhs->type->ptr_to)),
                      node->token);
+        memcpy(node, new, sizeof(Node));
+        new->rhs->type = alloc_type(TYPE_INT);
         node->type = alloc_type(TYPE_LONG);
         node->type->is_signed = false;
         return;
@@ -450,11 +452,14 @@ void add_type_internal(Node *node)
       if (is_pointer_type(lhs_type) && is_pointer_type(rhs_type))
       {
         // T* and void* -> void*
-        if (!lhs_type->ptr_to || !rhs_type->ptr_to)
+        if (rhs_type->ptr_to->type == TYPE_VOID)
         {
-          Type *t = alloc_type(TYPE_PTR);
-          t->ptr_to = NULL;
-          node->type = t;
+          node->type = lhs_type;
+          return;
+        }
+        if (lhs_type->ptr_to->type == TYPE_VOID)
+        {
+          node->type = rhs_type;
           return;
         }
       }
@@ -571,7 +576,7 @@ void add_type_internal(Node *node)
 
 void add_type(Node *node)
 {
-  if (!node)
+  if (!node || node->kind == ND_NOP)
     return;
   if (node->kind == ND_SWITCH)
     node->control.case_list = switch_new(node->control.label);
@@ -619,7 +624,7 @@ Node *analyze_type(Node *node, bool is_root)
     node->control.ternary_child =
         analyze_type(node->control.ternary_child, false);
   if (node->kind == ND_IF || node->kind == ND_ELIF || node->kind == ND_FOR ||
-      node->kind == ND_WHILE || node->kind == ND_DO)
+      node->kind == ND_WHILE || node->kind == ND_DO || node->kind == ND_SWITCH)
   {
     node->control.condition = analyze_type(node->control.condition, false);
     node->control.true_code = analyze_type(node->control.true_code, false);
@@ -632,9 +637,10 @@ Node *analyze_type(Node *node, bool is_root)
         analyze_type(node->jump.statement_child, false);
   if (node->kind == ND_FUNCCALL || node->kind == ND_FUNCDEF)
     for (size_t i = 1; i <= vector_size(node->func.expr); i++)
-      vector_replace_at(
-          node->func.expr, i,
-          analyze_type(vector_peek_at(node->func.expr, i), false));
+    {
+      Node *result = analyze_type(vector_peek_at(node->func.expr, i), false);
+      vector_replace_at(node->func.expr, i, result);
+    }
   if (node->kind == ND_BLOCK)
   {
     offset_enter_nest();
@@ -649,7 +655,7 @@ Node *analyze_type(Node *node, bool is_root)
       if (node->type->type == TYPE_ARRAY)
       {
         node->lhs->type = node->type;
-        memcpy(node, node->lhs, sizeof(Node));
+        return node->lhs;
       }
       break;
     case ND_SIZEOF:
@@ -665,20 +671,11 @@ Node *analyze_type(Node *node, bool is_root)
       if (is_root)
         node->kind = ND_NOP;
       break;
-    case ND_NUM:
-      if (node->type->type == TYPE_PTR || node->type->type == TYPE_ARRAY)
-      {
-        node->num_val = node->num_val * size_of(node->type->ptr_to);
-      }
-      break;
     case ND_STRING:
       // TODO: Behavior is different for ND_ARRAY
       node->literal_name = add_string_literal(node->token);
       break;
-    case ND_CAST:
-      node->lhs->type = node->type;
-      memcpy(node, node->lhs, sizeof(Node));
-      break;
+    case ND_CAST: node->lhs->type = node->type; return node->lhs;
     default: break;
   }
   return node;
@@ -718,22 +715,23 @@ FuncBlock *analyzer(FuncBlock *funcblock)
   for (FuncBlock *pointer = funcblock; pointer; pointer = pointer->next)
   {
     Node *node = pointer->node;
-    if (!node)
+    if (!node || node->kind == ND_NOP)
       continue;
     if (node->kind == ND_FUNCDEF)
     {
       init_nest();
       for (size_t i = 1; i <= vector_size(node->func.expr); i++)
-        vector_replace_at(
-            node->func.expr, i,
-            analyze_type(vector_peek_at(node->func.expr, i), false));
+      {
+        Node *result = analyze_type(vector_peek_at(node->func.expr, i), false);
+        vector_replace_at(node->func.expr, i, result);
+      }
       for (NDBlock *tmp = node->func.stmt; tmp; tmp = tmp->next)
         tmp->node = analyze_type(tmp->node, true);
       // Align stacksize to 8-byte units
       size_t max_stacksize = get_max_offset();
       pointer->stacksize = (max_stacksize + 7) / 8 * 8;
     }
-    else if (node->kind != ND_NOP && node->kind != ND_BUILTINFUNC)
+    else if (node->kind != ND_BUILTINFUNC)
     {
       pointer->node = analyze_type(node, false);
       node = pointer->node;

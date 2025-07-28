@@ -6,6 +6,7 @@
 #endif
 
 #include "include/analyzer.h"
+#include "include/debug.h"
 #include "include/error.h"
 #include "include/file.h"
 #include "include/generator.h"
@@ -17,6 +18,7 @@
 bool output_preprocess;
 bool gcc_compatible;
 bool output_ir;
+bool output_mermaid;
 
 // Argument processing
 // -E: Execute preprocessor and output
@@ -25,6 +27,7 @@ bool output_ir;
 // -i: Specify input file
 // -I: Use standard input after this argument as input
 // -emit-ir: Output IR
+// -emit-mermaid: Output AST in Mermaid format
 int main(int argc, char **argv)
 {
   fprintf(stdout, "\e[32mc_compiler\e[37m\n");
@@ -55,6 +58,8 @@ int main(int argc, char **argv)
         gcc_compatible = true;
       else if (!strcmp(argv[i], "-emit-ir"))
         output_ir = true;
+      else if (!strcmp(argv[i], "-emit-mermaid"))
+        output_mermaid = true;
       else if (!strcmp(argv[i], "-o") && ++i < argc)
         output_file_name = argv[i];
       else if (!strcmp(argv[i], "-i") && ++i < argc)
@@ -83,6 +88,11 @@ int main(int argc, char **argv)
   fix_token_head();  // Adjust the token head to not be IGNORABLE or LINEBREAK
   // Parser
   FuncBlock *parse_result = parser();
+  if (output_mermaid)
+  {
+    print_mermaid_result(parse_result, output_file_name);
+    return 0;
+  }
   // Analyzer (semantic analysis)
   FuncBlock *analyze_result = analyzer(parse_result);
   // IR generator

@@ -332,6 +332,161 @@ void print_parse_result(FuncBlock *node)
   }
 }
 
+void _print_mermaid_result(Node *node, int *i, FILE *fp)
+{
+  if (!node)
+    return;
+
+  int current_node_id = (*i)++;
+  fprintf(fp, "  id%d[%s];\n", current_node_id, nodekindlist[node->kind]);
+
+  if (node->lhs)
+  {
+    int child_id = *i;
+    fprintf(fp, "  id%d -- \"lhs\" --> id%d;\n", current_node_id, child_id);
+    _print_mermaid_result(node->lhs, i, fp);
+  }
+
+  if (node->rhs)
+  {
+    int child_id = *i;
+    fprintf(fp, "  id%d -- \"rhs\" --> id%d;\n", current_node_id, child_id);
+    _print_mermaid_result(node->rhs, i, fp);
+  }
+
+  switch (node->kind)
+  {
+    case ND_FUNCDEF:
+    case ND_FUNCCALL:
+    case ND_BUILTINFUNC:
+      if (node->func.expr)
+      {
+        for (size_t j = 1; j <= vector_size(node->func.expr); j++)
+        {
+          int child_id = *i;
+          fprintf(fp, "  id%d -- \"arg%zu\" --> id%d;\n", current_node_id, j, child_id);
+          _print_mermaid_result(vector_peek_at(node->func.expr, j), i, fp);
+        }
+      }
+      if (node->func.stmt)
+      {
+        for (NDBlock *p = node->func.stmt; p; p = p->next)
+        {
+          int child_id = *i;
+          fprintf(fp, "  id%d -- \"stmt\" --> id%d;\n", current_node_id, child_id);
+          _print_mermaid_result(p->node, i, fp);
+        }
+      }
+      break;
+    case ND_IF:
+    case ND_ELIF:
+    case ND_FOR:
+    case ND_WHILE:
+    case ND_DO:
+    case ND_TERNARY:
+    case ND_LOGICAL_OR:
+    case ND_LOGICAL_AND:
+    case ND_SWITCH:
+      if (node->control.init)
+      {
+        int child_id = *i;
+        fprintf(fp, "  id%d -- \"init\" --> id%d;\n", current_node_id, child_id);
+        _print_mermaid_result(node->control.init, i, fp);
+      }
+      if (node->control.condition)
+      {
+        int child_id = *i;
+        fprintf(fp, "  id%d -- \"cond\" --> id%d;\n", current_node_id, child_id);
+        _print_mermaid_result(node->control.condition, i, fp);
+      }
+      if (node->control.true_code)
+      {
+        int child_id = *i;
+        fprintf(fp, "  id%d -- \"then\" --> id%d;\n", current_node_id, child_id);
+        _print_mermaid_result(node->control.true_code, i, fp);
+      }
+      if (node->control.false_code)
+      {
+        int child_id = *i;
+        fprintf(fp, "  id%d -- \"else\" --> id%d;\n", current_node_id, child_id);
+        _print_mermaid_result(node->control.false_code, i, fp);
+      }
+      if (node->control.update)
+      {
+        int child_id = *i;
+        fprintf(fp, "  id%d -- \"update\" --> id%d;\n", current_node_id, child_id);
+        _print_mermaid_result(node->control.update, i, fp);
+      }
+      if (node->control.ternary_child)
+      {
+        int child_id = *i;
+        fprintf(fp, "  id%d -- \"child\" --> id%d;\n", current_node_id, child_id);
+        _print_mermaid_result(node->control.ternary_child, i, fp);
+      }
+      break;
+    case ND_GOTO:
+    case ND_LABEL:
+      if (node->jump.statement_child)
+      {
+        int child_id = *i;
+        fprintf(fp, "  id%d -- \"stmt\" --> id%d;\n", current_node_id, child_id);
+        _print_mermaid_result(node->jump.statement_child, i, fp);
+      }
+      break;
+    case ND_CASE:
+      if (node->jump.statement_child)
+      {
+        int child_id = *i;
+        fprintf(fp, "  id%d -- \"stmt\" --> id%d;\n", current_node_id, child_id);
+        _print_mermaid_result(node->jump.statement_child, i, fp);
+      }
+      break;
+    case ND_BLOCK:
+      if (node->func.stmt)
+      {
+        for (NDBlock *p = node->func.stmt; p; p = p->next)
+        {
+          int child_id = *i;
+          fprintf(fp, "  id%d -- \"stmt\" --> id%d;\n", current_node_id, child_id);
+          _print_mermaid_result(p->node, i, fp);
+        }
+      }
+      break;
+    case ND_INITIALIZER:
+      if (node->initialize.init_list)
+      {
+        for (size_t j = 1; j <= vector_size(node->initialize.init_list); j++)
+        {
+          int child_id = *i;
+          fprintf(fp, "  id%d -- \"init%zu\" --> id%d;\n", current_node_id, j, child_id);
+          _print_mermaid_result(vector_peek_at(node->initialize.init_list, j), i, fp);
+        }
+      }
+      break;
+    default:
+      return;
+  }
+}
+
+void print_mermaid_result(FuncBlock *node, char *output_file_name)
+{
+  FILE *fp = fopen(output_file_name, "w");
+  if (!fp)
+    error_exit("Failed to open file");
+
+  fprintf(fp, "graph TD;\n");
+  int i = 0;
+  for (FuncBlock *pointer = node; pointer; pointer = pointer->next)
+  {
+    if (pointer->node && pointer->node->kind != ND_NOP)
+    {
+      _print_mermaid_result(pointer->node, &i, fp);
+    }
+  }
+
+  fclose(fp);
+}
+
 void print_definition()
 {
   pr_debug("Definition:");

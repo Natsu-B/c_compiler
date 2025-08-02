@@ -137,6 +137,10 @@ IRProgram *gen_ir(FuncBlock *parsed)
         gen_stmt(func->IR_Blocks,
                  fb->node);  // Generate IR for statements
 
+        if (func->user_defined.function_name_size == 4 &&
+            !strncmp(func->user_defined.function_name, "main", 4))
+          gen_stmt(func->IR_Blocks, new_node(ND_RETURN, new_node_num(0), NULL, NULL));
+
         func->user_defined.stack_size = fb->stacksize;
         func->user_defined.num_virtual_regs = reg_id;
         vector_push(program->functions, func);

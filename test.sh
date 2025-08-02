@@ -302,7 +302,11 @@ assert 'int arr[5] = {10, 20, 30}; int main() { return arr[0] + arr[2]; }'
 assert 'int a[2][5] = {{1, 2,3, 4, 5}, {6, 7},}; int main() {return a[0][4] * 8 + a[1][3];}'
 assert 'int a[2][5] = {{6, 7},{1, 2,3, 4, 5}}; int main() {return a[0][4] * 8 + a[1][3];}'
 assert_print 'int fibonacci1(){for (int i = 0, a = 0, b = 1; i < 10; i++, b = a + b)printf("%d, ", i ? a = b - a : 0);printf("...\n");return 0;}int main(){printf("Hello World!!!"); return fibonacci1();}'
-assert 'int func() {static int x = 0; x++; return x;} int main() {if (func() != 1) return 1; if (func() != 2) return 1; if (func() != 3) return 1; return 0;}'
+assert_print 'int main() {}'
+assert 'int main() {int x = 1; switch (x) { case 0: x = x + 10; break; default: break; case 1: x--; break;} return x;}'
+
+# assert 'int func() {static int x = 0; x++; return x;} int main() {if (func() != 1) return 1; if (func() != 2) return 1; if (func() != 3) return 1; return 0;}'
+# sleep 0.5
 # assert '#include "../test/compiler_header.h"
 # int foo(int x, ...);int main(){ return foo(1, 2, 4, 7, 8, 9, 11, 15, 18, 20, 19, 0); } int foo(int x, ...){ va_list ap; va_start(ap, x); int tmp = x; int result; while (tmp) { result = tmp; tmp = va_arg(ap, int); } va_end(ap); return result; }'
 

@@ -586,6 +586,7 @@ static int *gen_stmt(Vector *v, Node *node)
     {
       int *cond_ptr = gen_stmt(v, node->control.condition);
       GTLabel *switch_label = node->control.label;
+      IR* default_jmp = NULL;
       for (size_t i = 1; i <= vector_size(node->control.case_list); i++)
       {
         char *label_name = malloc(14 + switch_label->len);
@@ -613,9 +614,11 @@ static int *gen_stmt(Vector *v, Node *node)
           IR *jump = calloc(1, sizeof(IR));
           jump->kind = IR_JMP;
           jump->jmp.label = label_name;
-          vector_push(v, jump);
+          default_jmp = jump;
         }
       }
+      if (default_jmp)
+        vector_push(v, default_jmp);
       char *label_name = malloc(12 + switch_label->len);
       snprintf(label_name, 12 + switch_label->len, ".Lendswitch%.*s",
                (int)switch_label->len, switch_label->name);

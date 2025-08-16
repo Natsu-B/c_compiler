@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 COMPILER=${1:-./main}
 
 show_compiler_output_and_exit() {
@@ -268,7 +268,7 @@ int foo();int printf(char*tmp, ...); int main() {printf("hello" "c" "world!!!");
 assert 'struct HOGE {int x;}; int main() {struct HOGE {int x;}; return sizeof(struct HOGE);}'
 assert 'int foo; int main() {extern int foo; return foo;}'
 assert "int main() {return 'a' + '\n' + '\0';}"
-assert_print '__asm__("gcc_predef_start: \n"" .incbin \"gcc_predef.h\"\n""gcc_predef_end: \n");extern char gcc_predef_start;extern char gcc_predef_end; int main() {printf("%.*s", (int)(&gcc_predef_end - &gcc_predef_start), &gcc_predef_start); __asm__("nop"); return 0;}'
+assert_print '__asm__("gcc_predef_start: \n"" .incbin \"include/gcc_predef.h\"\n""gcc_predef_end: \n");extern char gcc_predef_start;extern char gcc_predef_end; int main() {printf("%.*s", (int)(&gcc_predef_end - &gcc_predef_start), &gcc_predef_start); __asm__("nop"); return 0;}'
 assert 'int foo; extern int foo;extern int foo; int main() {extern int foo; return foo;}'
 assert 'extern int foo; int foo; extern int foo;extern int foo; int main() {extern int foo; return foo;}'
 assert 'int a = 187; int *b = &a; char* c = "abc"; int main() {return a + *b + c[1];}'

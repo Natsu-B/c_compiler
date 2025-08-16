@@ -16,6 +16,7 @@
 #include "include/define.h"
 #include "include/error.h"
 #include "include/file.h"
+#include "include/include_paths.h"
 #include "include/tokenizer.h"
 
 Vector *Conditional_Inclusion_List;
@@ -28,7 +29,7 @@ long long include_level = -1;
 #if defined(__GNUC__) || defined(__MYCC__)
 __asm__(
     "gcc_predef_start: \n"
-    " .incbin \"gcc_predef.h\" \n"
+    " .incbin \"include/gcc_predef.h\" \n"
     "gcc_predef_end: \n");
 extern char gcc_predef_start[];
 extern char gcc_predef_end[];
@@ -84,31 +85,6 @@ size_t get_current_directory_path()
     return 0;
   return last_path + 1 - File_Name;
 }
-
-#ifdef __GNUC__
-#define _TO_STRING(x) #x
-#define TO_STRING(x) _TO_STRING(x)
-static char gcc_lib_path[] =
-    "/usr/lib/gcc/x86_64-linux-gnu/" TO_STRING(__GNUC__) "/include/";
-static char local_include[] = "/usr/local/include/";
-static char linux_include[] = "/usr/include/x86_64-linux-gnu/";
-static char usr_include[] = "/usr/include/";
-static char *lib_path[] = {
-    gcc_lib_path,
-    local_include,
-    linux_include,
-    usr_include,
-};
-static size_t lib_path_size[] = {
-    sizeof(gcc_lib_path),
-    sizeof(local_include),
-    sizeof(linux_include),
-    sizeof(usr_include),
-};
-#define MAX_LIB_PATH_SIZE sizeof(gcc_lib_path)
-#else
-#error unsupported compiler
-#endif
 
 Token *preprocess(char *input, char *end, char *file_name, Token *token);
 

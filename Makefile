@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-std=c11 -g -static -Wall -Wextra -Werror -Wno-builtin-declaration-mismatch -Wno-attributes -D_GNU_SOURCE -DSELF_HOST
+CFLAGS=-std=c11 -g -Wall -Wextra -Werror -Wno-builtin-declaration-mismatch -Wno-attributes -D_GNU_SOURCE -DSELF_HOST
 ASFLAGS=-g
 CPPFLAGS=-E -P -D__MYCC__ -DSELF_HOST
 
@@ -14,7 +14,11 @@ GREEN=\033[0;32m
 YELLOW=\033[0;33m
 NC=\033[0m
 
-all: $(TARGET)
+all: build
+
+build:
+	./build.sh
+	$(MAKE) $(TARGET)
 
 $(TARGET): $(OBJS)
 	@echo -e "${GREEN}--> Linking $@${NC}"
@@ -78,4 +82,4 @@ clean:
 	rm -f .success_list .failure_list
 	rm -rf out
 
-.PHONY: all clean self1 test self1-test
+.PHONY: all clean self1 test self1-test build

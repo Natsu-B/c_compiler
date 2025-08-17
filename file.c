@@ -47,7 +47,7 @@ char *openfile(char *filename)
   FILE *fin = fopen(filename, "r");
   if (!fin)
   {
-    error_exit("Invalid filename.");
+    error_exit("Invalid filename: %s", filename);
   }
   pr_debug("File opened.");
   return file_read(fin);

@@ -20,9 +20,9 @@ typedef enum
 {
   // function instructions
   IR_CALL,
-  IR_FUNC_PROLOGUE,
-  IR_FUNC_EPILOGUE,
-  IR_RET,
+  IR_FUNC_PROLOGUE,  // LEADER
+  IR_FUNC_EPILOGUE,  // TERMINATOR
+  IR_RET,            // TERMINATOR
 
   // built in functions
   IR_BUILTIN_ASM,
@@ -46,9 +46,9 @@ typedef enum
   IR_LTE,  // <=
 
   // jump instruction
-  IR_JMP,  // jmp
-  IR_JNE,  // jmp if not equal
-  IR_JE,   // jmp if equal
+  IR_JMP,  // TERMINATOR: jmp
+  IR_JNE,  // TERMINATOR: jmp if not equal
+  IR_JE,   // TERMINATOR: jmp if equal
 
   // memory access
   IR_LOAD,
@@ -71,7 +71,7 @@ typedef enum
   IR_NEG,  // negate
 
   // label
-  IR_LABEL,  // jump label
+  IR_LABEL,  // LEADER: jump label
 
   // string
   IR_STRING,  // string literal
@@ -243,7 +243,7 @@ typedef struct
   size_t var_name_len;
   size_t var_size;
   bool is_static;
-  Vector *initializer;
+  IR_Blocks *initializer;
 } GlobalVar;
 
 typedef struct

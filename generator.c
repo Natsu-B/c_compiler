@@ -440,8 +440,8 @@ void generator(IRProgram *program, char *output_filename)
     for (size_t i = 0; i < vector_size(program->global_vars); i++)
     {
       GlobalVar *gvar = vector_peek_at(program->global_vars, i + 1);
-      if (vector_size(gvar->initializer) == 1 &&
-          ((GVarInitializer *)vector_peek(gvar->initializer))->how2_init ==
+      if (vector_size(gvar->initializer->IRs) == 1 &&
+          ((GVarInitializer *)vector_peek(gvar->initializer->IRs))->how2_init ==
               init_zero)
         output_file("    .section .bss");
       else
@@ -453,9 +453,9 @@ void generator(IRProgram *program, char *output_filename)
       output_file("    .size %.*s, %lu", (int)gvar->var_name_len,
                   gvar->var_name, gvar->var_size);
       output_file("%.*s:", (int)gvar->var_name_len, gvar->var_name);
-      for (size_t j = 1; j <= vector_size(gvar->initializer); j++)
+      for (size_t j = 1; j <= vector_size(gvar->initializer->IRs); j++)
       {
-        GVarInitializer *init = vector_peek_at(gvar->initializer, j);
+        GVarInitializer *init = vector_peek_at(gvar->initializer->IRs, j);
         switch (init->how2_init)
         {
           case init_zero: output_file("    .zero %zu", init->zero_len); break;
@@ -537,8 +537,12 @@ void generator(IRProgram *program, char *output_filename)
         // Generate code for each IR instruction
         for (size_t j = 0; j < vector_size(func->IR_Blocks); j++)
         {
-          IR *ir = vector_peek_at(func->IR_Blocks, j + 1);
-          gen_ir_instruction(ir);
+          IR_Blocks *block = vector_peek_at(func->IR_Blocks, j + 1);
+          for (size_t k = 0; k < vector_size(block->IRs); k++)
+          {
+            IR *ir = vector_peek_at(block->IRs, k + 1);
+            gen_ir_instruction(ir);
+          }
         }
 
         // Function epilogue (if not already handled by IR_RET)
@@ -546,9 +550,19 @@ void generator(IRProgram *program, char *output_filename)
         // This might be problematic if the function has multiple return points.
         // A better approach would be to ensure IR_RET is always the last
         // instruction of a basic block that ends a function.
-        IR *last_ir =
+        IR_Blocks *last_block =
             vector_peek_at(func->IR_Blocks, vector_size(func->IR_Blocks));
-        if (last_ir->kind != IR_RET)
+        if (vector_size(last_block->IRs) > 0)
+        {
+          IR *last_ir =
+              vector_peek_at(last_block->IRs, vector_size(last_block->IRs));
+          if (last_ir->kind != IR_RET)
+          {
+            output_file("    leave");
+            output_file("    ret");
+          }
+        }
+        else
         {
           output_file("    leave");
           output_file("    ret");
@@ -557,7 +571,8 @@ void generator(IRProgram *program, char *output_filename)
       }
       case FUNC_ASM:
       {
-        gen_ir_instruction(vector_pop(func->IR_Blocks));
+        IR_Blocks *block = vector_pop(func->IR_Blocks);
+        gen_ir_instruction(vector_pop(block->IRs));
         break;
       }
     }

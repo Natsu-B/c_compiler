@@ -651,6 +651,9 @@ Node *analyze_type(Node *node, bool is_root)
       tmp->node = analyze_type(tmp->node, true);
     offset_exit_nest();
   }
+  if (node->kind == ND_INITIALIZER)
+    for (size_t i = 1; i <= vector_size(node->initialize.init_list); i++)
+      analyze_type(vector_peek_at(node->initialize.init_list, i), false);
   switch (node->kind)
   {
     case ND_DEREF:

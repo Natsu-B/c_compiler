@@ -158,6 +158,23 @@ Token *consume_string()
       return_token->len += string->len;
     }
   }
+  // replace \e to \x1b
+  if (return_token)
+    for (size_t i = 0; i < return_token->len - 1; i++)
+    {
+      if (*(return_token->str + i) == '\\' &&
+          *(return_token->str + i + 1) == 'e')
+      {
+        char *tmp = malloc(return_token->len + 2);
+        memcpy(tmp, return_token->str, i);
+        memcpy(tmp + i, "\\x1b", 4);
+        memcpy(tmp + i + 4, return_token->str + i + 2,
+                return_token->len - i - 2);
+        return_token->len += 2;
+        return_token->str = tmp;
+      }
+    }
+
   return return_token;
 }
 

@@ -56,3 +56,6 @@ dkms.conf
 include/include_paths.h
 include/gcc_predef.h
 main
+main2
+.failure_list
+.success_list

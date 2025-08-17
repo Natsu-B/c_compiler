@@ -304,6 +304,7 @@ assert 'int a[2][5] = {{6, 7},{1, 2,3, 4, 5}}; int main() {return a[0][4] * 8 + 
 assert_print 'int fibonacci1(){for (int i = 0, a = 0, b = 1; i < 10; i++, b = a + b)printf("%d, ", i ? a = b - a : 0);printf("...\n");return 0;}int main(){printf("Hello World!!!"); return fibonacci1();}'
 assert_print 'int main() {}'
 assert 'int main() {int x = 1; switch (x) { case 0: x = x + 10; break; default: break; case 1: x--; break;} return x;}'
+assert 'int main() {printf("\e[35mhe\e[90mllo\e[37m\n");}'
 
 # assert 'int func() {static int x = 0; x++; return x;} int main() {if (func() != 1) return 1; if (func() != 2) return 1; if (func() != 3) return 1; return 0;}'
 # sleep 0.5

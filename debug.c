@@ -5,9 +5,11 @@
 #else
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 #endif
 
 #include "include/analyzer.h"
+#include "include/common.h"
 #include "include/conditional_inclusion.h"
 #include "include/define.h"
 #include "include/error.h"
@@ -21,13 +23,13 @@ extern Vector *output_list;
 // for calling with gdb
 void print_token_str(Vector *vec)
 {
-  pr_debug("Start\n");  // No Japanese here, just a comment
+  pr_debug("Start\n");
   for (size_t i = 1; i <= vector_size(vec); i++)
   {
     Token *token = vector_peek_at(vec, i);
     printf("%.*s", (int)token->len, token->str);
   }
-  pr_debug("\nEnd");  // No Japanese here, just a comment
+  pr_debug("\nEnd");
 }
 
 static char *CPPTKlist[CPPTK_Reserved] = {CPPTK_list};
@@ -210,7 +212,7 @@ void _print_parse_result(Node *node, int nest)
         }
       }
       if (node->func.stmt)
-      {  // For ND_FUNCDEF and ND_BLOCK
+      {
         make_space(nest);
         printf("|-block:\n");
         for (NDBlock *p = node->func.stmt; p; p = p->next)
@@ -219,9 +221,7 @@ void _print_parse_result(Node *node, int nest)
         }
       }
       break;
-    case ND_TYPE_NAME:
-      // No child nodes to print directly from Node structure
-      break;
+    case ND_TYPE_NAME: break;
     case ND_IF:
     case ND_ELIF:
     case ND_FOR:
@@ -262,13 +262,11 @@ void _print_parse_result(Node *node, int nest)
         _print_parse_result(node->control.update, nest + 1);
       }
       if (node->control.ternary_child)
-      {  // For ternary
+      {
         make_space(nest);
         printf("|-chs:\n");
         _print_parse_result(node->control.ternary_child, nest + 1);
       }
-      // For switch, case_list is handled separately in analyzer/generator, not
-      // directly here.
       break;
     case ND_GOTO:
     case ND_LABEL:
@@ -288,7 +286,7 @@ void _print_parse_result(Node *node, int nest)
       break;
     case ND_BLOCK:
       if (node->func.stmt)
-      {  // ND_BLOCK uses func.stmt
+      {
         make_space(nest);
         printf("|-block:\n");
         for (NDBlock *p = node->func.stmt; p; p = p->next)
@@ -297,9 +295,7 @@ void _print_parse_result(Node *node, int nest)
         }
       }
       break;
-    case ND_STRING:
-      // No child nodes to print directly from Node structure
-      break;
+    case ND_STRING: break;
     case ND_INITIALIZER:
       if (node->initialize.init_list)
       {
@@ -364,7 +360,8 @@ void _print_mermaid_result(Node *node, int *i, FILE *fp)
         for (size_t j = 1; j <= vector_size(node->func.expr); j++)
         {
           int child_id = *i;
-          fprintf(fp, "  id%d -- \"arg%zu\" --> id%d;\n", current_node_id, j, child_id);
+          fprintf(fp, "  id%d -- \"arg%zu\" --> id%d;\n", current_node_id, j,
+                  child_id);
           _print_mermaid_result(vector_peek_at(node->func.expr, j), i, fp);
         }
       }
@@ -373,7 +370,8 @@ void _print_mermaid_result(Node *node, int *i, FILE *fp)
         for (NDBlock *p = node->func.stmt; p; p = p->next)
         {
           int child_id = *i;
-          fprintf(fp, "  id%d -- \"stmt\" --> id%d;\n", current_node_id, child_id);
+          fprintf(fp, "  id%d -- \"stmt\" --> id%d;\n", current_node_id,
+                  child_id);
           _print_mermaid_result(p->node, i, fp);
         }
       }
@@ -390,37 +388,43 @@ void _print_mermaid_result(Node *node, int *i, FILE *fp)
       if (node->control.init)
       {
         int child_id = *i;
-        fprintf(fp, "  id%d -- \"init\" --> id%d;\n", current_node_id, child_id);
+        fprintf(fp, "  id%d -- \"init\" --> id%d;\n", current_node_id,
+                child_id);
         _print_mermaid_result(node->control.init, i, fp);
       }
       if (node->control.condition)
       {
         int child_id = *i;
-        fprintf(fp, "  id%d -- \"cond\" --> id%d;\n", current_node_id, child_id);
+        fprintf(fp, "  id%d -- \"cond\" --> id%d;\n", current_node_id,
+                child_id);
         _print_mermaid_result(node->control.condition, i, fp);
       }
       if (node->control.true_code)
       {
         int child_id = *i;
-        fprintf(fp, "  id%d -- \"then\" --> id%d;\n", current_node_id, child_id);
+        fprintf(fp, "  id%d -- \"then\" --> id%d;\n", current_node_id,
+                child_id);
         _print_mermaid_result(node->control.true_code, i, fp);
       }
       if (node->control.false_code)
       {
         int child_id = *i;
-        fprintf(fp, "  id%d -- \"else\" --> id%d;\n", current_node_id, child_id);
+        fprintf(fp, "  id%d -- \"else\" --> id%d;\n", current_node_id,
+                child_id);
         _print_mermaid_result(node->control.false_code, i, fp);
       }
       if (node->control.update)
       {
         int child_id = *i;
-        fprintf(fp, "  id%d -- \"update\" --> id%d;\n", current_node_id, child_id);
+        fprintf(fp, "  id%d -- \"update\" --> id%d;\n", current_node_id,
+                child_id);
         _print_mermaid_result(node->control.update, i, fp);
       }
       if (node->control.ternary_child)
       {
         int child_id = *i;
-        fprintf(fp, "  id%d -- \"child\" --> id%d;\n", current_node_id, child_id);
+        fprintf(fp, "  id%d -- \"child\" --> id%d;\n", current_node_id,
+                child_id);
         _print_mermaid_result(node->control.ternary_child, i, fp);
       }
       break;
@@ -429,7 +433,8 @@ void _print_mermaid_result(Node *node, int *i, FILE *fp)
       if (node->jump.statement_child)
       {
         int child_id = *i;
-        fprintf(fp, "  id%d -- \"stmt\" --> id%d;\n", current_node_id, child_id);
+        fprintf(fp, "  id%d -- \"stmt\" --> id%d;\n", current_node_id,
+                child_id);
         _print_mermaid_result(node->jump.statement_child, i, fp);
       }
       break;
@@ -437,7 +442,8 @@ void _print_mermaid_result(Node *node, int *i, FILE *fp)
       if (node->jump.statement_child)
       {
         int child_id = *i;
-        fprintf(fp, "  id%d -- \"stmt\" --> id%d;\n", current_node_id, child_id);
+        fprintf(fp, "  id%d -- \"stmt\" --> id%d;\n", current_node_id,
+                child_id);
         _print_mermaid_result(node->jump.statement_child, i, fp);
       }
       break;
@@ -447,7 +453,8 @@ void _print_mermaid_result(Node *node, int *i, FILE *fp)
         for (NDBlock *p = node->func.stmt; p; p = p->next)
         {
           int child_id = *i;
-          fprintf(fp, "  id%d -- \"stmt\" --> id%d;\n", current_node_id, child_id);
+          fprintf(fp, "  id%d -- \"stmt\" --> id%d;\n", current_node_id,
+                  child_id);
           _print_mermaid_result(p->node, i, fp);
         }
       }
@@ -458,13 +465,14 @@ void _print_mermaid_result(Node *node, int *i, FILE *fp)
         for (size_t j = 1; j <= vector_size(node->initialize.init_list); j++)
         {
           int child_id = *i;
-          fprintf(fp, "  id%d -- \"init%zu\" --> id%d;\n", current_node_id, j, child_id);
-          _print_mermaid_result(vector_peek_at(node->initialize.init_list, j), i, fp);
+          fprintf(fp, "  id%d -- \"init%zu\" --> id%d;\n", current_node_id, j,
+                  child_id);
+          _print_mermaid_result(vector_peek_at(node->initialize.init_list, j),
+                                i, fp);
         }
       }
       break;
-    default:
-      return;
+    default: return;
   }
 }
 
@@ -522,5 +530,305 @@ void print_definition()
       printf("%.*s ", (int)token->len, token->str);
     }
     printf("\n");
+  }
+}
+
+static const char *get_size_prefix(size_t size)
+{
+  switch (size)
+  {
+    case 1: return "BYTE";
+    case 2: return "WORD";
+    case 4: return "DWORD";
+    case 8: return "QWORD";
+    default: return "";
+  }
+}
+
+static void fprint_ir(FILE *fp, IR *ir, bool mermaid_escape)
+{
+  switch (ir->kind)
+  {
+    case IR_CALL:
+    {
+      fprintf(fp, "CALL r%d, %.*s, (", ir->call.dst_reg,
+              (int)ir->call.func_name_size, ir->call.func_name);
+      for (size_t k = 0; k < vector_size(ir->call.args); k++)
+      {
+        int *reg = vector_peek_at(ir->call.args, k + 1);
+        fprintf(fp, "r%d%s", *reg,
+                (k == vector_size(ir->call.args) - 1) ? "" : ", ");
+      }
+      fprintf(fp, ")");
+      break;
+    }
+    case IR_FUNC_PROLOGUE: fprintf(fp, "PROLOGUE"); break;
+    case IR_FUNC_EPILOGUE: fprintf(fp, "EPILOGUE"); break;
+    case IR_RET: fprintf(fp, "RET r%d", ir->ret.src_reg); break;
+    case IR_MOV:
+      if (ir->mov.is_imm)
+        fprintf(fp, "MOV r%d, %lld", ir->mov.dst_reg, ir->mov.imm_val);
+      else
+        fprintf(fp, "MOV r%d, r%d", ir->mov.dst_reg, ir->mov.src_reg);
+      break;
+    case IR_ADD:
+      fprintf(fp, "ADD %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
+              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      break;
+    case IR_SUB:
+      fprintf(fp, "SUB %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
+              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      break;
+    case IR_MUL:
+      fprintf(fp, "MUL %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
+              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      break;
+    case IR_OP_DIV:
+      fprintf(fp, "DIV %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
+              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      break;
+    case IR_OP_IDIV:
+      fprintf(fp, "IDIV %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
+              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      break;
+    case IR_EQ:
+      fprintf(fp, "EQ %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
+              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      break;
+    case IR_NEQ:
+      fprintf(fp, "NEQ %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
+              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      break;
+    case IR_LT:
+      fprintf(fp, "LT %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
+              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      break;
+    case IR_LTE:
+      fprintf(fp, "LTE %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
+              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      break;
+    case IR_OR:
+      fprintf(fp, "OR %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
+              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      break;
+    case IR_XOR:
+      fprintf(fp, "XOR %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
+              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      break;
+    case IR_AND:
+      fprintf(fp, "AND %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
+              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      break;
+    case IR_SHL:
+      fprintf(fp, "SHL %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
+              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      break;
+    case IR_SHR:
+      fprintf(fp, "SHR %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
+              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      break;
+    case IR_SAL:
+      fprintf(fp, "SAL %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
+              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      break;
+    case IR_SAR:
+      fprintf(fp, "SAR %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
+              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      break;
+    case IR_BIT_NOT:
+      fprintf(fp, "BNOT r%d, r%d", ir->un_op.dst_reg, ir->un_op.src_reg);
+      break;
+    case IR_JMP: fprintf(fp, "JMP %s", ir->jmp.label); break;
+    case IR_JNE:
+      fprintf(fp, "JNE %s, r%d", ir->jmp.label, ir->jmp.cond_reg);
+      break;
+    case IR_JE:
+      fprintf(fp, "JE %s, r%d", ir->jmp.label, ir->jmp.cond_reg);
+      break;
+    case IR_LOAD:
+      fprintf(fp, "LOAD %s r%d, [r%d + %d]", get_size_prefix(ir->mem.size),
+              ir->mem.reg, ir->mem.mem_reg, ir->mem.offset);
+      break;
+    case IR_STORE:
+      fprintf(fp, "STORE %s [r%d + %d], r%d", get_size_prefix(ir->mem.size),
+              ir->mem.mem_reg, ir->mem.offset, ir->mem.reg);
+      break;
+    case IR_STORE_ARG:
+      fprintf(fp, "STORE_ARG %s r%d, %d", get_size_prefix(ir->store_arg.size),
+              ir->store_arg.dst_reg, ir->store_arg.arg_index);
+      break;
+    case IR_LEA:
+      if (ir->lea.is_local)
+        fprintf(fp, "LEA r%d, LOCAL %zu", ir->lea.dst_reg, ir->lea.var_offset);
+      else if (ir->lea.is_static)
+        fprintf(fp, "LEA r%d, STATIC %.*s", ir->lea.dst_reg,
+                (int)ir->lea.var_name_len, ir->lea.var_name);
+      else
+        fprintf(fp, "LEA r%d, GLOBAL %.*s", ir->lea.dst_reg,
+                (int)ir->lea.var_name_len, ir->lea.var_name);
+      break;
+    case IR_LABEL: fprintf(fp, "%s:", ir->label.name); break;
+    case IR_NEG:
+      fprintf(fp, "NEG r%d, r%d", ir->un_op.dst_reg, ir->un_op.src_reg);
+      break;
+    case IR_NOT:
+      fprintf(fp, "NOT r%d, r%d", ir->un_op.dst_reg, ir->un_op.src_reg);
+      break;
+    case IR_BUILTIN_ASM:
+      if (mermaid_escape)
+        fprintf(fp, "ASM #%.*s#", (int)ir->builtin_asm.asm_len,
+                ir->builtin_asm.asm_str);
+      else
+        fprintf(fp, "ASM \"%.*s\"", (int)ir->builtin_asm.asm_len,
+                ir->builtin_asm.asm_str);
+      break;
+    default: fprintf(fp, "unimplemented IR"); break;
+  }
+}
+
+void dump_ir_fp(IRProgram *program, FILE *fp)
+{
+  // Dump global variables
+  for (size_t i = 0; i < vector_size(program->global_vars); i++)
+  {
+    GlobalVar *gvar = vector_peek_at(program->global_vars, i + 1);
+    fprintf(fp, "GVAR %.*s %zu", (int)gvar->var_name_len, gvar->var_name,
+            gvar->var_size);
+    for (size_t j = 1; j <= vector_size(gvar->initializer->IRs); j++)
+    {
+      GVarInitializer *init = vector_peek_at(gvar->initializer->IRs, j);
+      switch (init->how2_init)
+      {
+        case init_zero: fprintf(fp, " ZERO %lu\n", init->zero_len); break;
+        case init_val:
+          fprintf(fp, " VAL %lu %lld\n", init->value.value_size,
+                  init->value.init_val);
+          break;
+        case init_pointer:
+          fprintf(fp, " VAR %.*s\n", (int)init->assigned_var.var_name_len,
+                  init->assigned_var.var_name);
+          break;
+        case init_string:
+          fprintf(fp, " STRING %s\n", init->literal_name);
+          break;
+        default: unreachable(); break;
+      }
+    }
+  }
+
+  // Dump string literals
+  for (size_t i = 0; i < vector_size(program->strings); i++)
+  {
+    Var *str_var = vector_peek_at(program->strings, i + 1);
+    fprintf(fp, "STRING %.*s \"%.*s\"\n", (int)str_var->len, str_var->name,
+            (int)str_var->token->len, str_var->token->str);
+  }
+
+  // Loop through all functions
+  for (size_t i = 0; i < vector_size(program->functions); i++)
+  {
+    IRFunc *func = vector_peek_at(program->functions, i + 1);
+    if (func->builtin_func == FUNC_USER_DEFINED)
+    {
+      // Print function information
+      fprintf(fp, "FUNC %.*s %zu %zu %d\n",
+              (int)func->user_defined.function_name_size,
+              func->user_defined.function_name, func->user_defined.stack_size,
+              func->user_defined.num_virtual_regs,
+              func->user_defined.is_static);
+    }
+    // Loop through the IR blocks of the function
+    for (size_t j = 0; j < vector_size(func->IR_Blocks); j++)
+    {
+      IR_Blocks *irs = vector_peek_at(func->IR_Blocks, j + 1);
+      for (size_t k = 0; k < vector_size(irs->IRs); k++)
+      {
+        IR *ir = vector_peek_at(irs->IRs, k + 1);
+        fprintf(fp, "  ");
+        fprint_ir(fp, ir, false);
+        fprintf(fp, "\n");
+      }
+    }
+  }
+}
+
+void dump_ir(IRProgram *program, char *path)
+{
+  FILE *fp = fopen(path, "w");
+  if (!fp)
+  {
+    error_exit("Failed to open file for writing: %s", path);
+  }
+  dump_ir_fp(program, fp);
+  fclose(fp);
+}
+
+void dump_ir_stdout(IRProgram *program)
+{
+  dump_ir_fp(program, stdout);
+}
+
+static int get_block_index(Vector *blocks, IR_Blocks *target_block)
+{
+  for (size_t i = 1; i <= vector_size(blocks); i++)
+  {
+    if (vector_peek_at(blocks, i) == target_block)
+    {
+      return i - 1;
+    }
+  }
+  return -1;  // Not found
+}
+
+void dump_cfg(IRProgram *program, FILE *fp)
+{
+  for (size_t i = 1; i <= vector_size(program->functions); i++)
+  {
+    IRFunc *func = vector_peek_at(program->functions, i);
+    if (func->builtin_func != FUNC_USER_DEFINED)
+      continue;
+
+    fprintf(fp, "CFG for function %.*s:\n",
+            (int)func->user_defined.function_name_size,
+            func->user_defined.function_name);
+    fprintf(fp, "graph TD\n");
+
+    // Define all nodes
+    for (size_t j = 1; j <= vector_size(func->IR_Blocks); j++)
+    {
+      IR_Blocks *block = vector_peek_at(func->IR_Blocks, j);
+      int block_id = j - 1;
+
+      fprintf(fp, "  B%d[\"<b>B%d</b><br/>", block_id, block_id);
+
+      for (size_t k = 1; k <= vector_size(block->IRs); k++)
+      {
+        IR *ir = vector_peek_at(block->IRs, k);
+        fprint_ir(fp, ir, true);
+        fprintf(fp, "<br/>");
+      }
+      fprintf(fp, "\"]\n");
+    }
+
+    // Define all edges
+    for (size_t j = 1; j <= vector_size(func->IR_Blocks); j++)
+    {
+      IR_Blocks *block = vector_peek_at(func->IR_Blocks, j);
+      int block_id = j - 1;
+
+      if (block->lhs)
+      {
+        int lhs_id = get_block_index(func->IR_Blocks, block->lhs);
+        if (lhs_id != -1)
+          fprintf(fp, "  B%d --> B%d\n", block_id, lhs_id);
+      }
+      if (block->rhs)
+      {
+        int rhs_id = get_block_index(func->IR_Blocks, block->rhs);
+        if (rhs_id != -1)
+          fprintf(fp, "  B%d --> B%d\n", block_id, rhs_id);
+      }
+    }
+    fprintf(fp, "\n");
   }
 }

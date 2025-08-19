@@ -435,57 +435,46 @@ void generator(IRProgram *program, char *output_filename)
   output_file("    .intel_syntax noprefix\n");
 
   // Global variables
-  if (vector_size(program->global_vars))
+  for (size_t i = 0; i < vector_size(program->global_vars); i++)
   {
-    for (size_t i = 0; i < vector_size(program->global_vars); i++)
+    GlobalVar *gvar = vector_peek_at(program->global_vars, i + 1);
+    if (vector_size(gvar->initializer->IRs) == 1 &&
+        ((GVarInitializer *)vector_peek(gvar->initializer->IRs))->how2_init ==
+            init_zero)
+      output_file("    .section .bss");
+    else
+      output_file("    .section .data");
+    if (!gvar->is_static)
+      output_file("    .globl %.*s", (int)gvar->var_name_len, gvar->var_name);
+    output_file("    .type %.*s, @object", (int)gvar->var_name_len,
+                gvar->var_name);
+    output_file("    .size %.*s, %lu", (int)gvar->var_name_len, gvar->var_name,
+                gvar->var_size);
+    output_file("%.*s:", (int)gvar->var_name_len, gvar->var_name);
+    for (size_t j = 1; j <= vector_size(gvar->initializer->IRs); j++)
     {
-      GlobalVar *gvar = vector_peek_at(program->global_vars, i + 1);
-      if (vector_size(gvar->initializer->IRs) == 1 &&
-          ((GVarInitializer *)vector_peek(gvar->initializer->IRs))->how2_init ==
-              init_zero)
-        output_file("    .section .bss");
-      else
-        output_file("    .section .data");
-      if (!gvar->is_static)
-        output_file("    .globl %.*s", (int)gvar->var_name_len, gvar->var_name);
-      output_file("    .type %.*s, @object", (int)gvar->var_name_len,
-                  gvar->var_name);
-      output_file("    .size %.*s, %lu", (int)gvar->var_name_len,
-                  gvar->var_name, gvar->var_size);
-      output_file("%.*s:", (int)gvar->var_name_len, gvar->var_name);
-      for (size_t j = 1; j <= vector_size(gvar->initializer->IRs); j++)
+      GVarInitializer *init = vector_peek_at(gvar->initializer->IRs, j);
+      switch (init->how2_init)
       {
-        GVarInitializer *init = vector_peek_at(gvar->initializer->IRs, j);
-        switch (init->how2_init)
-        {
-          case init_zero: output_file("    .zero %zu", init->zero_len); break;
-          case init_val:
-            switch (init->value.value_size)
-            {
-              case 1:
-                output_file("    .byte %lld", init->value.init_val);
-                break;
-              case 2:
-                output_file("    .word %lld", init->value.init_val);
-                break;
-              case 4:
-                output_file("    .long %lld", init->value.init_val);
-                break;
-              case 8:
-                output_file("    .quad %lld", init->value.init_val);
-                break;
-              default: unreachable();
-            }
-            break;
-          case init_pointer:
-            output_file("    .quad %.*s", (int)init->assigned_var.var_name_len,
-                        init->assigned_var.var_name);
-            break;
-          case init_string:
-            output_file("    .quad %s", init->literal_name);
-            break;
-          default: unreachable(); break;
-        }
+        case init_zero: output_file("    .zero %zu", init->zero_len); break;
+        case init_val:
+          switch (init->value.value_size)
+          {
+            case 1: output_file("    .byte %lld", init->value.init_val); break;
+            case 2: output_file("    .word %lld", init->value.init_val); break;
+            case 4: output_file("    .long %lld", init->value.init_val); break;
+            case 8: output_file("    .quad %lld", init->value.init_val); break;
+            default: unreachable();
+          }
+          break;
+        case init_pointer:
+          output_file("    .quad %.*s", (int)init->assigned_var.var_name_len,
+                      init->assigned_var.var_name);
+          break;
+        case init_string:
+          output_file("    .quad %s", init->literal_name);
+          break;
+        default: unreachable(); break;
       }
     }
   }
@@ -558,22 +547,25 @@ void generator(IRProgram *program, char *output_filename)
               vector_peek_at(last_block->IRs, vector_size(last_block->IRs));
           if (last_ir->kind != IR_RET)
           {
+            for (size_t i = 0; i < vector_size(program->global_vars); i++)
+            {
+              output_file("    leave");
+              output_file("    ret");
+            }
+          }
+          else
+          {
             output_file("    leave");
             output_file("    ret");
           }
+          break;
         }
-        else
+        case FUNC_ASM:
         {
-          output_file("    leave");
-          output_file("    ret");
+          IR_Blocks *block = vector_pop(func->IR_Blocks);
+          gen_ir_instruction(vector_pop(block->IRs));
+          break;
         }
-        break;
-      }
-      case FUNC_ASM:
-      {
-        IR_Blocks *block = vector_pop(func->IR_Blocks);
-        gen_ir_instruction(vector_pop(block->IRs));
-        break;
       }
     }
   }

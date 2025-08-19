@@ -187,15 +187,19 @@ struct IR
   };
 };
 
-typedef struct
+typedef struct IR_Blocks
 {
-  Vector *IRs;  // IR instructions
+  Vector *IRs;            // IR instructions
+  Vector *parent;         // parent list (IR_Blocks vector)
+  struct IR_Blocks *lhs;  // child
+  struct IR_Blocks *rhs;  // child
 } IR_Blocks;
 
 typedef struct
 {
   enum function_type builtin_func;
   Vector *IR_Blocks;  // Basic blocks of IR instructions
+  Vector *labels;     // jump label list
   union
   {
     struct

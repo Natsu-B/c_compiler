@@ -12,7 +12,9 @@
 #include <stdio.h>
 #include <string.h>
 #endif
+#include <assert.h>
 
+#include "include/debug.h"
 #include "include/error.h"
 #include "include/parser.h"
 #include "include/vector.h"
@@ -49,19 +51,21 @@ static char *gen_label()
 }
 
 // Forward declarations
-static int *gen_addr(Vector *blocks, IR_Blocks **irs, Node *node);
-static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node);
-static void dump_ir_fp(IRProgram *program, FILE *fp);
+static int *gen_addr(Vector *blocks, Vector *labels, IR_Blocks **irs,
+                     Node *node);
+static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
+                     Node *node);
 
 IRFunc *call_builtin_func(Node *node)
 {
   IRFunc *func = calloc(1, sizeof(IRFunc));
   func->builtin_func = FUNC_ASM;
   func->IR_Blocks = vector_new();
-  IR_Blocks *irs = malloc(sizeof(IR_Blocks));
+  IR_Blocks *irs = calloc(1, sizeof(IR_Blocks));
   irs->IRs = vector_new();
+  irs->parent = vector_new();
   vector_push(func->IR_Blocks, irs);
-  gen_stmt(func->IR_Blocks, &irs, node);
+  gen_stmt(func->IR_Blocks, func->labels, &irs, node);
   if (vector_size(func->IR_Blocks) != 1 || vector_size(irs->IRs) != 1)
     unreachable();
   return func;
@@ -136,12 +140,14 @@ IRProgram *gen_ir(FuncBlock *parsed)
         func->user_defined.is_static =
             fb->node->func.storage_class_specifier & 1 << 2;
         func->IR_Blocks = vector_new();
-        IR_Blocks *irs = malloc(sizeof(IR_Blocks));
+        func->labels = vector_new();
+        IR_Blocks *irs = calloc(1, sizeof(IR_Blocks));
         irs->IRs = vector_new();
+        irs->parent = vector_new();
         vector_push(func->IR_Blocks, irs);
 
         reg_id = 0;  // Reset register ID for each function
-        gen_stmt(func->IR_Blocks, &irs,
+        gen_stmt(func->IR_Blocks, func->labels, &irs,
                  fb->node);  // Generate IR for statements
 
         func->user_defined.stack_size = fb->stacksize;
@@ -167,7 +173,8 @@ IRProgram *gen_ir(FuncBlock *parsed)
         GVarInitializer *init = calloc(1, sizeof(GVarInitializer));
         init->how2_init = init_zero;  // Default to zero-initialization
         init->zero_len = size_of(fb->node->variable.var->type);
-        IR_Blocks *irs = malloc(sizeof(IR_Blocks));
+        IR_Blocks *irs = calloc(1, sizeof(IR_Blocks));
+        irs->parent = vector_new();
         vector_push(irs->IRs = vector_new(), init);
         gvar->initializer = irs;
         vector_push(program->global_vars, gvar);
@@ -181,8 +188,9 @@ IRProgram *gen_ir(FuncBlock *parsed)
         gvar->var_size = size_of(fb->node->lhs->variable.var->type);
         gvar->is_static =
             fb->node->lhs->variable.var->storage_class_specifier & 1 << 2;
-        IR_Blocks *irs = malloc(sizeof(IR_Blocks));
+        IR_Blocks *irs = calloc(1, sizeof(IR_Blocks));
         irs->IRs = vector_new();
+        irs->parent = vector_new();
         gvar->initializer = irs;
         gen_gvar_assign(irs, fb->node->lhs->type, fb->node->rhs,
                         size_of(fb->node->type));
@@ -203,27 +211,16 @@ IRProgram *gen_ir(FuncBlock *parsed)
   return program;
 }
 
-static const char *get_size_prefix(size_t size)
-{
-  switch (size)
-  {
-    case 1: return "BYTE";
-    case 2: return "WORD";
-    case 4: return "DWORD";
-    case 8: return "QWORD";
-    default: return "";
-  }
-}
-
-static int *gen_assign(Vector *blocks, IR_Blocks **irs, Node *assigned,
-                       Node *node, size_t padding, size_t assign_size)
+static int *gen_assign(Vector *blocks, Vector *labels, IR_Blocks **irs,
+                       Node *assigned, Node *node, size_t padding,
+                       size_t assign_size)
 {
   if (node->kind == ND_INITIALIZER)
   {
     for (size_t i = 0; i < vector_size(node->initialize.init_list); i++)
     {
       Node *child = vector_peek_at(node->initialize.init_list, i + 1);
-      gen_assign(blocks, irs, assigned, child,
+      gen_assign(blocks, labels, irs, assigned, child,
                  padding + i * size_of(node->type->ptr_to),
                  size_of(child->type));
     }
@@ -235,8 +232,8 @@ static int *gen_assign(Vector *blocks, IR_Blocks **irs, Node *assigned,
       size_t size = size_of(node->type) - done_init > 8
                         ? 8
                         : size_of(node->type) - done_init;
-      int *zero_reg = gen_stmt(blocks, irs, new_node_num(0));
-      int *lhs_addr_ptr = gen_addr(blocks, irs, assigned);
+      int *zero_reg = gen_stmt(blocks, labels, irs, new_node_num(0));
+      int *lhs_addr_ptr = gen_addr(blocks, labels, irs, assigned);
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_STORE;
       ir->mem.reg = *zero_reg;
@@ -252,8 +249,8 @@ static int *gen_assign(Vector *blocks, IR_Blocks **irs, Node *assigned,
   {
     // For an assignment, evaluate the RHS, then STORE it at the address of
     // the LHS.
-    int *rhs_ptr = gen_stmt(blocks, irs, node);
-    int *lhs_addr_ptr = gen_addr(blocks, irs, assigned);
+    int *rhs_ptr = gen_stmt(blocks, labels, irs, node);
+    int *lhs_addr_ptr = gen_addr(blocks, labels, irs, assigned);
     IR *ir = calloc(1, sizeof(IR));
     ir->kind = IR_STORE;
     ir->mem.reg = *rhs_ptr;
@@ -266,7 +263,8 @@ static int *gen_assign(Vector *blocks, IR_Blocks **irs, Node *assigned,
   }
 }
 
-static int *gen_addr(Vector *blocks, IR_Blocks **irs, Node *node)
+static int *gen_addr(Vector *blocks, Vector *labels, IR_Blocks **irs,
+                     Node *node)
 {
   switch (node->kind)
   {
@@ -297,14 +295,16 @@ static int *gen_addr(Vector *blocks, IR_Blocks **irs, Node *node)
     {
       // For a dereference, evaluate the expression on the left of `*` to get
       // the address.
-      return gen_stmt(blocks, irs, node->lhs);
+      return gen_stmt(blocks, labels, irs, node->lhs);
     }
     case ND_DOT:
     case ND_ARROW:
     {
-      int *lhs_addr = node->kind == ND_DOT ? gen_addr(blocks, irs, node->lhs)
-                                           : gen_stmt(blocks, irs, node->lhs);
-      int *offset_val = gen_stmt(blocks, irs, new_node_num(node->child_offset));
+      int *lhs_addr = node->kind == ND_DOT
+                          ? gen_addr(blocks, labels, irs, node->lhs)
+                          : gen_stmt(blocks, labels, irs, node->lhs);
+      int *offset_val =
+          gen_stmt(blocks, labels, irs, new_node_num(node->child_offset));
 
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_ADD;
@@ -320,7 +320,8 @@ static int *gen_addr(Vector *blocks, IR_Blocks **irs, Node *node)
   }
 }
 
-static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
+static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
+                     Node *node)
 {
   if (!node || node->kind == ND_NOP)
     return NULL;
@@ -345,10 +346,10 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
       // If it's an array type, return its address.
       if (node->type->type == TYPE_ARRAY)
       {
-        return gen_addr(blocks, irs, node);
+        return gen_addr(blocks, labels, irs, node);
       }
       // For a variable, get its address and then generate a LOAD instruction.
-      int *addr_reg_ptr = gen_addr(blocks, irs, node);
+      int *addr_reg_ptr = gen_addr(blocks, labels, irs, node);
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_LOAD;
       ir->mem.mem_reg = *addr_reg_ptr;
@@ -378,20 +379,21 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
     }
     case ND_ASSIGN:
     {
-      return gen_assign(blocks, irs, node->lhs, node->rhs, 0,
+      return gen_assign(blocks, labels, irs, node->lhs, node->rhs, 0,
                         size_of(node->type));
     }
     case ND_RETURN:
     {
       // For a return statement, evaluate the return value and generate a RET
       // instruction.
-      int *src_ptr = gen_stmt(blocks, irs, node->lhs);
+      int *src_ptr = gen_stmt(blocks, labels, irs, node->lhs);
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_RET;
       ir->ret.src_reg = *src_ptr;
       vector_push((*irs)->IRs, ir);
-      *irs = malloc(sizeof(IR_Blocks));
+      *irs = calloc(1, sizeof(IR_Blocks));
       (*irs)->IRs = vector_new();
+      (*irs)->parent = vector_new();
       vector_push(blocks, *irs);
       return NULL;  // A return statement does not produce a value.
     }
@@ -402,55 +404,64 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
       char *end_label = gen_label();
 
       // Evaluate the condition.
-      int *cond_reg_ptr = gen_stmt(blocks, irs, node->control.condition);
+      int *cond_reg_ptr =
+          gen_stmt(blocks, labels, irs, node->control.condition);
       // If the condition is false (0), jump to else_label.
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_JE;  // Jump if Equal (to zero)
       ir->jmp.label = else_label;
       ir->jmp.cond_reg = *cond_reg_ptr;
       vector_push((*irs)->IRs, ir);
-      *irs = malloc(sizeof(IR_Blocks));
+      *irs = calloc(1, sizeof(IR_Blocks));
       (*irs)->IRs = vector_new();
+      (*irs)->parent = vector_new();
       vector_push(blocks, *irs);
 
       // Generate code for the 'true' block.
-      gen_stmt(blocks, irs, node->control.true_code);
+      gen_stmt(blocks, labels, irs, node->control.true_code);
       // Jump to the end_label.
       IR *jmp_ir = calloc(1, sizeof(IR));
       jmp_ir->kind = IR_JMP;
       jmp_ir->jmp.label = end_label;
       vector_push((*irs)->IRs, jmp_ir);
-      *irs = malloc(sizeof(IR_Blocks));
+      *irs = calloc(1, sizeof(IR_Blocks));
       (*irs)->IRs = vector_new();
+      (*irs)->parent = vector_new();
       vector_push(blocks, *irs);
 
       // Place the 'else' label.
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       IR *else_label_ir = calloc(1, sizeof(IR));
       else_label_ir->kind = IR_LABEL;
       else_label_ir->label.name = else_label;
       vector_push((*irs)->IRs, else_label_ir);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
 
       // If there is a 'false' block (else, else if), generate its code.
       if (node->control.false_code)
       {
-        gen_stmt(blocks, irs, node->control.false_code);
+        gen_stmt(blocks, labels, irs, node->control.false_code);
       }
 
       // Place the 'end' label.
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       IR *end_label_ir = calloc(1, sizeof(IR));
       end_label_ir->kind = IR_LABEL;
       end_label_ir->label.name = end_label;
       vector_push((*irs)->IRs, end_label_ir);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
       return NULL;  // Control flow statements do not produce a value.
     }
     case ND_WHILE:
@@ -467,47 +478,56 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
       // Place the loop start label.
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       IR *begin_label_ir = calloc(1, sizeof(IR));
       begin_label_ir->kind = IR_LABEL;
       begin_label_ir->label.name = begin_label;
       vector_push((*irs)->IRs, begin_label_ir);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
 
       // Evaluate the condition.
-      int *cond_reg_ptr = gen_stmt(blocks, irs, node->control.condition);
+      int *cond_reg_ptr =
+          gen_stmt(blocks, labels, irs, node->control.condition);
       // If the condition is false (0), jump to end_label.
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_JE;
       ir->jmp.label = end_label;
       ir->jmp.cond_reg = *cond_reg_ptr;
       vector_push((*irs)->IRs, ir);
-      *irs = malloc(sizeof(IR_Blocks));
+      *irs = calloc(1, sizeof(IR_Blocks));
       (*irs)->IRs = vector_new();
+      (*irs)->parent = vector_new();
       vector_push(blocks, *irs);
 
       // Generate code for the loop body.
-      gen_stmt(blocks, irs, node->control.true_code);
+      gen_stmt(blocks, labels, irs, node->control.true_code);
       // Jump to the loop start label.
       IR *jmp_ir = calloc(1, sizeof(IR));
       jmp_ir->kind = IR_JMP;
       jmp_ir->jmp.label = begin_label;
       vector_push((*irs)->IRs, jmp_ir);
-      *irs = malloc(sizeof(IR_Blocks));
+      *irs = calloc(1, sizeof(IR_Blocks));
       (*irs)->IRs = vector_new();
+      (*irs)->parent = vector_new();
       vector_push(blocks, *irs);
 
       // Place the loop end label.
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       IR *end_label_ir = calloc(1, sizeof(IR));
       end_label_ir->kind = IR_LABEL;
       end_label_ir->label.name = end_label;
       vector_push((*irs)->IRs, end_label_ir);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
       return NULL;
     }
     case ND_DO:
@@ -517,35 +537,42 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
                (int)node->control.label->len, node->control.label->name);
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       IR *label = calloc(1, sizeof(IR));
       label->kind = IR_LABEL;
       label->label.name = label_name;
       vector_push((*irs)->IRs, label);
-      gen_stmt(blocks, irs, node->control.true_code);
-      int *cond_ptr = gen_stmt(blocks, irs, node->control.condition);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
+      gen_stmt(blocks, labels, irs, node->control.true_code);
+      int *cond_ptr = gen_stmt(blocks, labels, irs, node->control.condition);
       IR *condition = calloc(1, sizeof(IR));
       condition->kind = IR_JNE;
       condition->jmp.label = label_name;
       condition->jmp.cond_reg = *cond_ptr;
       vector_push((*irs)->IRs, condition);
-      *irs = malloc(sizeof(IR_Blocks));
+      *irs = calloc(1, sizeof(IR_Blocks));
       (*irs)->IRs = vector_new();
+      (*irs)->parent = vector_new();
       vector_push(blocks, *irs);
       char *end_name = malloc(8 + node->control.label->len);
       snprintf(end_name, 8 + node->control.label->len, ".Lenddo%.*s",
                (int)node->control.label->len, node->control.label->name);
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       IR *end_label = calloc(1, sizeof(IR));
       end_label->kind = IR_LABEL;
       end_label->label.name = end_name;
       vector_push((*irs)->IRs, end_label);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
       return NULL;
     }
     case ND_FOR:
@@ -561,92 +588,107 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
 
       // Generate the initializer if it exists.
       if (node->control.init)
-        gen_stmt(blocks, irs, node->control.init);
+        gen_stmt(blocks, labels, irs, node->control.init);
 
       // Place the loop start label.
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       IR *begin_label_ir = calloc(1, sizeof(IR));
       begin_label_ir->kind = IR_LABEL;
       begin_label_ir->label.name = begin_label;
       vector_push((*irs)->IRs, begin_label_ir);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
 
       // If there is a condition, evaluate it and exit the loop if false.
       if (node->control.condition)
       {
-        int *cond_reg_ptr = gen_stmt(blocks, irs, node->control.condition);
+        int *cond_reg_ptr =
+            gen_stmt(blocks, labels, irs, node->control.condition);
         IR *ir = calloc(1, sizeof(IR));
         ir->kind = IR_JE;
         ir->jmp.label = end_label;
         ir->jmp.cond_reg = *cond_reg_ptr;
         vector_push((*irs)->IRs, ir);
-        *irs = malloc(sizeof(IR_Blocks));
+        *irs = calloc(1, sizeof(IR_Blocks));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
         vector_push(blocks, *irs);
       }
 
       // Generate code for the loop body.
-      gen_stmt(blocks, irs, node->control.true_code);
+      gen_stmt(blocks, labels, irs, node->control.true_code);
       // Generate the update expression if it exists.
       if (node->control.update)
-        gen_stmt(blocks, irs, node->control.update);
+        gen_stmt(blocks, labels, irs, node->control.update);
 
       // Jump to the loop start label.
       IR *jmp_ir = calloc(1, sizeof(IR));
       jmp_ir->kind = IR_JMP;
       jmp_ir->jmp.label = begin_label;
       vector_push((*irs)->IRs, jmp_ir);
-      *irs = malloc(sizeof(IR_Blocks));
+      *irs = calloc(1, sizeof(IR_Blocks));
       (*irs)->IRs = vector_new();
+      (*irs)->parent = vector_new();
       vector_push(blocks, *irs);
 
       // Place the loop end label.
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       IR *end_label_ir = calloc(1, sizeof(IR));
       end_label_ir->kind = IR_LABEL;
       end_label_ir->label.name = end_label;
       vector_push((*irs)->IRs, end_label_ir);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
       return NULL;
     }
     case ND_TERNARY:
     {
       char *false_label = gen_label();
       char *end_label = gen_label();
-      int *condition = gen_stmt(blocks, irs, node->lhs);
+      int *condition = gen_stmt(blocks, labels, irs, node->lhs);
       IR *jump = calloc(1, sizeof(IR));
       jump->kind = IR_JE;
       jump->jmp.label = false_label;
       jump->jmp.cond_reg = *condition;
       vector_push((*irs)->IRs, jump);
-      *irs = malloc(sizeof(IR_Blocks));
+      *irs = calloc(1, sizeof(IR_Blocks));
       (*irs)->IRs = vector_new();
+      (*irs)->parent = vector_new();
       vector_push(blocks, *irs);
 
-      int *true_reg = gen_stmt(blocks, irs, node->control.ternary_child);
+      int *true_reg =
+          gen_stmt(blocks, labels, irs, node->control.ternary_child);
       IR *jump_end = calloc(1, sizeof(IR));
       jump_end->kind = IR_JMP;
       jump_end->jmp.label = end_label;
       vector_push((*irs)->IRs, jump_end);
-      *irs = malloc(sizeof(IR_Blocks));
+      *irs = calloc(1, sizeof(IR_Blocks));
       (*irs)->IRs = vector_new();
+      (*irs)->parent = vector_new();
       vector_push(blocks, *irs);
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       IR *label_false = calloc(1, sizeof(IR));
       label_false->kind = IR_LABEL;
       label_false->label.name = false_label;
       vector_push((*irs)->IRs, label_false);
-      int *false_reg = gen_stmt(blocks, irs, node->rhs);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
+      int *false_reg = gen_stmt(blocks, labels, irs, node->rhs);
       IR *merge = calloc(1, sizeof(IR));
       merge->kind = IR_MOV;
       merge->mov.src_reg = *false_reg;
@@ -654,13 +696,16 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
       vector_push((*irs)->IRs, merge);
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       IR *label_end = calloc(1, sizeof(IR));
       label_end->kind = IR_LABEL;
       label_end->label.name = end_label;
       vector_push((*irs)->IRs, label_end);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
       return true_reg;
     }
     case ND_CASE:
@@ -671,23 +716,27 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
                node->jump.case_num);
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       IR *label = calloc(1, sizeof(IR));
       label->kind = IR_LABEL;
       label->label.name = label_name;
       vector_push((*irs)->IRs, label);
-      return gen_stmt(blocks, irs, node->jump.statement_child);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
+      return gen_stmt(blocks, labels, irs, node->jump.statement_child);
     }
     case ND_SWITCH:
     {
-      int *cond_ptr = gen_stmt(blocks, irs, node->control.condition);
+      int *cond_ptr = gen_stmt(blocks, labels, irs, node->control.condition);
       GTLabel *switch_label = node->control.label;
       IR *default_jmp = NULL;
       for (size_t i = 1; i <= vector_size(node->control.case_list); i++)
@@ -701,8 +750,9 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
           IR *cmp = calloc(1, sizeof(IR));
           cmp->kind = IR_EQ;
           cmp->bin_op.lhs_reg = *cond_ptr;
-          cmp->bin_op.rhs_reg = *gen_stmt(
-              blocks, irs, new_node_num(case_child->jump.constant_expression));
+          cmp->bin_op.rhs_reg =
+              *gen_stmt(blocks, labels, irs,
+                        new_node_num(case_child->jump.constant_expression));
           int *cmp_result = gen_reg();
           cmp->bin_op.dst_reg = *cmp_result;
           vector_push((*irs)->IRs, cmp);
@@ -711,8 +761,9 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
           jump->jmp.label = label_name;
           jump->jmp.cond_reg = *cmp_result;
           vector_push((*irs)->IRs, jump);
-          *irs = malloc(sizeof(IR_Blocks));
+          *irs = calloc(1, sizeof(IR_Blocks));
           (*irs)->IRs = vector_new();
+          (*irs)->parent = vector_new();
           vector_push(blocks, *irs);
         }
         else
@@ -726,8 +777,9 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
       if (default_jmp)
       {
         vector_push((*irs)->IRs, default_jmp);
-        *irs = malloc(sizeof(IR_Blocks));
+        *irs = calloc(1, sizeof(IR_Blocks));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
         vector_push(blocks, *irs);
       }
       char *label_name = malloc(12 + switch_label->len);
@@ -737,20 +789,24 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
       jump->kind = IR_JMP;
       jump->jmp.label = label_name;
       vector_push((*irs)->IRs, jump);
-      *irs = malloc(sizeof(IR_Blocks));
+      *irs = calloc(1, sizeof(IR_Blocks));
       (*irs)->IRs = vector_new();
+      (*irs)->parent = vector_new();
       vector_push(blocks, *irs);
 
-      gen_stmt(blocks, irs, node->control.true_code);
+      gen_stmt(blocks, labels, irs, node->control.true_code);
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       IR *end = calloc(1, sizeof(IR));
       end->kind = IR_LABEL;
       end->label.name = label_name;
       vector_push((*irs)->IRs, end);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
       return NULL;
     }
     case ND_FUNCCALL:
@@ -760,7 +816,7 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
       for (size_t i = 0; i < vector_size(node->func.expr); i++)
       {
         Node *arg = vector_peek_at(node->func.expr, i + 1);
-        int *reg_val = gen_stmt(blocks, irs, arg);
+        int *reg_val = gen_stmt(blocks, labels, irs, arg);
         vector_push(args, reg_val);
       }
 
@@ -778,7 +834,7 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
     case ND_DISCARD_EXPR:
     {
       // Expression statement (discard the evaluation result).
-      gen_stmt(blocks, irs, node->lhs);
+      gen_stmt(blocks, labels, irs, node->lhs);
       return NULL;
     }
     case ND_BLOCK:
@@ -786,7 +842,7 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
       // Generate code for each statement in the block sequentially.
       for (NDBlock *b = node->func.stmt; b; b = b->next)
       {
-        gen_stmt(blocks, irs, b->node);
+        gen_stmt(blocks, labels, irs, b->node);
       }
       return NULL;
     }
@@ -803,7 +859,7 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
       for (size_t i = 0; i < vector_size(node->func.expr); i++)
       {
         Node *arg_node = vector_peek_at(node->func.expr, i + 1);
-        int *addr_reg = gen_addr(blocks, irs, arg_node);
+        int *addr_reg = gen_addr(blocks, labels, irs, arg_node);
         IR *ir = calloc(1, sizeof(IR));
         ir->kind = IR_STORE_ARG;
         ir->store_arg.dst_reg = *addr_reg;
@@ -815,11 +871,12 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
       // Generate code for the function body.
       for (NDBlock *b = node->func.stmt; b; b = b->next)
       {
-        gen_stmt(blocks, irs, b->node);
+        gen_stmt(blocks, labels, irs, b->node);
       }
 
       if (node->token->len == 4 && !strncmp(node->token->str, "main", 4))
-        gen_stmt(blocks, irs, new_node(ND_RETURN, new_node_num(0), NULL, NULL));
+        gen_stmt(blocks, labels, irs,
+                 new_node(ND_RETURN, new_node_num(0), NULL, NULL));
 
       // Generate the function epilogue.
       IR *epilogue_ir = calloc(1, sizeof(IR));
@@ -831,7 +888,7 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
     {
       // Dereference `*p`.
       // Evaluate the address of p.
-      int *addr_reg_ptr = gen_stmt(blocks, irs, node->lhs);
+      int *addr_reg_ptr = gen_stmt(blocks, labels, irs, node->lhs);
       // Load the value from that address.
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_LOAD;
@@ -846,13 +903,13 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
     case ND_ADDR:
     {
       // Address-of `&v`.
-      return gen_addr(blocks, irs, node->lhs);
+      return gen_addr(blocks, labels, irs, node->lhs);
     }
     case ND_LOGICAL_NOT:
     case ND_NOT:
     case ND_UNARY_MINUS:
     {
-      int *src_reg_ptr = gen_stmt(blocks, irs, node->lhs);
+      int *src_reg_ptr = gen_stmt(blocks, labels, irs, node->lhs);
       IR *ir = calloc(1, sizeof(IR));
       switch (node->kind)
       {
@@ -870,15 +927,15 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
     case ND_UNARY_PLUS:
     {
       // Unary plus `+x` does nothing.
-      return gen_stmt(blocks, irs, node->lhs);
+      return gen_stmt(blocks, labels, irs, node->lhs);
     }
     case ND_EVAL:
     {
       // Convert int to bool
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_NEQ;
-      ir->bin_op.lhs_reg = *gen_stmt(blocks, irs, node->lhs);
-      ir->bin_op.rhs_reg = *gen_stmt(blocks, irs, new_node_num(0));
+      ir->bin_op.lhs_reg = *gen_stmt(blocks, labels, irs, node->lhs);
+      ir->bin_op.rhs_reg = *gen_stmt(blocks, labels, irs, new_node_num(0));
       int *dst_reg_ptr = gen_reg();
       ir->bin_op.dst_reg = *dst_reg_ptr;
       vector_push((*irs)->IRs, ir);
@@ -890,8 +947,9 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
       ir->kind = IR_JMP;
       ir->jmp.label = node->jump.label_name;
       vector_push((*irs)->IRs, ir);
-      *irs = malloc(sizeof(IR_Blocks));
+      *irs = calloc(1, sizeof(IR_Blocks));
       (*irs)->IRs = vector_new();
+      (*irs)->parent = vector_new();
       vector_push(blocks, *irs);
       return NULL;
     }
@@ -899,21 +957,24 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
     {
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_LABEL;
       ir->label.name = node->jump.label_name;
       vector_push((*irs)->IRs, ir);
-      return gen_stmt(blocks, irs, node->jump.statement_child);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
+      return gen_stmt(blocks, labels, irs, node->jump.statement_child);
     }
     case ND_PREDECREMENT:
     case ND_POSTDECREMENT:
     case ND_PREINCREMENT:
     case ND_POSTINCREMENT:
     {
-      int *pre_reg = gen_stmt(blocks, irs, node->lhs);
+      int *pre_reg = gen_stmt(blocks, labels, irs, node->lhs);
       int *post_reg = gen_reg();
       bool is_inc =
           node->kind == ND_PREINCREMENT || node->kind == ND_POSTINCREMENT;
@@ -936,13 +997,13 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
           ir->kind = IR_SUB;
         ir->bin_op.lhs_reg = *pre_reg;
         ir->bin_op.rhs_reg =
-            *gen_stmt(blocks, irs, new_node_num(node->num_val));
+            *gen_stmt(blocks, labels, irs, new_node_num(node->num_val));
         ir->bin_op.lhs_size = size_of(node->lhs->type);
         ir->bin_op.rhs_size = 8;
         ir->bin_op.dst_reg = *post_reg;
       }
       vector_push((*irs)->IRs, ir);
-      int *lhs_addr_ptr = gen_addr(blocks, irs, node->lhs);
+      int *lhs_addr_ptr = gen_addr(blocks, labels, irs, node->lhs);
       IR *assign = calloc(1, sizeof(IR));
       assign->kind = IR_STORE;
       assign->mem.reg = *post_reg;
@@ -972,8 +1033,8 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
     case ND_RIGHT_SHIFT:
     {
       // Binary operations.
-      int *lhs_ptr = gen_stmt(blocks, irs, node->lhs);
-      int *rhs_ptr = gen_stmt(blocks, irs, node->rhs);
+      int *lhs_ptr = gen_stmt(blocks, labels, irs, node->lhs);
+      int *rhs_ptr = gen_stmt(blocks, labels, irs, node->rhs);
       IR *ir = calloc(1, sizeof(IR));
       switch (node->kind)
       {
@@ -1014,14 +1075,15 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
       char *end_label = gen_label();
       int *dst_reg_ptr = gen_reg();
 
-      int *lhs_ptr = gen_stmt(blocks, irs, node->lhs);
+      int *lhs_ptr = gen_stmt(blocks, labels, irs, node->lhs);
       IR *ir1 = calloc(1, sizeof(IR));
       ir1->kind = IR_JE;
       ir1->jmp.label = false_label;
       ir1->jmp.cond_reg = *lhs_ptr;
       vector_push((*irs)->IRs, ir1);
-      *irs = malloc(sizeof(IR_Blocks));
+      *irs = calloc(1, sizeof(IR_Blocks));
       (*irs)->IRs = vector_new();
+      (*irs)->parent = vector_new();
       vector_push(blocks, *irs);
 
       IR *ir2 = calloc(1, sizeof(IR));
@@ -1035,21 +1097,25 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
       ir3->kind = IR_JMP;
       ir3->jmp.label = end_label;
       vector_push((*irs)->IRs, ir3);
-      *irs = malloc(sizeof(IR_Blocks));
+      *irs = calloc(1, sizeof(IR_Blocks));
       (*irs)->IRs = vector_new();
+      (*irs)->parent = vector_new();
       vector_push(blocks, *irs);
 
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       IR *ir4 = calloc(1, sizeof(IR));
       ir4->kind = IR_LABEL;
       ir4->label.name = false_label;
       vector_push((*irs)->IRs, ir4);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
 
-      int *rhs_ptr = gen_stmt(blocks, irs, node->rhs);
+      int *rhs_ptr = gen_stmt(blocks, labels, irs, node->rhs);
       IR *ir5 = calloc(1, sizeof(IR));
       ir5->kind = IR_MOV;
       ir5->mov.is_imm = false;
@@ -1059,13 +1125,16 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
 
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       IR *ir6 = calloc(1, sizeof(IR));
       ir6->kind = IR_LABEL;
       ir6->label.name = end_label;
       vector_push((*irs)->IRs, ir6);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
 
       return dst_reg_ptr;
     }
@@ -1075,24 +1144,26 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
       char *end_label = gen_label();
       int *dst_reg_ptr = gen_reg();
 
-      int *lhs_ptr = gen_stmt(blocks, irs, node->lhs);
+      int *lhs_ptr = gen_stmt(blocks, labels, irs, node->lhs);
       IR *ir1 = calloc(1, sizeof(IR));
       ir1->kind = IR_JE;
       ir1->jmp.label = false_label;
       ir1->jmp.cond_reg = *lhs_ptr;
       vector_push((*irs)->IRs, ir1);
-      *irs = malloc(sizeof(IR_Blocks));
+      *irs = calloc(1, sizeof(IR_Blocks));
       (*irs)->IRs = vector_new();
+      (*irs)->parent = vector_new();
       vector_push(blocks, *irs);
 
-      int *rhs_ptr = gen_stmt(blocks, irs, node->rhs);
+      int *rhs_ptr = gen_stmt(blocks, labels, irs, node->rhs);
       IR *ir2 = calloc(1, sizeof(IR));
       ir2->kind = IR_JE;
       ir2->jmp.label = false_label;
       ir2->jmp.cond_reg = *rhs_ptr;
       vector_push((*irs)->IRs, ir2);
-      *irs = malloc(sizeof(IR_Blocks));
+      *irs = calloc(1, sizeof(IR_Blocks));
       (*irs)->IRs = vector_new();
+      (*irs)->parent = vector_new();
       vector_push(blocks, *irs);
 
       IR *ir3 = calloc(1, sizeof(IR));
@@ -1106,19 +1177,23 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
       ir4->kind = IR_JMP;
       ir4->jmp.label = end_label;
       vector_push((*irs)->IRs, ir4);
-      *irs = malloc(sizeof(IR_Blocks));
+      *irs = calloc(1, sizeof(IR_Blocks));
       (*irs)->IRs = vector_new();
+      (*irs)->parent = vector_new();
       vector_push(blocks, *irs);
 
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       IR *ir5 = calloc(1, sizeof(IR));
       ir5->kind = IR_LABEL;
       ir5->label.name = false_label;
       vector_push((*irs)->IRs, ir5);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
 
       IR *ir6 = calloc(1, sizeof(IR));
       ir6->kind = IR_MOV;
@@ -1129,20 +1204,23 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
 
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = malloc(sizeof(IR_Blocks)));
+        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
         (*irs)->IRs = vector_new();
+        (*irs)->parent = vector_new();
       }
       IR *ir7 = calloc(1, sizeof(IR));
       ir7->kind = IR_LABEL;
       ir7->label.name = end_label;
       vector_push((*irs)->IRs, ir7);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
 
       return dst_reg_ptr;
     }
     case ND_COMMA:
     {
-      gen_stmt(blocks, irs, node->lhs);
-      return gen_stmt(blocks, irs, node->rhs);
+      gen_stmt(blocks, labels, irs, node->lhs);
+      return gen_stmt(blocks, labels, irs, node->rhs);
     }
     case ND_BUILTINFUNC:
     {
@@ -1166,275 +1244,12 @@ static int *gen_stmt(Vector *blocks, IR_Blocks **irs, Node *node)
     }
     case ND_DECLARATOR_LIST:
     {
-      gen_stmt(blocks, irs, node->lhs);
-      gen_stmt(blocks, irs, node->rhs);
+      gen_stmt(blocks, labels, irs, node->lhs);
+      gen_stmt(blocks, labels, irs, node->rhs);
       return NULL;
     }
     default:
       error_exit("unexpected node kind: %d", node->kind);
       return 0;  // Unreachable
   }
-}
-
-static void dump_ir_fp(IRProgram *program, FILE *fp)
-{
-  // Dump global variables
-  for (size_t i = 0; i < vector_size(program->global_vars); i++)
-  {
-    GlobalVar *gvar = vector_peek_at(program->global_vars, i + 1);
-    fprintf(fp, "GVAR %.*s %zu", (int)gvar->var_name_len, gvar->var_name,
-            gvar->var_size);
-    for (size_t j = 1; j <= vector_size(gvar->initializer->IRs); j++)
-    {
-      GVarInitializer *init = vector_peek_at(gvar->initializer->IRs, j);
-      switch (init->how2_init)
-      {
-        case init_zero: fprintf(fp, " ZERO %lu\n", init->zero_len); break;
-        case init_val:
-          fprintf(fp, " VAL %lu %lld\n", init->value.value_size,
-                  init->value.init_val);
-          break;
-        case init_pointer:
-          fprintf(fp, " VAR %.*s\n", (int)init->assigned_var.var_name_len,
-                  init->assigned_var.var_name);
-          break;
-        case init_string:
-          fprintf(fp, " STRING %s\n", init->literal_name);
-          break;
-        default: unreachable(); break;
-      }
-    }
-  }
-
-  // Dump string literals
-  for (size_t i = 0; i < vector_size(program->strings); i++)
-  {
-    Var *str_var = vector_peek_at(program->strings, i + 1);
-    fprintf(fp, "STRING %.*s \"%.*s\"\n", (int)str_var->len, str_var->name,
-            (int)str_var->token->len, str_var->token->str);
-  }
-
-  // Loop through all functions
-  for (size_t i = 0; i < vector_size(program->functions); i++)
-  {
-    IRFunc *func = vector_peek_at(program->functions, i + 1);
-    if (func->builtin_func == FUNC_USER_DEFINED)
-    {
-      // Print function information
-      fprintf(fp, "FUNC %.*s %zu %zu %d\n",
-              (int)func->user_defined.function_name_size,
-              func->user_defined.function_name, func->user_defined.stack_size,
-              func->user_defined.num_virtual_regs,
-              func->user_defined.is_static);
-    }
-    // Loop through the IR blocks of the function
-    for (size_t j = 0; j < vector_size(func->IR_Blocks); j++)
-    {
-      IR_Blocks *irs = vector_peek_at(func->IR_Blocks, j + 1);
-      for (size_t k = 0; k < vector_size(irs->IRs); k++)
-      {
-        IR *ir = vector_peek_at(irs->IRs, k + 1);
-        // Print in text format according to the IR kind
-        switch (ir->kind)
-        {
-          case IR_CALL:
-            fprintf(fp, "  CALL r%d, %.*s, (", ir->call.dst_reg,
-                    (int)ir->call.func_name_size, ir->call.func_name);
-            for (size_t k = 0; k < vector_size(ir->call.args); k++)
-            {
-              int *reg = vector_peek_at(ir->call.args, k + 1);
-              fprintf(fp, "r%d%s", *reg,
-                      (k == vector_size(ir->call.args) - 1) ? "" : ", ");
-            }
-            fprintf(fp, ")\n");
-            break;
-          case IR_FUNC_PROLOGUE:
-            if (k)
-              unreachable();
-            fprintf(fp, "  PROLOGUE\n");
-            break;
-          case IR_FUNC_EPILOGUE:
-            if (k + 1 != vector_size(irs->IRs))
-              unreachable();
-            fprintf(fp, "  EPILOGUE\n");
-            break;
-          case IR_RET:
-            if (k + 1 != vector_size(irs->IRs))
-              unreachable();
-            fprintf(fp, "  RET r%d\n", ir->ret.src_reg);
-            break;
-          case IR_MOV:
-            if (ir->mov.is_imm)
-              fprintf(fp, "  MOV r%d, %lld\n", ir->mov.dst_reg,
-                      ir->mov.imm_val);
-            else
-              fprintf(fp, "  MOV r%d, r%d\n", ir->mov.dst_reg, ir->mov.src_reg);
-            break;
-          case IR_ADD:
-            fprintf(fp, "  ADD %s r%d, r%d, r%d\n",
-                    get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
-                    ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
-            break;
-          case IR_SUB:
-            fprintf(fp, "  SUB %s r%d, r%d, r%d\n",
-                    get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
-                    ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
-            break;
-          case IR_MUL:
-            fprintf(fp, "  MUL %s r%d, r%d, r%d\n",
-                    get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
-                    ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
-            break;
-          case IR_OP_DIV:
-            fprintf(fp, "  DIV %s r%d, r%d, r%d\n",
-                    get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
-                    ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
-            break;
-          case IR_OP_IDIV:
-            fprintf(fp, "  IDIV %s r%d, r%d, r%d\n",
-                    get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
-                    ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
-            break;
-          case IR_EQ:
-            fprintf(fp, "  EQ %s r%d, r%d, r%d\n",
-                    get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
-                    ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
-            break;
-          case IR_NEQ:
-            fprintf(fp, "  NEQ %s r%d, r%d, r%d\n",
-                    get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
-                    ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
-            break;
-          case IR_LT:
-            fprintf(fp, "  LT %s r%d, r%d, r%d\n",
-                    get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
-                    ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
-            break;
-          case IR_LTE:
-            fprintf(fp, "  LTE %s r%d, r%d, r%d\n",
-                    get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
-                    ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
-            break;
-          case IR_OR:
-            fprintf(fp, "  OR %s r%d, r%d, r%d\n",
-                    get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
-                    ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
-            break;
-          case IR_XOR:
-            fprintf(fp, "  XOR %s r%d, r%d, r%d\n",
-                    get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
-                    ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
-            break;
-          case IR_AND:
-            fprintf(fp, "  AND %s r%d, r%d, r%d\n",
-                    get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
-                    ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
-            break;
-          case IR_SHL:
-            fprintf(fp, "  SHL %s r%d, r%d, r%d\n",
-                    get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
-                    ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
-            break;
-          case IR_SHR:
-            fprintf(fp, "  SHR %s r%d, r%d, r%d\n",
-                    get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
-                    ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
-            break;
-          case IR_SAL:
-            fprintf(fp, "  SAL %s r%d, r%d, r%d\n",
-                    get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
-                    ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
-            break;
-          case IR_SAR:
-            fprintf(fp, "  SAR %s r%d, r%d, r%d\n",
-                    get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
-                    ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
-            break;
-          case IR_BIT_NOT:
-            fprintf(fp, "  BNOT r%d, r%d\n", ir->un_op.dst_reg,
-                    ir->un_op.src_reg);
-            break;
-          case IR_JMP:
-            if (k + 1 != vector_size(irs->IRs))
-              unreachable();
-            fprintf(fp, "  JMP %s\n", ir->jmp.label);
-            break;
-          case IR_JNE:
-            if (k + 1 != vector_size(irs->IRs))
-              unreachable();
-            fprintf(fp, "  JNE %s, r%d\n", ir->jmp.label, ir->jmp.cond_reg);
-            break;
-          case IR_JE:
-            if (k + 1 != vector_size(irs->IRs))
-              unreachable();
-            fprintf(fp, "  JE %s, r%d\n", ir->jmp.label, ir->jmp.cond_reg);
-            break;
-          case IR_LOAD:
-            fprintf(fp, "  LOAD %s r%d, [r%d + %d]\n",
-                    get_size_prefix(ir->mem.size), ir->mem.reg, ir->mem.mem_reg,
-                    ir->mem.offset);
-            break;
-          case IR_STORE:
-            fprintf(fp, "  STORE %s [r%d + %d], r%d\n",
-                    get_size_prefix(ir->mem.size), ir->mem.mem_reg,
-                    ir->mem.offset, ir->mem.reg);
-            break;
-          case IR_STORE_ARG:
-            fprintf(fp, "  STORE_ARG %s r%d, %d\n",
-                    get_size_prefix(ir->store_arg.size), ir->store_arg.dst_reg,
-                    ir->store_arg.arg_index);
-            break;
-          case IR_LEA:
-            if (ir->lea.is_local)
-            {
-              fprintf(fp, "  LEA r%d, LOCAL %zu\n", ir->lea.dst_reg,
-                      ir->lea.var_offset);
-            }
-            else
-            {
-              if (ir->lea.is_static)
-              {
-                fprintf(fp, "  LEA r%d, STATIC %.*s\n", ir->lea.dst_reg,
-                        (int)ir->lea.var_name_len, ir->lea.var_name);
-              }
-              else
-              {
-                fprintf(fp, "  LEA r%d, GLOBAL %.*s\n", ir->lea.dst_reg,
-                        (int)ir->lea.var_name_len, ir->lea.var_name);
-              }
-            }
-            break;
-          case IR_LABEL:
-            if (k)
-              unreachable();
-            fprintf(fp, "%s:\n", ir->label.name);
-            break;
-          case IR_NEG:
-            fprintf(fp, "  NEG r%d, r%d\n", ir->un_op.dst_reg,
-                    ir->un_op.src_reg);
-            break;
-          case IR_NOT:
-            fprintf(fp, "  NOT r%d, r%d\n", ir->un_op.dst_reg,
-                    ir->un_op.src_reg);
-            break;
-          case IR_BUILTIN_ASM:
-            fprintf(fp, "  ASM \"%.*s\"", (int)ir->builtin_asm.asm_len,
-                    ir->builtin_asm.asm_str);
-            break;
-          default: unimplemented(); break;
-        }
-      }
-    }
-  }
-}
-
-void dump_ir(IRProgram *program, char *path)
-{
-  FILE *fp = fopen(path, "w");
-  if (!fp)
-  {
-    error_exit("Failed to open file for writing: %s", path);
-  }
-  dump_ir_fp(program, fp);
-  fclose(fp);
 }

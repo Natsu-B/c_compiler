@@ -4,6 +4,5 @@
 #include "common.h"
 
 IRProgram *gen_ir(FuncBlock *parsed);
-void dump_ir(IRProgram *program, char *path);
 
 #endif

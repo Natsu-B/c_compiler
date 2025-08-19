@@ -10,15 +10,17 @@
 #include "include/error.h"
 #include "include/file.h"
 #include "include/generator.h"
+#include "include/ir_generator.h"
+#include "include/ir_optimizer.h"
 #include "include/parser.h"
 #include "include/preprocessor.h"
 #include "include/tokenizer.h"
-#include "include/ir_generator.h"
 
 bool output_preprocess;
 bool gcc_compatible;
 bool output_ir;
 bool output_mermaid;
+uint8_t optimize_level = 1;
 
 // Argument processing
 // -E: Execute preprocessor and output
@@ -28,6 +30,8 @@ bool output_mermaid;
 // -I: Use standard input after this argument as input
 // -emit-ir: Output IR
 // -emit-mermaid: Output AST in Mermaid format
+// -O0: non optimized
+// -O1: optimized(default)
 int main(int argc, char **argv)
 {
   fprintf(stdout, "\e[32mc_compiler\e[37m\n");
@@ -60,6 +64,10 @@ int main(int argc, char **argv)
         output_ir = true;
       else if (!strcmp(argv[i], "-emit-mermaid"))
         output_mermaid = true;
+      else if (!strcmp(argv[i], "-O0") && !(optimize_level & 1 << 7))
+        optimize_level = 0 | 1 << 7;
+      else if (!strcmp(argv[i], "-O1") && !(optimize_level & 1 << 7))
+        optimize_level = 1 | 1 << 7;
       else if (!strcmp(argv[i], "-o") && ++i < argc)
         output_file_name = argv[i];
       else if (!strcmp(argv[i], "-i") && ++i < argc)
@@ -97,6 +105,9 @@ int main(int argc, char **argv)
   FuncBlock *analyze_result = analyzer(parse_result);
   // IR generator
   IRProgram *ir_program = gen_ir(analyze_result);
+  // IR optimizer
+  if ((optimize_level & ~(1 << 7)) == 1)
+    ir_program = optimize_ir(ir_program);
 
   if (output_ir)
   {

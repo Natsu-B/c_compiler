@@ -89,20 +89,20 @@ struct IR
       char *func_name;
       size_t func_name_size;
       Vector *args;  // Vector of virtual registers
-      int dst_reg;
+      size_t dst_reg;
     } call;
 
     // IR_BUILTIN_VA_LIST
     struct
     {
-      int va_reg;  // virtual register for va_list
+      size_t va_reg;  // virtual register for va_list
     } va_list;
 
     // IR_MOV
     struct
     {
-      int dst_reg;
-      int src_reg;
+      size_t dst_reg;
+      size_t src_reg;
       long long imm_val;  // for immediate value
       bool is_imm;
     } mov;
@@ -110,9 +110,9 @@ struct IR
     // Arithmetic, bitwise, compare operators
     struct
     {
-      int dst_reg;
-      int lhs_reg;
-      int rhs_reg;
+      size_t dst_reg;
+      size_t lhs_reg;
+      size_t rhs_reg;
       size_t lhs_size;
       size_t rhs_size;
     } bin_op;
@@ -120,21 +120,21 @@ struct IR
     // Unary operators
     struct
     {
-      int dst_reg;
-      int src_reg;
+      size_t dst_reg;
+      size_t src_reg;
     } un_op;
 
     // IR_JMP, IR_JNE, IR_JE
     struct
     {
       char *label;
-      int cond_reg;  // not used for IR_JMP
+      size_t cond_reg;  // not used for IR_JMP
     } jmp;
 
     // IR_STORE_ARG
     struct
     {
-      int dst_reg;
+      size_t dst_reg;
       int arg_index;
       size_t size;
     } store_arg;
@@ -142,8 +142,8 @@ struct IR
     // IR_LOAD, IR_STORE
     struct
     {
-      int reg;
-      int mem_reg;  // register holding memory address
+      size_t reg;
+      size_t mem_reg;  // register holding memory address
       int offset;
       size_t size;  // Size of the data being accessed
     } mem;
@@ -151,7 +151,7 @@ struct IR
     // IR_LEA
     struct
     {
-      int dst_reg;
+      size_t dst_reg;
       bool is_local;
       bool is_static;
       char *var_name;
@@ -162,7 +162,7 @@ struct IR
     // IR_RET
     struct
     {
-      int src_reg;
+      size_t src_reg;
     } ret;
 
     // IR_LABEL
@@ -193,6 +193,10 @@ typedef struct IR_Blocks
   Vector *parent;         // parent list (IR_Blocks vector)
   struct IR_Blocks *lhs;  // child
   struct IR_Blocks *rhs;  // child
+  Vector *reg_in;         // reg num (size_t*)
+  Vector *reg_use;
+  Vector *reg_def;
+  Vector *reg_out;
 } IR_Blocks;
 
 typedef struct

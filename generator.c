@@ -103,7 +103,7 @@ size_t function_max_stack_size;
 
 // Simple stack-based allocation: all virtual registers are on the stack.
 // Get the stack offset for a given virtual register.
-static int get_stack_offset(int virtual_reg)
+static size_t get_stack_offset(size_t virtual_reg)
 {
   // +1 because rbp points to the old rbp, stack grows downwards.
   if (function_variables_stack_size + (virtual_reg + 1) * 8 >
@@ -128,6 +128,8 @@ char *get_physical_reg_name(int reg_type, int size)
 }
 
 int call_id = 0;  // function call id
+size_t func_name_len;
+char *func_name;
 
 // Function to generate x64 assembly for a single IR instruction
 void gen_ir_instruction(IR *ir)
@@ -143,9 +145,10 @@ void gen_ir_instruction(IR *ir)
       }
       else
       {
-        output_file("    mov rax, [rbp-%d]", get_stack_offset(ir->mov.src_reg));
+        output_file("    mov rax, [rbp-%zu]",
+                    get_stack_offset(ir->mov.src_reg));
       }
-      output_file("    mov [rbp-%d], rax", get_stack_offset(ir->mov.dst_reg));
+      output_file("    mov [rbp-%zu], rax", get_stack_offset(ir->mov.dst_reg));
       break;
     }
     case IR_ADD:
@@ -165,9 +168,9 @@ void gen_ir_instruction(IR *ir)
     case IR_LT:
     case IR_LTE:
     {
-      output_file("    mov rax, [rbp-%d]",
+      output_file("    mov rax, [rbp-%zu]",
                   get_stack_offset(ir->bin_op.lhs_reg));
-      output_file("    mov rcx, [rbp-%d]",
+      output_file("    mov rcx, [rbp-%zu]",
                   get_stack_offset(ir->bin_op.rhs_reg));
 
       switch (ir->kind)
@@ -227,44 +230,57 @@ void gen_ir_instruction(IR *ir)
           error_exit_with_guard("Unhandled binary operation IR kind: %d",
                                 ir->kind);
       }
-      output_file("    mov [rbp-%d], rax",
+      output_file("    mov [rbp-%zu], rax",
                   get_stack_offset(ir->bin_op.dst_reg));
       break;
     }
     case IR_NEG:
     {
-      output_file("    mov rax, [rbp-%d]", get_stack_offset(ir->un_op.src_reg));
+      output_file("    mov rax, [rbp-%zu]",
+                  get_stack_offset(ir->un_op.src_reg));
       output_file("    neg rax");
-      output_file("    mov [rbp-%d], rax", get_stack_offset(ir->un_op.dst_reg));
+      output_file("    mov [rbp-%zu], rax",
+                  get_stack_offset(ir->un_op.dst_reg));
       break;
     }
     case IR_BIT_NOT:
     {
-      output_file("    mov rax, [rbp-%d]", get_stack_offset(ir->un_op.src_reg));
+      output_file("    mov rax, [rbp-%zu]",
+                  get_stack_offset(ir->un_op.src_reg));
       output_file("    not rax");
-      output_file("    mov [rbp-%d], rax", get_stack_offset(ir->un_op.dst_reg));
+      output_file("    mov [rbp-%zu], rax",
+                  get_stack_offset(ir->un_op.dst_reg));
       break;
     }
     case IR_NOT:
     {
-      output_file("    mov rax, [rbp-%d]", get_stack_offset(ir->un_op.src_reg));
+      output_file("    mov rax, [rbp-%zu]",
+                  get_stack_offset(ir->un_op.src_reg));
       output_file("    cmp rax, 0");
       output_file("    sete al");
       output_file("    movzx rax, al");
-      output_file("    mov [rbp-%d], rax", get_stack_offset(ir->un_op.dst_reg));
+      output_file("    mov [rbp-%zu], rax",
+                  get_stack_offset(ir->un_op.dst_reg));
       break;
     }
     case IR_RET:
     {
-      output_file("    mov rax, [rbp-%d]", get_stack_offset(ir->ret.src_reg));
+      output_file("    mov rax, [rbp-%zu]", get_stack_offset(ir->ret.src_reg));
       output_file("    leave");
       output_file("    ret");
       break;
     }
     case IR_FUNC_PROLOGUE:
-    case IR_FUNC_EPILOGUE:
       // These are handled in the main generator loop.
       break;
+    case IR_FUNC_EPILOGUE:
+    {
+      if (func_name_len == 4 && !strncmp(func_name, "main", 4))
+        output_file("    mov rax, 0");
+      output_file("    leave");
+      output_file("    ret");
+    }
+    break;
     case IR_CALL:
     {
       size_t num_args = vector_size(ir->call.args);
@@ -273,8 +289,8 @@ void gen_ir_instruction(IR *ir)
       // Load arguments 1-6 into registers
       for (size_t i = 0; i < (num_args < 6 ? num_args : 6); i++)
       {
-        int arg_vreg = *(int *)vector_peek_at(ir->call.args, i + 1);
-        output_file("    mov %s, [rbp-%d]", get_physical_reg_name(i, 8),
+        size_t arg_vreg = *(size_t *)vector_peek_at(ir->call.args, i + 1);
+        output_file("    mov %s, [rbp-%zu]", get_physical_reg_name(i, 8),
                     get_stack_offset(arg_vreg));
       }
 
@@ -293,8 +309,9 @@ void gen_ir_instruction(IR *ir)
       {
         for (size_t i = 0; i < stack_arg_count; i++)
         {
-          int arg_vreg = *(int *)vector_peek_at(ir->call.args, num_args - i);
-          output_file("    push QWORD PTR [rbp-%d]",
+          size_t arg_vreg =
+              *(size_t *)vector_peek_at(ir->call.args, num_args - i);
+          output_file("    push QWORD PTR [rbp-%zu]",
                       get_stack_offset(arg_vreg));
         }
       }
@@ -307,7 +324,7 @@ void gen_ir_instruction(IR *ir)
       output_file("    pop r12");
       call_id++;
       // Store return value
-      output_file("    mov [rbp-%d], rax", get_stack_offset(ir->call.dst_reg));
+      output_file("    mov [rbp-%zu], rax", get_stack_offset(ir->call.dst_reg));
       break;
     }
     case IR_JMP:
@@ -318,7 +335,7 @@ void gen_ir_instruction(IR *ir)
     case IR_JE:
     case IR_JNE:
     {
-      output_file("    mov rax, [rbp-%d]", get_stack_offset(ir->jmp.cond_reg));
+      output_file("    mov rax, [rbp-%zu]", get_stack_offset(ir->jmp.cond_reg));
       output_file("    cmp rax, 0");
       if (ir->kind == IR_JE)
         output_file("    je %s", ir->jmp.label);
@@ -334,7 +351,7 @@ void gen_ir_instruction(IR *ir)
     case IR_LOAD:
     {
       // Get address from memory register's stack slot
-      output_file("    mov rax, [rbp-%d]", get_stack_offset(ir->mem.mem_reg));
+      output_file("    mov rax, [rbp-%zu]", get_stack_offset(ir->mem.mem_reg));
       // Load value from that address
       // Note: The size of the value loaded is determined by the size of the
       // register we move it to. We use rax for 8-byte, eax for 4-byte etc. A
@@ -357,15 +374,15 @@ void gen_ir_instruction(IR *ir)
           error_exit_with_guard("Unsupported load size: %d", ir->mem.size);
       }
       // Store it in the destination register's stack slot
-      output_file("    mov [rbp-%d], rax", get_stack_offset(ir->mem.reg));
+      output_file("    mov [rbp-%zu], rax", get_stack_offset(ir->mem.reg));
       break;
     }
     case IR_STORE:
     {
       // Get address from memory register's stack slot
-      output_file("    mov rax, [rbp-%d]", get_stack_offset(ir->mem.mem_reg));
+      output_file("    mov rax, [rbp-%zu]", get_stack_offset(ir->mem.mem_reg));
       // Get value from source register's stack slot
-      output_file("    mov rcx, [rbp-%d]", get_stack_offset(ir->mem.reg));
+      output_file("    mov rcx, [rbp-%zu]", get_stack_offset(ir->mem.reg));
       // Store value at the address
       output_file("    mov [rax + %d], %s", ir->mem.offset,
                   get_physical_reg_name(rcx, ir->mem.size));
@@ -378,7 +395,7 @@ void gen_ir_instruction(IR *ir)
       else
         output_file("    lea rax, [rip+%.*s]", (int)ir->lea.var_name_len,
                     ir->lea.var_name);
-      output_file("    mov [rbp-%d], rax", get_stack_offset(ir->lea.dst_reg));
+      output_file("    mov [rbp-%zu], rax", get_stack_offset(ir->lea.dst_reg));
       break;
     }
     case IR_STORE_ARG:
@@ -392,7 +409,7 @@ void gen_ir_instruction(IR *ir)
         output_file("    mov rax, [rbp+%d]", offset);
         // Get the address of the local variable (where we store the arg) into
         // rcx
-        output_file("    mov rcx, [rbp-%d]",
+        output_file("    mov rcx, [rbp-%zu]",
                     get_stack_offset(ir->store_arg.dst_reg));
         // Store the argument value into the local variable's address
         output_file("    mov [rcx], %s",
@@ -402,7 +419,7 @@ void gen_ir_instruction(IR *ir)
       {
         // Arguments 1-6 are in registers.
         // Get the address of the local variable from its stack slot into rax
-        output_file("    mov rax, [rbp-%d]",
+        output_file("    mov rax, [rbp-%zu]",
                     get_stack_offset(ir->store_arg.dst_reg));
         // Store the argument register's value into that address
         output_file(
@@ -500,6 +517,8 @@ void generator(IRProgram *program, char *output_filename)
     {
       case FUNC_USER_DEFINED:
       {
+        func_name = func->user_defined.function_name;
+        func_name_len = func->user_defined.function_name_size;
         output_file("\n    .text\n");
         if (!func->user_defined.is_static)
           output_file("    .global %.*s",
@@ -533,39 +552,13 @@ void generator(IRProgram *program, char *output_filename)
             gen_ir_instruction(ir);
           }
         }
-
-        // Function epilogue (if not already handled by IR_RET)
-        // If the last instruction is not IR_RET, add a default return.
-        // This might be problematic if the function has multiple return points.
-        // A better approach would be to ensure IR_RET is always the last
-        // instruction of a basic block that ends a function.
-        IR_Blocks *last_block =
-            vector_peek_at(func->IR_Blocks, vector_size(func->IR_Blocks));
-        if (vector_size(last_block->IRs) > 0)
-        {
-          IR *last_ir =
-              vector_peek_at(last_block->IRs, vector_size(last_block->IRs));
-          if (last_ir->kind != IR_RET)
-          {
-            for (size_t i = 0; i < vector_size(program->global_vars); i++)
-            {
-              output_file("    leave");
-              output_file("    ret");
-            }
-          }
-          else
-          {
-            output_file("    leave");
-            output_file("    ret");
-          }
-          break;
-        }
-        case FUNC_ASM:
-        {
-          IR_Blocks *block = vector_pop(func->IR_Blocks);
-          gen_ir_instruction(vector_pop(block->IRs));
-          break;
-        }
+        break;
+      }
+      case FUNC_ASM:
+      {
+        IR_Blocks *block = vector_pop(func->IR_Blocks);
+        gen_ir_instruction(vector_pop(block->IRs));
+        break;
       }
     }
   }

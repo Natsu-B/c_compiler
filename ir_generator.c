@@ -27,14 +27,28 @@
 #define output_debug(fmt, ...)
 #endif
 
-// Virtual register ID
-static int reg_id;
-// Generates a new virtual register and returns its ID.
-static int *gen_reg()
+IR_Blocks *new_ir_blocks()
 {
-  int *new_reg = malloc(sizeof(int));
+  IR_Blocks *new = malloc(sizeof(IR_Blocks));
+  new->IRs = vector_new();
+  new->parent = vector_new();
+  new->lhs = NULL;
+  new->rhs = NULL;
+  new->reg_in = vector_new();
+  new->reg_use = vector_new();
+  new->reg_def = vector_new();
+  new->reg_out = vector_new();
+  return new;
+}
+
+// Virtual register ID
+static size_t reg_id;
+// Generates a new virtual register and returns its ID.
+static size_t *gen_reg(void)
+{
+  size_t *new_reg = malloc(sizeof(size_t));
   *new_reg = reg_id++;
-  output_debug("gen_reg: new reg_id = %d", *new_reg);
+  output_debug("gen_reg: new reg_id = %zu", *new_reg);
   return new_reg;
 }
 
@@ -51,19 +65,17 @@ static char *gen_label()
 }
 
 // Forward declarations
-static int *gen_addr(Vector *blocks, Vector *labels, IR_Blocks **irs,
-                     Node *node);
-static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
-                     Node *node);
+static size_t *gen_addr(Vector *blocks, Vector *labels, IR_Blocks **irs,
+                        Node *node);
+static size_t *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
+                        Node *node);
 
 IRFunc *call_builtin_func(Node *node)
 {
   IRFunc *func = calloc(1, sizeof(IRFunc));
   func->builtin_func = FUNC_ASM;
   func->IR_Blocks = vector_new();
-  IR_Blocks *irs = calloc(1, sizeof(IR_Blocks));
-  irs->IRs = vector_new();
-  irs->parent = vector_new();
+  IR_Blocks *irs = new_ir_blocks();
   vector_push(func->IR_Blocks, irs);
   gen_stmt(func->IR_Blocks, func->labels, &irs, node);
   if (vector_size(func->IR_Blocks) != 1 || vector_size(irs->IRs) != 1)
@@ -141,9 +153,7 @@ IRProgram *gen_ir(FuncBlock *parsed)
             fb->node->func.storage_class_specifier & 1 << 2;
         func->IR_Blocks = vector_new();
         func->labels = vector_new();
-        IR_Blocks *irs = calloc(1, sizeof(IR_Blocks));
-        irs->IRs = vector_new();
-        irs->parent = vector_new();
+        IR_Blocks *irs = new_ir_blocks();
         vector_push(func->IR_Blocks, irs);
 
         reg_id = 0;  // Reset register ID for each function
@@ -173,9 +183,8 @@ IRProgram *gen_ir(FuncBlock *parsed)
         GVarInitializer *init = calloc(1, sizeof(GVarInitializer));
         init->how2_init = init_zero;  // Default to zero-initialization
         init->zero_len = size_of(fb->node->variable.var->type);
-        IR_Blocks *irs = calloc(1, sizeof(IR_Blocks));
-        irs->parent = vector_new();
-        vector_push(irs->IRs = vector_new(), init);
+        IR_Blocks *irs = new_ir_blocks();
+        vector_push(irs->IRs, init);
         gvar->initializer = irs;
         vector_push(program->global_vars, gvar);
         break;
@@ -188,9 +197,7 @@ IRProgram *gen_ir(FuncBlock *parsed)
         gvar->var_size = size_of(fb->node->lhs->variable.var->type);
         gvar->is_static =
             fb->node->lhs->variable.var->storage_class_specifier & 1 << 2;
-        IR_Blocks *irs = calloc(1, sizeof(IR_Blocks));
-        irs->IRs = vector_new();
-        irs->parent = vector_new();
+        IR_Blocks *irs = new_ir_blocks();
         gvar->initializer = irs;
         gen_gvar_assign(irs, fb->node->lhs->type, fb->node->rhs,
                         size_of(fb->node->type));
@@ -211,9 +218,9 @@ IRProgram *gen_ir(FuncBlock *parsed)
   return program;
 }
 
-static int *gen_assign(Vector *blocks, Vector *labels, IR_Blocks **irs,
-                       Node *assigned, Node *node, size_t padding,
-                       size_t assign_size)
+static size_t *gen_assign(Vector *blocks, Vector *labels, IR_Blocks **irs,
+                          Node *assigned, Node *node, size_t padding,
+                          size_t assign_size)
 {
   if (node->kind == ND_INITIALIZER)
   {
@@ -232,8 +239,8 @@ static int *gen_assign(Vector *blocks, Vector *labels, IR_Blocks **irs,
       size_t size = size_of(node->type) - done_init > 8
                         ? 8
                         : size_of(node->type) - done_init;
-      int *zero_reg = gen_stmt(blocks, labels, irs, new_node_num(0));
-      int *lhs_addr_ptr = gen_addr(blocks, labels, irs, assigned);
+      size_t *zero_reg = gen_stmt(blocks, labels, irs, new_node_num(0));
+      size_t *lhs_addr_ptr = gen_addr(blocks, labels, irs, assigned);
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_STORE;
       ir->mem.reg = *zero_reg;
@@ -249,8 +256,8 @@ static int *gen_assign(Vector *blocks, Vector *labels, IR_Blocks **irs,
   {
     // For an assignment, evaluate the RHS, then STORE it at the address of
     // the LHS.
-    int *rhs_ptr = gen_stmt(blocks, labels, irs, node);
-    int *lhs_addr_ptr = gen_addr(blocks, labels, irs, assigned);
+    size_t *rhs_ptr = gen_stmt(blocks, labels, irs, node);
+    size_t *lhs_addr_ptr = gen_addr(blocks, labels, irs, assigned);
     IR *ir = calloc(1, sizeof(IR));
     ir->kind = IR_STORE;
     ir->mem.reg = *rhs_ptr;
@@ -263,8 +270,8 @@ static int *gen_assign(Vector *blocks, Vector *labels, IR_Blocks **irs,
   }
 }
 
-static int *gen_addr(Vector *blocks, Vector *labels, IR_Blocks **irs,
-                     Node *node)
+static size_t *gen_addr(Vector *blocks, Vector *labels, IR_Blocks **irs,
+                        Node *node)
 {
   switch (node->kind)
   {
@@ -284,7 +291,7 @@ static int *gen_addr(Vector *blocks, Vector *labels, IR_Blocks **irs,
       }
       else
         ir->lea.var_offset = node->variable.var->offset;
-      int *dst_reg_ptr = gen_reg();
+      size_t *dst_reg_ptr = gen_reg();
       ir->lea.dst_reg = *dst_reg_ptr;
       output_debug("gen_addr: LEA var name = %.*s", (int)ir->lea.var_name_len,
                    ir->lea.var_name);
@@ -300,17 +307,17 @@ static int *gen_addr(Vector *blocks, Vector *labels, IR_Blocks **irs,
     case ND_DOT:
     case ND_ARROW:
     {
-      int *lhs_addr = node->kind == ND_DOT
-                          ? gen_addr(blocks, labels, irs, node->lhs)
-                          : gen_stmt(blocks, labels, irs, node->lhs);
-      int *offset_val =
+      size_t *lhs_addr = node->kind == ND_DOT
+                             ? gen_addr(blocks, labels, irs, node->lhs)
+                             : gen_stmt(blocks, labels, irs, node->lhs);
+      size_t *offset_val =
           gen_stmt(blocks, labels, irs, new_node_num(node->child_offset));
 
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_ADD;
       ir->bin_op.lhs_reg = *lhs_addr;
       ir->bin_op.rhs_reg = *offset_val;
-      int *dst_reg = gen_reg();
+      size_t *dst_reg = gen_reg();
       ir->bin_op.dst_reg = *dst_reg;
       vector_push((*irs)->IRs, ir);
 
@@ -320,8 +327,8 @@ static int *gen_addr(Vector *blocks, Vector *labels, IR_Blocks **irs,
   }
 }
 
-static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
-                     Node *node)
+static size_t *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
+                        Node *node)
 {
   if (!node || node->kind == ND_NOP)
     return NULL;
@@ -334,7 +341,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->kind = IR_MOV;
       ir->mov.is_imm = true;
       ir->mov.imm_val = node->num_val;
-      int *dst_reg_ptr = gen_reg();
+      size_t *dst_reg_ptr = gen_reg();
       ir->mov.dst_reg = *dst_reg_ptr;
       vector_push((*irs)->IRs, ir);
       return dst_reg_ptr;
@@ -349,12 +356,12 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
         return gen_addr(blocks, labels, irs, node);
       }
       // For a variable, get its address and then generate a LOAD instruction.
-      int *addr_reg_ptr = gen_addr(blocks, labels, irs, node);
+      size_t *addr_reg_ptr = gen_addr(blocks, labels, irs, node);
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_LOAD;
       ir->mem.mem_reg = *addr_reg_ptr;
       ir->mem.offset = 0;
-      int *reg_ptr = gen_reg();
+      size_t *reg_ptr = gen_reg();
       ir->mem.reg = *reg_ptr;
       ir->mem.size = size_of(node->type);
       vector_push((*irs)->IRs, ir);
@@ -372,7 +379,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       if (!node->literal_name)
         unreachable();
       ir->lea.var_name_len = strlen(node->literal_name);
-      int *dst_reg_ptr = gen_reg();
+      size_t *dst_reg_ptr = gen_reg();
       ir->lea.dst_reg = *dst_reg_ptr;
       vector_push((*irs)->IRs, ir);
       return dst_reg_ptr;
@@ -386,14 +393,12 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     {
       // For a return statement, evaluate the return value and generate a RET
       // instruction.
-      int *src_ptr = gen_stmt(blocks, labels, irs, node->lhs);
+      size_t *src_ptr = gen_stmt(blocks, labels, irs, node->lhs);
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_RET;
       ir->ret.src_reg = *src_ptr;
       vector_push((*irs)->IRs, ir);
-      *irs = calloc(1, sizeof(IR_Blocks));
-      (*irs)->IRs = vector_new();
-      (*irs)->parent = vector_new();
+      *irs = new_ir_blocks();
       vector_push(blocks, *irs);
       return NULL;  // A return statement does not produce a value.
     }
@@ -404,7 +409,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       char *end_label = gen_label();
 
       // Evaluate the condition.
-      int *cond_reg_ptr =
+      size_t *cond_reg_ptr =
           gen_stmt(blocks, labels, irs, node->control.condition);
       // If the condition is false (0), jump to else_label.
       IR *ir = calloc(1, sizeof(IR));
@@ -412,9 +417,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->jmp.label = else_label;
       ir->jmp.cond_reg = *cond_reg_ptr;
       vector_push((*irs)->IRs, ir);
-      *irs = calloc(1, sizeof(IR_Blocks));
-      (*irs)->IRs = vector_new();
-      (*irs)->parent = vector_new();
+      *irs = new_ir_blocks();
       vector_push(blocks, *irs);
 
       // Generate code for the 'true' block.
@@ -424,17 +427,13 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       jmp_ir->kind = IR_JMP;
       jmp_ir->jmp.label = end_label;
       vector_push((*irs)->IRs, jmp_ir);
-      *irs = calloc(1, sizeof(IR_Blocks));
-      (*irs)->IRs = vector_new();
-      (*irs)->parent = vector_new();
+      *irs = new_ir_blocks();
       vector_push(blocks, *irs);
 
       // Place the 'else' label.
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       IR *else_label_ir = calloc(1, sizeof(IR));
       else_label_ir->kind = IR_LABEL;
@@ -452,9 +451,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       // Place the 'end' label.
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       IR *end_label_ir = calloc(1, sizeof(IR));
       end_label_ir->kind = IR_LABEL;
@@ -478,9 +475,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       // Place the loop start label.
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       IR *begin_label_ir = calloc(1, sizeof(IR));
       begin_label_ir->kind = IR_LABEL;
@@ -490,7 +485,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       vector_push(labels, *irs);
 
       // Evaluate the condition.
-      int *cond_reg_ptr =
+      size_t *cond_reg_ptr =
           gen_stmt(blocks, labels, irs, node->control.condition);
       // If the condition is false (0), jump to end_label.
       IR *ir = calloc(1, sizeof(IR));
@@ -498,9 +493,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->jmp.label = end_label;
       ir->jmp.cond_reg = *cond_reg_ptr;
       vector_push((*irs)->IRs, ir);
-      *irs = calloc(1, sizeof(IR_Blocks));
-      (*irs)->IRs = vector_new();
-      (*irs)->parent = vector_new();
+      *irs = new_ir_blocks();
       vector_push(blocks, *irs);
 
       // Generate code for the loop body.
@@ -510,17 +503,13 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       jmp_ir->kind = IR_JMP;
       jmp_ir->jmp.label = begin_label;
       vector_push((*irs)->IRs, jmp_ir);
-      *irs = calloc(1, sizeof(IR_Blocks));
-      (*irs)->IRs = vector_new();
-      (*irs)->parent = vector_new();
+      *irs = new_ir_blocks();
       vector_push(blocks, *irs);
 
       // Place the loop end label.
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       IR *end_label_ir = calloc(1, sizeof(IR));
       end_label_ir->kind = IR_LABEL;
@@ -537,9 +526,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
                (int)node->control.label->len, node->control.label->name);
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       IR *label = calloc(1, sizeof(IR));
       label->kind = IR_LABEL;
@@ -548,24 +535,20 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       assert(vector_size((*irs)->IRs) == 1);
       vector_push(labels, *irs);
       gen_stmt(blocks, labels, irs, node->control.true_code);
-      int *cond_ptr = gen_stmt(blocks, labels, irs, node->control.condition);
+      size_t *cond_ptr = gen_stmt(blocks, labels, irs, node->control.condition);
       IR *condition = calloc(1, sizeof(IR));
       condition->kind = IR_JNE;
       condition->jmp.label = label_name;
       condition->jmp.cond_reg = *cond_ptr;
       vector_push((*irs)->IRs, condition);
-      *irs = calloc(1, sizeof(IR_Blocks));
-      (*irs)->IRs = vector_new();
-      (*irs)->parent = vector_new();
+      *irs = new_ir_blocks();
       vector_push(blocks, *irs);
       char *end_name = malloc(8 + node->control.label->len);
       snprintf(end_name, 8 + node->control.label->len, ".Lenddo%.*s",
                (int)node->control.label->len, node->control.label->name);
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       IR *end_label = calloc(1, sizeof(IR));
       end_label->kind = IR_LABEL;
@@ -593,9 +576,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       // Place the loop start label.
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       IR *begin_label_ir = calloc(1, sizeof(IR));
       begin_label_ir->kind = IR_LABEL;
@@ -607,16 +588,14 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       // If there is a condition, evaluate it and exit the loop if false.
       if (node->control.condition)
       {
-        int *cond_reg_ptr =
+        size_t *cond_reg_ptr =
             gen_stmt(blocks, labels, irs, node->control.condition);
         IR *ir = calloc(1, sizeof(IR));
         ir->kind = IR_JE;
         ir->jmp.label = end_label;
         ir->jmp.cond_reg = *cond_reg_ptr;
         vector_push((*irs)->IRs, ir);
-        *irs = calloc(1, sizeof(IR_Blocks));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        *irs = new_ir_blocks();
         vector_push(blocks, *irs);
       }
 
@@ -631,17 +610,13 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       jmp_ir->kind = IR_JMP;
       jmp_ir->jmp.label = begin_label;
       vector_push((*irs)->IRs, jmp_ir);
-      *irs = calloc(1, sizeof(IR_Blocks));
-      (*irs)->IRs = vector_new();
-      (*irs)->parent = vector_new();
+      *irs = new_ir_blocks();
       vector_push(blocks, *irs);
 
       // Place the loop end label.
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       IR *end_label_ir = calloc(1, sizeof(IR));
       end_label_ir->kind = IR_LABEL;
@@ -655,32 +630,34 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     {
       char *false_label = gen_label();
       char *end_label = gen_label();
-      int *condition = gen_stmt(blocks, labels, irs, node->lhs);
+      size_t *dst_reg_ptr = gen_reg();
+
+      size_t *condition = gen_stmt(blocks, labels, irs, node->lhs);
       IR *jump = calloc(1, sizeof(IR));
       jump->kind = IR_JE;
       jump->jmp.label = false_label;
       jump->jmp.cond_reg = *condition;
       vector_push((*irs)->IRs, jump);
-      *irs = calloc(1, sizeof(IR_Blocks));
-      (*irs)->IRs = vector_new();
-      (*irs)->parent = vector_new();
+      *irs = new_ir_blocks();
       vector_push(blocks, *irs);
 
-      int *true_reg =
+      size_t *true_reg =
           gen_stmt(blocks, labels, irs, node->control.ternary_child);
+      IR *mov_true = calloc(1, sizeof(IR));
+      mov_true->kind = IR_MOV;
+      mov_true->mov.is_imm = false;
+      mov_true->mov.src_reg = *true_reg;
+      mov_true->mov.dst_reg = *dst_reg_ptr;
+      vector_push((*irs)->IRs, mov_true);
       IR *jump_end = calloc(1, sizeof(IR));
       jump_end->kind = IR_JMP;
       jump_end->jmp.label = end_label;
       vector_push((*irs)->IRs, jump_end);
-      *irs = calloc(1, sizeof(IR_Blocks));
-      (*irs)->IRs = vector_new();
-      (*irs)->parent = vector_new();
+      *irs = new_ir_blocks();
       vector_push(blocks, *irs);
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       IR *label_false = calloc(1, sizeof(IR));
       label_false->kind = IR_LABEL;
@@ -688,17 +665,16 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       vector_push((*irs)->IRs, label_false);
       assert(vector_size((*irs)->IRs) == 1);
       vector_push(labels, *irs);
-      int *false_reg = gen_stmt(blocks, labels, irs, node->rhs);
-      IR *merge = calloc(1, sizeof(IR));
-      merge->kind = IR_MOV;
-      merge->mov.src_reg = *false_reg;
-      merge->mov.dst_reg = *true_reg;
-      vector_push((*irs)->IRs, merge);
+      size_t *false_reg = gen_stmt(blocks, labels, irs, node->rhs);
+      IR *mov_false = calloc(1, sizeof(IR));
+      mov_false->kind = IR_MOV;
+      mov_false->mov.is_imm = false;
+      mov_false->mov.src_reg = *false_reg;
+      mov_false->mov.dst_reg = *dst_reg_ptr;
+      vector_push((*irs)->IRs, mov_false);
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       IR *label_end = calloc(1, sizeof(IR));
       label_end->kind = IR_LABEL;
@@ -706,7 +682,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       vector_push((*irs)->IRs, label_end);
       assert(vector_size((*irs)->IRs) == 1);
       vector_push(labels, *irs);
-      return true_reg;
+      return dst_reg_ptr;
     }
     case ND_CASE:
     {
@@ -716,15 +692,11 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
                node->jump.case_num);
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       IR *label = calloc(1, sizeof(IR));
       label->kind = IR_LABEL;
@@ -736,7 +708,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     }
     case ND_SWITCH:
     {
-      int *cond_ptr = gen_stmt(blocks, labels, irs, node->control.condition);
+      size_t *cond_ptr = gen_stmt(blocks, labels, irs, node->control.condition);
       GTLabel *switch_label = node->control.label;
       IR *default_jmp = NULL;
       for (size_t i = 1; i <= vector_size(node->control.case_list); i++)
@@ -750,10 +722,11 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
           IR *cmp = calloc(1, sizeof(IR));
           cmp->kind = IR_EQ;
           cmp->bin_op.lhs_reg = *cond_ptr;
-          cmp->bin_op.rhs_reg =
-              *gen_stmt(blocks, labels, irs,
-                        new_node_num(case_child->jump.constant_expression));
-          int *cmp_result = gen_reg();
+          size_t *rhs_reg =
+              gen_stmt(blocks, labels, irs,
+                       new_node_num(case_child->jump.constant_expression));
+          cmp->bin_op.rhs_reg = *rhs_reg;
+          size_t *cmp_result = gen_reg();
           cmp->bin_op.dst_reg = *cmp_result;
           vector_push((*irs)->IRs, cmp);
           IR *jump = calloc(1, sizeof(IR));
@@ -761,9 +734,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
           jump->jmp.label = label_name;
           jump->jmp.cond_reg = *cmp_result;
           vector_push((*irs)->IRs, jump);
-          *irs = calloc(1, sizeof(IR_Blocks));
-          (*irs)->IRs = vector_new();
-          (*irs)->parent = vector_new();
+          *irs = new_ir_blocks();
           vector_push(blocks, *irs);
         }
         else
@@ -777,9 +748,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       if (default_jmp)
       {
         vector_push((*irs)->IRs, default_jmp);
-        *irs = calloc(1, sizeof(IR_Blocks));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        *irs = new_ir_blocks();
         vector_push(blocks, *irs);
       }
       char *label_name = malloc(12 + switch_label->len);
@@ -789,17 +758,13 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       jump->kind = IR_JMP;
       jump->jmp.label = label_name;
       vector_push((*irs)->IRs, jump);
-      *irs = calloc(1, sizeof(IR_Blocks));
-      (*irs)->IRs = vector_new();
-      (*irs)->parent = vector_new();
+      *irs = new_ir_blocks();
       vector_push(blocks, *irs);
 
       gen_stmt(blocks, labels, irs, node->control.true_code);
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       IR *end = calloc(1, sizeof(IR));
       end->kind = IR_LABEL;
@@ -816,7 +781,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       for (size_t i = 0; i < vector_size(node->func.expr); i++)
       {
         Node *arg = vector_peek_at(node->func.expr, i + 1);
-        int *reg_val = gen_stmt(blocks, labels, irs, arg);
+        size_t *reg_val = gen_stmt(blocks, labels, irs, arg);
         vector_push(args, reg_val);
       }
 
@@ -826,7 +791,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->call.func_name = node->token->str;
       ir->call.func_name_size = node->token->len;
       ir->call.args = args;
-      int *dst_reg_ptr = gen_reg();  // Register to receive the return value.
+      size_t *dst_reg_ptr = gen_reg();  // Register to receive the return value.
       ir->call.dst_reg = *dst_reg_ptr;
       vector_push((*irs)->IRs, ir);
       return dst_reg_ptr;
@@ -859,7 +824,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       for (size_t i = 0; i < vector_size(node->func.expr); i++)
       {
         Node *arg_node = vector_peek_at(node->func.expr, i + 1);
-        int *addr_reg = gen_addr(blocks, labels, irs, arg_node);
+        size_t *addr_reg = gen_addr(blocks, labels, irs, arg_node);
         IR *ir = calloc(1, sizeof(IR));
         ir->kind = IR_STORE_ARG;
         ir->store_arg.dst_reg = *addr_reg;
@@ -870,13 +835,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
 
       // Generate code for the function body.
       for (NDBlock *b = node->func.stmt; b; b = b->next)
-      {
         gen_stmt(blocks, labels, irs, b->node);
-      }
-
-      if (node->token->len == 4 && !strncmp(node->token->str, "main", 4))
-        gen_stmt(blocks, labels, irs,
-                 new_node(ND_RETURN, new_node_num(0), NULL, NULL));
 
       // Generate the function epilogue.
       IR *epilogue_ir = calloc(1, sizeof(IR));
@@ -888,13 +847,13 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     {
       // Dereference `*p`.
       // Evaluate the address of p.
-      int *addr_reg_ptr = gen_stmt(blocks, labels, irs, node->lhs);
+      size_t *addr_reg_ptr = gen_stmt(blocks, labels, irs, node->lhs);
       // Load the value from that address.
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_LOAD;
       ir->mem.mem_reg = *addr_reg_ptr;
       ir->mem.offset = 0;
-      int *reg_ptr = gen_reg();
+      size_t *reg_ptr = gen_reg();
       ir->mem.reg = *reg_ptr;
       ir->mem.size = size_of(node->type);
       vector_push((*irs)->IRs, ir);
@@ -909,7 +868,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     case ND_NOT:
     case ND_UNARY_MINUS:
     {
-      int *src_reg_ptr = gen_stmt(blocks, labels, irs, node->lhs);
+      size_t *src_reg_ptr = gen_stmt(blocks, labels, irs, node->lhs);
       IR *ir = calloc(1, sizeof(IR));
       switch (node->kind)
       {
@@ -919,7 +878,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
         default: unreachable(); break;
       }
       ir->un_op.src_reg = *src_reg_ptr;
-      int *dst_reg_ptr = gen_reg();
+      size_t *dst_reg_ptr = gen_reg();
       ir->un_op.dst_reg = *dst_reg_ptr;
       vector_push((*irs)->IRs, ir);
       return dst_reg_ptr;
@@ -932,11 +891,13 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     case ND_EVAL:
     {
       // Convert int to bool
+      size_t *lhs_reg = gen_stmt(blocks, labels, irs, node->lhs);
+      size_t *rhs_reg = gen_stmt(blocks, labels, irs, new_node_num(0));
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_NEQ;
-      ir->bin_op.lhs_reg = *gen_stmt(blocks, labels, irs, node->lhs);
-      ir->bin_op.rhs_reg = *gen_stmt(blocks, labels, irs, new_node_num(0));
-      int *dst_reg_ptr = gen_reg();
+      ir->bin_op.lhs_reg = *lhs_reg;
+      ir->bin_op.rhs_reg = *rhs_reg;
+      size_t *dst_reg_ptr = gen_reg();
       ir->bin_op.dst_reg = *dst_reg_ptr;
       vector_push((*irs)->IRs, ir);
       return dst_reg_ptr;
@@ -947,9 +908,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->kind = IR_JMP;
       ir->jmp.label = node->jump.label_name;
       vector_push((*irs)->IRs, ir);
-      *irs = calloc(1, sizeof(IR_Blocks));
-      (*irs)->IRs = vector_new();
-      (*irs)->parent = vector_new();
+      *irs = new_ir_blocks();
       vector_push(blocks, *irs);
       return NULL;
     }
@@ -957,9 +916,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     {
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_LABEL;
@@ -974,8 +931,8 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     case ND_PREINCREMENT:
     case ND_POSTINCREMENT:
     {
-      int *pre_reg = gen_stmt(blocks, labels, irs, node->lhs);
-      int *post_reg = gen_reg();
+      size_t *pre_reg = gen_stmt(blocks, labels, irs, node->lhs);
+      size_t *post_reg = gen_reg();
       bool is_inc =
           node->kind == ND_PREINCREMENT || node->kind == ND_POSTINCREMENT;
       IR *ir = calloc(1, sizeof(IR));
@@ -996,14 +953,15 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
         else
           ir->kind = IR_SUB;
         ir->bin_op.lhs_reg = *pre_reg;
-        ir->bin_op.rhs_reg =
-            *gen_stmt(blocks, labels, irs, new_node_num(node->num_val));
+        size_t *rhs_reg =
+            gen_stmt(blocks, labels, irs, new_node_num(node->num_val));
+        ir->bin_op.rhs_reg = *rhs_reg;
         ir->bin_op.lhs_size = size_of(node->lhs->type);
         ir->bin_op.rhs_size = 8;
         ir->bin_op.dst_reg = *post_reg;
       }
       vector_push((*irs)->IRs, ir);
-      int *lhs_addr_ptr = gen_addr(blocks, labels, irs, node->lhs);
+      size_t *lhs_addr_ptr = gen_addr(blocks, labels, irs, node->lhs);
       IR *assign = calloc(1, sizeof(IR));
       assign->kind = IR_STORE;
       assign->mem.reg = *post_reg;
@@ -1013,7 +971,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       vector_push((*irs)->IRs, assign);
 
       if (node->kind == ND_PREINCREMENT || node->kind == ND_PREDECREMENT)
-        return post_reg;  // pre operators should return post value
+        return post_reg;
       else
         return pre_reg;
     }
@@ -1033,8 +991,8 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     case ND_RIGHT_SHIFT:
     {
       // Binary operations.
-      int *lhs_ptr = gen_stmt(blocks, labels, irs, node->lhs);
-      int *rhs_ptr = gen_stmt(blocks, labels, irs, node->rhs);
+      size_t *lhs_ptr = gen_stmt(blocks, labels, irs, node->lhs);
+      size_t *rhs_ptr = gen_stmt(blocks, labels, irs, node->rhs);
       IR *ir = calloc(1, sizeof(IR));
       switch (node->kind)
       {
@@ -1064,7 +1022,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->bin_op.rhs_reg = *rhs_ptr;
       ir->bin_op.lhs_size = size_of(node->lhs->type);
       ir->bin_op.rhs_size = size_of(node->rhs->type);
-      int *dst_reg_ptr = gen_reg();
+      size_t *dst_reg_ptr = gen_reg();
       ir->bin_op.dst_reg = *dst_reg_ptr;
       vector_push((*irs)->IRs, ir);
       return dst_reg_ptr;
@@ -1073,17 +1031,15 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     {
       char *false_label = gen_label();
       char *end_label = gen_label();
-      int *dst_reg_ptr = gen_reg();
+      size_t *dst_reg_ptr = gen_reg();
 
-      int *lhs_ptr = gen_stmt(blocks, labels, irs, node->lhs);
+      size_t *lhs_ptr = gen_stmt(blocks, labels, irs, node->lhs);
       IR *ir1 = calloc(1, sizeof(IR));
       ir1->kind = IR_JE;
       ir1->jmp.label = false_label;
       ir1->jmp.cond_reg = *lhs_ptr;
       vector_push((*irs)->IRs, ir1);
-      *irs = calloc(1, sizeof(IR_Blocks));
-      (*irs)->IRs = vector_new();
-      (*irs)->parent = vector_new();
+      *irs = new_ir_blocks();
       vector_push(blocks, *irs);
 
       IR *ir2 = calloc(1, sizeof(IR));
@@ -1097,16 +1053,12 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir3->kind = IR_JMP;
       ir3->jmp.label = end_label;
       vector_push((*irs)->IRs, ir3);
-      *irs = calloc(1, sizeof(IR_Blocks));
-      (*irs)->IRs = vector_new();
-      (*irs)->parent = vector_new();
+      *irs = new_ir_blocks();
       vector_push(blocks, *irs);
 
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       IR *ir4 = calloc(1, sizeof(IR));
       ir4->kind = IR_LABEL;
@@ -1115,7 +1067,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       assert(vector_size((*irs)->IRs) == 1);
       vector_push(labels, *irs);
 
-      int *rhs_ptr = gen_stmt(blocks, labels, irs, node->rhs);
+      size_t *rhs_ptr = gen_stmt(blocks, labels, irs, node->rhs);
       IR *ir5 = calloc(1, sizeof(IR));
       ir5->kind = IR_MOV;
       ir5->mov.is_imm = false;
@@ -1125,9 +1077,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
 
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       IR *ir6 = calloc(1, sizeof(IR));
       ir6->kind = IR_LABEL;
@@ -1142,28 +1092,24 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     {
       char *false_label = gen_label();
       char *end_label = gen_label();
-      int *dst_reg_ptr = gen_reg();
+      size_t *dst_reg_ptr = gen_reg();
 
-      int *lhs_ptr = gen_stmt(blocks, labels, irs, node->lhs);
+      size_t *lhs_ptr = gen_stmt(blocks, labels, irs, node->lhs);
       IR *ir1 = calloc(1, sizeof(IR));
       ir1->kind = IR_JE;
       ir1->jmp.label = false_label;
       ir1->jmp.cond_reg = *lhs_ptr;
       vector_push((*irs)->IRs, ir1);
-      *irs = calloc(1, sizeof(IR_Blocks));
-      (*irs)->IRs = vector_new();
-      (*irs)->parent = vector_new();
+      *irs = new_ir_blocks();
       vector_push(blocks, *irs);
 
-      int *rhs_ptr = gen_stmt(blocks, labels, irs, node->rhs);
+      size_t *rhs_ptr = gen_stmt(blocks, labels, irs, node->rhs);
       IR *ir2 = calloc(1, sizeof(IR));
       ir2->kind = IR_JE;
       ir2->jmp.label = false_label;
       ir2->jmp.cond_reg = *rhs_ptr;
       vector_push((*irs)->IRs, ir2);
-      *irs = calloc(1, sizeof(IR_Blocks));
-      (*irs)->IRs = vector_new();
-      (*irs)->parent = vector_new();
+      *irs = new_ir_blocks();
       vector_push(blocks, *irs);
 
       IR *ir3 = calloc(1, sizeof(IR));
@@ -1177,16 +1123,12 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir4->kind = IR_JMP;
       ir4->jmp.label = end_label;
       vector_push((*irs)->IRs, ir4);
-      *irs = calloc(1, sizeof(IR_Blocks));
-      (*irs)->IRs = vector_new();
-      (*irs)->parent = vector_new();
+      *irs = new_ir_blocks();
       vector_push(blocks, *irs);
 
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       IR *ir5 = calloc(1, sizeof(IR));
       ir5->kind = IR_LABEL;
@@ -1204,9 +1146,7 @@ static int *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
 
       if (vector_size((*irs)->IRs))
       {
-        vector_push(blocks, *irs = calloc(1, sizeof(IR_Blocks)));
-        (*irs)->IRs = vector_new();
-        (*irs)->parent = vector_new();
+        vector_push(blocks, *irs = new_ir_blocks());
       }
       IR *ir7 = calloc(1, sizeof(IR));
       ir7->kind = IR_LABEL;

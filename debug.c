@@ -551,12 +551,12 @@ static void fprint_ir(FILE *fp, IR *ir, bool mermaid_escape)
   {
     case IR_CALL:
     {
-      fprintf(fp, "CALL r%d, %.*s, (", ir->call.dst_reg,
+      fprintf(fp, "CALL r%zu, %.*s, (", ir->call.dst_reg,
               (int)ir->call.func_name_size, ir->call.func_name);
       for (size_t k = 0; k < vector_size(ir->call.args); k++)
       {
-        int *reg = vector_peek_at(ir->call.args, k + 1);
-        fprintf(fp, "r%d%s", *reg,
+        size_t *reg = vector_peek_at(ir->call.args, k + 1);
+        fprintf(fp, "r%zu%s", *reg,
                 (k == vector_size(ir->call.args) - 1) ? "" : ", ");
       }
       fprintf(fp, ")");
@@ -564,115 +564,131 @@ static void fprint_ir(FILE *fp, IR *ir, bool mermaid_escape)
     }
     case IR_FUNC_PROLOGUE: fprintf(fp, "PROLOGUE"); break;
     case IR_FUNC_EPILOGUE: fprintf(fp, "EPILOGUE"); break;
-    case IR_RET: fprintf(fp, "RET r%d", ir->ret.src_reg); break;
+    case IR_RET: fprintf(fp, "RET r%zu", ir->ret.src_reg); break;
     case IR_MOV:
       if (ir->mov.is_imm)
-        fprintf(fp, "MOV r%d, %lld", ir->mov.dst_reg, ir->mov.imm_val);
+        fprintf(fp, "MOV r%zu, %lld", ir->mov.dst_reg, ir->mov.imm_val);
       else
-        fprintf(fp, "MOV r%d, r%d", ir->mov.dst_reg, ir->mov.src_reg);
+        fprintf(fp, "MOV r%zu, r%zu", ir->mov.dst_reg, ir->mov.src_reg);
       break;
     case IR_ADD:
-      fprintf(fp, "ADD %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
-              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      fprintf(fp, "ADD %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
+              ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
       break;
     case IR_SUB:
-      fprintf(fp, "SUB %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
-              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      fprintf(fp, "SUB %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
+              ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
       break;
     case IR_MUL:
-      fprintf(fp, "MUL %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
-              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      fprintf(fp, "MUL %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
+              ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
       break;
     case IR_OP_DIV:
-      fprintf(fp, "DIV %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
-              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      fprintf(fp, "DIV %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
+              ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
       break;
     case IR_OP_IDIV:
-      fprintf(fp, "IDIV %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
-              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      fprintf(fp, "IDIV %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
+              ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
       break;
     case IR_EQ:
-      fprintf(fp, "EQ %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
-              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      fprintf(fp, "EQ %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
+              ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
       break;
     case IR_NEQ:
-      fprintf(fp, "NEQ %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
-              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      fprintf(fp, "NEQ %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
+              ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
       break;
     case IR_LT:
-      fprintf(fp, "LT %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
-              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      fprintf(fp, "LT %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
+              ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
       break;
     case IR_LTE:
-      fprintf(fp, "LTE %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
-              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      fprintf(fp, "LTE %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
+              ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
       break;
     case IR_OR:
-      fprintf(fp, "OR %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
-              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      fprintf(fp, "OR %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
+              ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
       break;
     case IR_XOR:
-      fprintf(fp, "XOR %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
-              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      fprintf(fp, "XOR %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
+              ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
       break;
     case IR_AND:
-      fprintf(fp, "AND %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
-              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      fprintf(fp, "AND %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
+              ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
       break;
     case IR_SHL:
-      fprintf(fp, "SHL %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
-              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      fprintf(fp, "SHL %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
+              ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
       break;
     case IR_SHR:
-      fprintf(fp, "SHR %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
-              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      fprintf(fp, "SHR %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
+              ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
       break;
     case IR_SAL:
-      fprintf(fp, "SAL %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
-              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      fprintf(fp, "SAL %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
+              ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
       break;
     case IR_SAR:
-      fprintf(fp, "SAR %s r%d, r%d, r%d", get_size_prefix(ir->bin_op.lhs_size),
-              ir->bin_op.dst_reg, ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
+      fprintf(fp, "SAR %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_size), ir->bin_op.dst_reg,
+              ir->bin_op.lhs_reg, ir->bin_op.rhs_reg);
       break;
     case IR_BIT_NOT:
-      fprintf(fp, "BNOT r%d, r%d", ir->un_op.dst_reg, ir->un_op.src_reg);
+      fprintf(fp, "BNOT r%zu, r%zu", ir->un_op.dst_reg, ir->un_op.src_reg);
       break;
     case IR_JMP: fprintf(fp, "JMP %s", ir->jmp.label); break;
     case IR_JNE:
-      fprintf(fp, "JNE %s, r%d", ir->jmp.label, ir->jmp.cond_reg);
+      fprintf(fp, "JNE %s, r%zu", ir->jmp.label, ir->jmp.cond_reg);
       break;
     case IR_JE:
-      fprintf(fp, "JE %s, r%d", ir->jmp.label, ir->jmp.cond_reg);
+      fprintf(fp, "JE %s, r%zu", ir->jmp.label, ir->jmp.cond_reg);
       break;
     case IR_LOAD:
-      fprintf(fp, "LOAD %s r%d, [r%d + %d]", get_size_prefix(ir->mem.size),
+      fprintf(fp, "LOAD %s r%zu, [r%zu + %d]", get_size_prefix(ir->mem.size),
               ir->mem.reg, ir->mem.mem_reg, ir->mem.offset);
       break;
     case IR_STORE:
-      fprintf(fp, "STORE %s [r%d + %d], r%d", get_size_prefix(ir->mem.size),
+      fprintf(fp, "STORE %s [r%zu + %d], r%zu", get_size_prefix(ir->mem.size),
               ir->mem.mem_reg, ir->mem.offset, ir->mem.reg);
       break;
     case IR_STORE_ARG:
-      fprintf(fp, "STORE_ARG %s r%d, %d", get_size_prefix(ir->store_arg.size),
+      fprintf(fp, "STORE_ARG %s r%zu, %d", get_size_prefix(ir->store_arg.size),
               ir->store_arg.dst_reg, ir->store_arg.arg_index);
       break;
     case IR_LEA:
       if (ir->lea.is_local)
-        fprintf(fp, "LEA r%d, LOCAL %zu", ir->lea.dst_reg, ir->lea.var_offset);
+        fprintf(fp, "LEA r%zu, LOCAL %zu", ir->lea.dst_reg, ir->lea.var_offset);
       else if (ir->lea.is_static)
-        fprintf(fp, "LEA r%d, STATIC %.*s", ir->lea.dst_reg,
+        fprintf(fp, "LEA r%zu, STATIC %.*s", ir->lea.dst_reg,
                 (int)ir->lea.var_name_len, ir->lea.var_name);
       else
-        fprintf(fp, "LEA r%d, GLOBAL %.*s", ir->lea.dst_reg,
+        fprintf(fp, "LEA r%zu, GLOBAL %.*s", ir->lea.dst_reg,
                 (int)ir->lea.var_name_len, ir->lea.var_name);
       break;
     case IR_LABEL: fprintf(fp, "%s:", ir->label.name); break;
     case IR_NEG:
-      fprintf(fp, "NEG r%d, r%d", ir->un_op.dst_reg, ir->un_op.src_reg);
+      fprintf(fp, "NEG r%zu, r%zu", ir->un_op.dst_reg, ir->un_op.src_reg);
       break;
     case IR_NOT:
-      fprintf(fp, "NOT r%d, r%d", ir->un_op.dst_reg, ir->un_op.src_reg);
+      fprintf(fp, "NOT r%zu, r%zu", ir->un_op.dst_reg, ir->un_op.src_reg);
       break;
     case IR_BUILTIN_ASM:
       if (mermaid_escape)
@@ -807,6 +823,29 @@ void dump_cfg(IRProgram *program, FILE *fp)
         fprint_ir(fp, ir, true);
         fprintf(fp, "<br/>");
       }
+
+      // print live-in, live-out, def, use
+      fprintf(fp, "<hr/>");
+      fprintf(fp, "<b>reg_in:</b> ");
+      for (size_t k = 1; k <= vector_size(block->reg_in); k++)
+        fprintf(fp, "r%zu ", *(size_t *)vector_peek_at(block->reg_in, k));
+      fprintf(fp, "<br/>");
+
+      fprintf(fp, "<b>reg_def:</b> ");
+      for (size_t k = 1; k <= vector_size(block->reg_def); k++)
+        fprintf(fp, "r%zu ", *(size_t *)vector_peek_at(block->reg_def, k));
+      fprintf(fp, "<br/>");
+
+      fprintf(fp, "<b>reg_use:</b> ");
+      for (size_t k = 1; k <= vector_size(block->reg_use); k++)
+        fprintf(fp, "r%zu ", *(size_t *)vector_peek_at(block->reg_use, k));
+      fprintf(fp, "<br/>");
+
+      fprintf(fp, "<b>reg_out:</b> ");
+      for (size_t k = 1; k <= vector_size(block->reg_out); k++)
+        fprintf(fp, "r%zu ", *(size_t *)vector_peek_at(block->reg_out, k));
+      fprintf(fp, "<br/>");
+
       fprintf(fp, "\"]\n");
     }
 

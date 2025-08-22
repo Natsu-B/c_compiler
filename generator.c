@@ -59,7 +59,10 @@ char *access_size_specifier(int size)
     case 2: tmp = "WORD PTR"; break;
     case 4: tmp = "DWORD PTR"; break;
     case 8: tmp = "QWORD PTR"; break;
-    default: error_exit("unknown access size specifier: %d", size); break;
+    default:
+      error_exit("unknown access size specifier: %d", size);
+      tmp = "";
+      break;
   }
   return tmp;
 }

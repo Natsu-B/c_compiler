@@ -541,7 +541,11 @@ static const char *get_size_prefix(size_t size)
     case 2: return "WORD";
     case 4: return "DWORD";
     case 8: return "QWORD";
-    default: return "";
+    default:
+    {
+      error_exit("invalid access size: %u", size);
+      return NULL;
+    }
   }
 }
 
@@ -747,11 +751,11 @@ void dump_ir_fp(IRProgram *program, FILE *fp)
     if (func->builtin_func == FUNC_USER_DEFINED)
     {
       // Print function information
-      fprintf(fp, "FUNC %.*s %zu %zu %d\n",
+      fprintf(fp, "FUNC %.*s %zu %zu %s\n",
               (int)func->user_defined.function_name_size,
               func->user_defined.function_name, func->user_defined.stack_size,
               func->user_defined.num_virtual_regs,
-              func->user_defined.is_static);
+              func->user_defined.is_static ? "static" : "");
     }
     // Loop through the IR blocks of the function
     for (size_t j = 0; j < vector_size(func->IR_Blocks); j++)

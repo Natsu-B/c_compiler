@@ -417,7 +417,10 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
   else if (int_count || unsigned_count || signed_count)
     kind = TYPE_INT;
   else
+  {
     unreachable();
+    kind = TYPE_NULL;
+  }
   type = alloc_type(kind);
   if (!unsigned_count)
     type->is_signed = true;
@@ -635,6 +638,24 @@ Type* alloc_type(TypeKind kind)
   Type* new = calloc(1, sizeof(Type));
   new->type = kind;
   return new;
+}
+
+size_t size_of_real(TypeKind type)
+{
+  switch (type)
+  {
+    case TYPE_ENUM:
+    case TYPE_INT: return 4;
+    case TYPE_CHAR:
+    case TYPE_BOOL: return 1;
+    case TYPE_SHORT: return 2;
+    case TYPE_STR:
+    case TYPE_LONG:
+    case TYPE_LONGLONG:
+    case TYPE_PTR:
+    case TYPE_ARRAY: return 8;
+    default: unreachable(); return 0;
+  }
 }
 
 // A function that takes a TYPE_INT, TYPE_ARRAY, etc. and returns its size

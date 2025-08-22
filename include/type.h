@@ -119,6 +119,7 @@ enum member_name
 };
 enum member_name is_enum_or_function_or_typedef_or_variables_name(
     Token *token, size_t *number, Type **type, Var **var);
+size_t size_of_real(TypeKind kind);
 size_t size_of(Type *type);
 size_t align_of(Type *type);
 void add_typedef(Token *token, Type *type);

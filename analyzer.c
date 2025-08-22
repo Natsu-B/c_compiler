@@ -149,9 +149,10 @@ void switch_end()
   vector_pop(switch_list.case_list);
 }
 
-void add_type(Node *node);
+Node *analyze_type(Node *node, bool is_root, size_t recursion_limit);
+static void add_type_internal(Node *const node);
 
-void add_type_for_assignment(Node *node)
+static void add_type_for_assignment(Node *node)
 {
   Type *lhs_type = node->lhs->type;
   Type *rhs_type = node->rhs->type;
@@ -206,7 +207,7 @@ void add_type_for_assignment(Node *node)
            "Cannot convert both sides of '=' types.");
 }
 
-bool check_initializer_type(Type *type, Node *init_list, bool is_root)
+static bool check_initializer_type(Type *type, Node *init_list, bool is_root)
 {
   if (init_list->kind == ND_INITIALIZER)
   {
@@ -242,7 +243,7 @@ bool check_initializer_type(Type *type, Node *init_list, bool is_root)
   return true;
 }
 
-void add_type_internal(Node *const node)
+static void add_type_internal(Node *const node)
 {
   switch (node->kind)
   {
@@ -258,7 +259,7 @@ void add_type_internal(Node *const node)
         node->rhs = new_node(ND_MUL, node->rhs,
                              new_node_num(size_of(node->lhs->type->ptr_to)),
                              node->token);
-        add_type(node->rhs);
+        analyze_type(node->rhs, false, 1);
         node->type = node->lhs->type;
         return;
       }
@@ -267,7 +268,7 @@ void add_type_internal(Node *const node)
         node->lhs = new_node(ND_MUL, node->lhs,
                              new_node_num(size_of(node->rhs->type->ptr_to)),
                              node->token);
-        add_type(node->lhs);
+        analyze_type(node->lhs, false, 1);
         node->type = node->rhs->type;
         return;
       }
@@ -296,7 +297,7 @@ void add_type_internal(Node *const node)
         node->rhs = new_node(ND_MUL, node->rhs,
                              new_node_num(size_of(node->lhs->type->ptr_to)),
                              node->token);
-        add_type(node->rhs);
+        analyze_type(node->rhs, false, 1);
         node->type = node->lhs->type;
         return;
       }
@@ -517,13 +518,11 @@ void add_type_internal(Node *const node)
       if (node->lhs->type->type != TYPE_ARRAY &&
           node->lhs->type->type != TYPE_PTR)
         error_at(node->lhs->token->str, node->lhs->token->len, "invalid array");
-      node->type = node->lhs->type->ptr_to;
-
+      node->type = node->lhs->type;
       node->kind = ND_DEREF;
       node->lhs = new_node(ND_ADD, node->lhs, node->rhs, node->token);
       node->rhs = NULL;
-      if (node->variable.is_array_top)
-        add_type(node);  // add_type internal should call only one time
+      analyze_type(node, false, 2);
       return;
     case ND_DOT:
     case ND_ARROW:
@@ -534,14 +533,8 @@ void add_type_internal(Node *const node)
       return;
     }
     case ND_FIELD: node->type = alloc_type(TYPE_VOID); return;
-    case ND_TYPE_NAME: return;
-    case ND_NUM:
-    {
-      Type *t = alloc_type(TYPE_INT);
-      t->is_signed = true;
-      node->type = t;
-      return;
-    }
+    case ND_TYPE_NAME:
+    case ND_NUM: return;
     case ND_BLOCK: node->type = alloc_type(TYPE_VOID); return;
     case ND_DISCARD_EXPR: node->type = alloc_type(TYPE_VOID); return;
     case ND_STRING: node->type = alloc_type(TYPE_STR); return;
@@ -566,94 +559,84 @@ void add_type_internal(Node *const node)
           error_at(node->initialize.assigned->token->str,
                    node->initialize.assigned->token->len,
                    "invalid initializer");
-        if (!(check_initializer_type(
-                node->initialize.assigned->variable.var->type, node, true)))
+        if (!check_initializer_type(
+                node->initialize.assigned->variable.var->type, node, true))
           error_at(node->token->str, node->token->len, "invalid initializer");
       }
       break;
     case ND_CAST: node->type = node->rhs->type; return;
+    case ND_EVAL: node->type = alloc_type(TYPE_INT); return;
     case ND_DECLARATOR_LIST: node->type = alloc_type(TYPE_VOID); return;
-    default: unreachable();
+    case ND_VARIABLE_ARGS:
+    case ND_END: unreachable(); break;
   }
 }
 
-void add_type(Node *node)
+Node *analyze_type(Node *node, bool is_root, size_t recursion_limit)
 {
   if (!node || node->kind == ND_NOP)
-    return;
-  if (node->kind == ND_SWITCH)
-    node->control.case_list = switch_new(node->control.label);
-  if (node->lhs)
-    add_type(node->lhs);
-  if (node->rhs)
-    add_type(node->rhs);
-  if (node->kind == ND_TERNARY)
-    add_type(node->control.ternary_child);
-  if (node->kind == ND_IF || node->kind == ND_ELIF || node->kind == ND_FOR ||
-      node->kind == ND_WHILE || node->kind == ND_DO || node->kind == ND_SWITCH)
+    return NULL;
+  if (recursion_limit != 1)
   {
-    add_type(node->control.condition);
-    add_type(node->control.true_code);
-    add_type(node->control.false_code);
-    add_type(node->control.init);
-    add_type(node->control.update);
+    size_t next_recursion_limit = recursion_limit ? recursion_limit - 1 : 0;
+    if (node->kind == ND_SWITCH)
+      node->control.case_list = switch_new(node->control.label);
+
+    if (node->lhs)
+      node->lhs = analyze_type(node->lhs, node->kind == ND_DECLARATOR_LIST,
+                               next_recursion_limit);
+    if (node->rhs)
+      node->rhs = analyze_type(node->rhs, node->kind == ND_DECLARATOR_LIST,
+                               next_recursion_limit);
+    if (node->kind == ND_TERNARY)
+      node->control.ternary_child = analyze_type(node->control.ternary_child,
+                                                 false, next_recursion_limit);
+    if (node->kind == ND_IF || node->kind == ND_ELIF || node->kind == ND_FOR ||
+        node->kind == ND_WHILE || node->kind == ND_DO ||
+        node->kind == ND_SWITCH)
+    {
+      node->control.condition =
+          analyze_type(node->control.condition, false, next_recursion_limit);
+      node->control.true_code =
+          analyze_type(node->control.true_code, false, next_recursion_limit);
+      node->control.false_code =
+          analyze_type(node->control.false_code, false, next_recursion_limit);
+      node->control.init =
+          analyze_type(node->control.init, false, next_recursion_limit);
+      node->control.update =
+          analyze_type(node->control.update, false, next_recursion_limit);
+    }
+    if (node->kind == ND_LABEL || node->kind == ND_CASE)
+      node->jump.statement_child =
+          analyze_type(node->jump.statement_child, false, next_recursion_limit);
+    if (node->kind == ND_FUNCCALL || node->kind == ND_FUNCDEF)
+      for (size_t i = 1; i <= vector_size(node->func.expr); i++)
+      {
+        Node *result = analyze_type(vector_peek_at(node->func.expr, i), false,
+                                    next_recursion_limit);
+        vector_replace_at(node->func.expr, i, result);
+      }
+    if (node->kind == ND_BLOCK)
+    {
+      offset_enter_nest();
+      for (NDBlock *tmp = node->func.stmt; tmp; tmp = tmp->next)
+        tmp->node = analyze_type(tmp->node, true, next_recursion_limit);
+      offset_exit_nest();
+    }
+    if (node->kind == ND_INITIALIZER)
+      for (size_t i = 1; i <= vector_size(node->initialize.init_list); i++)
+        analyze_type(vector_peek_at(node->initialize.init_list, i), false,
+                     next_recursion_limit);
+
+    if (node->kind == ND_SWITCH)
+      switch_end();
   }
-  if (node->kind == ND_LABEL || node->kind == ND_CASE)
-    add_type(node->jump.statement_child);
-  if (node->kind == ND_FUNCCALL || node->kind == ND_FUNCDEF)
-    for (size_t i = 1; i <= vector_size(node->func.expr); i++)
-      add_type(vector_peek_at(node->func.expr, i));
-  if (node->kind == ND_BLOCK || node->kind == ND_FUNCDEF)
-    for (NDBlock *tmp = node->func.stmt; tmp; tmp = tmp->next)
-      add_type(tmp->node);
-  if (node->kind == ND_INITIALIZER)
-    for (size_t i = 1; i <= vector_size(node->initialize.init_list); i++)
-      add_type(vector_peek_at(node->initialize.init_list, i));
-  if (node->kind == ND_SWITCH)
-    switch_end();
 
   add_type_internal(node);
-}
 
-Node *analyze_type(Node *node, bool is_root)
-{
-  if (!node)
-    return NULL;
-  if (node->lhs)
-    node->lhs = analyze_type(node->lhs, node->kind == ND_DECLARATOR_LIST);
-  if (node->rhs)
-    node->rhs = analyze_type(node->rhs, node->kind == ND_DECLARATOR_LIST);
-  if (node->kind == ND_TERNARY)
-    node->control.ternary_child =
-        analyze_type(node->control.ternary_child, false);
-  if (node->kind == ND_IF || node->kind == ND_ELIF || node->kind == ND_FOR ||
-      node->kind == ND_WHILE || node->kind == ND_DO || node->kind == ND_SWITCH)
-  {
-    node->control.condition = analyze_type(node->control.condition, false);
-    node->control.true_code = analyze_type(node->control.true_code, false);
-    node->control.false_code = analyze_type(node->control.false_code, false);
-    node->control.init = analyze_type(node->control.init, false);
-    node->control.update = analyze_type(node->control.update, false);
-  }
-  if (node->kind == ND_LABEL || node->kind == ND_CASE)
-    node->jump.statement_child =
-        analyze_type(node->jump.statement_child, false);
-  if (node->kind == ND_FUNCCALL || node->kind == ND_FUNCDEF)
-    for (size_t i = 1; i <= vector_size(node->func.expr); i++)
-    {
-      Node *result = analyze_type(vector_peek_at(node->func.expr, i), false);
-      vector_replace_at(node->func.expr, i, result);
-    }
-  if (node->kind == ND_BLOCK)
-  {
-    offset_enter_nest();
-    for (NDBlock *tmp = node->func.stmt; tmp; tmp = tmp->next)
-      tmp->node = analyze_type(tmp->node, true);
-    offset_exit_nest();
-  }
-  if (node->kind == ND_INITIALIZER)
-    for (size_t i = 1; i <= vector_size(node->initialize.init_list); i++)
-      analyze_type(vector_peek_at(node->initialize.init_list, i), false);
+  if (recursion_limit)
+    return node;
+
   switch (node->kind)
   {
     case ND_DEREF:
@@ -697,33 +680,6 @@ Node *analyze_type(Node *node, bool is_root)
 FuncBlock *analyzer(FuncBlock *funcblock)
 {
   pr_debug("Start analyze");
-  // Apply types to nodes that are not variables or numbers, such as ND_ASSIGN
-  for (FuncBlock *pointer = funcblock; pointer; pointer = pointer->next)
-  {
-    Node *node = pointer->node;
-    if (!node)
-      continue;
-    if (node->kind == ND_FUNCDEF)
-    {
-      for (size_t i = 1; i <= vector_size(node->func.expr); i++)
-        add_type(vector_peek_at(node->func.expr, i));
-      for (NDBlock *tmp = node->func.stmt; tmp; tmp = tmp->next)
-        add_type(tmp->node);
-    }
-    else if (node->kind == ND_VAR)
-    {
-      if (node->variable.var->is_local)
-        error_exit("Failed to parse correctly.");
-      add_type(node);
-    }
-    else if (node->kind == ND_BUILTINFUNC)
-      node->type = alloc_type(TYPE_VOID);
-    else if (node->kind != ND_NOP)
-      add_type(node);
-  }
-#ifdef DEBUG
-  print_parse_result(funcblock);
-#endif
   // Calculate offsets based on the types assigned by add_type
   for (FuncBlock *pointer = funcblock; pointer; pointer = pointer->next)
   {
@@ -735,18 +691,19 @@ FuncBlock *analyzer(FuncBlock *funcblock)
       init_nest();
       for (size_t i = 1; i <= vector_size(node->func.expr); i++)
       {
-        Node *result = analyze_type(vector_peek_at(node->func.expr, i), false);
+        Node *result =
+            analyze_type(vector_peek_at(node->func.expr, i), false, 0);
         vector_replace_at(node->func.expr, i, result);
       }
       for (NDBlock *tmp = node->func.stmt; tmp; tmp = tmp->next)
-        tmp->node = analyze_type(tmp->node, true);
+        tmp->node = analyze_type(tmp->node, true, 0);
       // Align stacksize to 8-byte units
       size_t max_stacksize = get_max_offset();
       pointer->stacksize = (max_stacksize + 7) / 8 * 8;
     }
     else if (node->kind != ND_BUILTINFUNC)
     {
-      pointer->node = analyze_type(node, false);
+      pointer->node = analyze_type(node, false, 0);
       node = pointer->node;
       // global variables initializer only allows constant value
       if (node->kind != ND_ASSIGN && node->kind != ND_VAR)

@@ -192,6 +192,9 @@ Node *new_node_num(long long val)
   Node *node = calloc(1, sizeof(Node));
   node->kind = ND_NUM;
   node->num_val = val;
+  Type *t = alloc_type(TYPE_INT);
+  t->is_signed = true;
+  node->type = t;
   return node;
 }
 
@@ -351,7 +354,17 @@ Node *init_declarator(Type *type, uint8_t storage_class_specifier)
     return NULL;
   Token *old = get_token();
   if (node->kind != ND_FUNCDEF && consume("=", TK_RESERVED))
+  {
     node = new_node(ND_ASSIGN, node, initializer(node), old);
+    if (node->rhs->kind == ND_INITIALIZER)
+    {
+      if (node->lhs->type->type != TYPE_ARRAY)
+        error_at(node->lhs->token->str, node->lhs->token->len,
+                 "invalid initializer");
+      if (!node->lhs->type->size)
+        node->lhs->type->size = vector_size(node->rhs->initialize.init_list);
+    }
+  }
   return node;
 }
 
@@ -1199,27 +1212,28 @@ Node *primary_expression()
   Token *char_token = consume_char();
   if (char_token)
   {
-    Node *node = calloc(1, sizeof(Node));
-    node->kind = ND_NUM;
+    size_t num_val;
     if (char_token->len == 2)
     {
       switch (char_token->str[1])
       {
-        case 'n': node->num_val = '\n'; break;
-        case 't': node->num_val = '\t'; break;
-        case '\\': node->num_val = '\\'; break;
-        case '\'': node->num_val = '\''; break;
-        case '"': node->num_val = '"'; break;
-        case '0': node->num_val = '\0'; break;
-        case 'e': node->num_val = '\e'; break;
+        case 'n': num_val = '\n'; break;
+        case 't': num_val = '\t'; break;
+        case '\\': num_val = '\\'; break;
+        case '\'': num_val = '\''; break;
+        case '"': num_val = '"'; break;
+        case '0': num_val = '\0'; break;
+        case 'e': num_val = '\e'; break;
         default:
-          error_at(node->token->str, node->token->len,
+          error_at(char_token->str, char_token->len,
                    "unknown control character found");
+          num_val = 0;
+          break;
       }
     }
     else
-      node->num_val = char_token->str[0];
-    return node;
+      num_val = char_token->str[0];
+    return new_node_num(num_val);
   }
   long long num;
   if (consume_number(&num))

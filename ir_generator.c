@@ -194,7 +194,7 @@ IRProgram *gen_ir(FuncBlock *parsed)
         GlobalVar *gvar = calloc(1, sizeof(GlobalVar));
         gvar->var_name = fb->node->lhs->variable.var->name;
         gvar->var_name_len = fb->node->lhs->variable.var->len;
-        gvar->var_size = size_of(fb->node->lhs->variable.var->type);
+        gvar->var_size = size_of_real(fb->node->lhs->variable.var->type->type);
         gvar->is_static =
             fb->node->lhs->variable.var->storage_class_specifier & 1 << 2;
         IR_Blocks *irs = new_ir_blocks();
@@ -317,6 +317,8 @@ static size_t *gen_addr(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->kind = IR_ADD;
       ir->bin_op.lhs_reg = *lhs_addr;
       ir->bin_op.rhs_reg = *offset_val;
+      ir->bin_op.lhs_size = size_of_real(TYPE_PTR);
+      ir->bin_op.rhs_size = size_of_real(TYPE_INT);
       size_t *dst_reg = gen_reg();
       ir->bin_op.dst_reg = *dst_reg;
       vector_push((*irs)->IRs, ir);
@@ -363,7 +365,7 @@ static size_t *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->mem.offset = 0;
       size_t *reg_ptr = gen_reg();
       ir->mem.reg = *reg_ptr;
-      ir->mem.size = size_of(node->type);
+      ir->mem.size = size_of_real(node->type->type);
       vector_push((*irs)->IRs, ir);
       return reg_ptr;
     }
@@ -387,7 +389,7 @@ static size_t *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     case ND_ASSIGN:
     {
       return gen_assign(blocks, labels, irs, node->lhs, node->rhs, 0,
-                        size_of(node->type));
+                        size_of_real(node->type->type));
     }
     case ND_RETURN:
     {
@@ -728,6 +730,9 @@ static size_t *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
           cmp->bin_op.rhs_reg = *rhs_reg;
           size_t *cmp_result = gen_reg();
           cmp->bin_op.dst_reg = *cmp_result;
+          cmp->bin_op.lhs_size =
+              size_of_real(node->control.condition->type->type);
+          cmp->bin_op.rhs_size = size_of_real(TYPE_INT);
           vector_push((*irs)->IRs, cmp);
           IR *jump = calloc(1, sizeof(IR));
           jump->kind = IR_JNE;
@@ -738,7 +743,7 @@ static size_t *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
           vector_push(blocks, *irs);
         }
         else
-        {
+        {  // default
           IR *jump = calloc(1, sizeof(IR));
           jump->kind = IR_JMP;
           jump->jmp.label = label_name;
@@ -829,7 +834,7 @@ static size_t *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
         ir->kind = IR_STORE_ARG;
         ir->store_arg.dst_reg = *addr_reg;
         ir->store_arg.arg_index = i;
-        ir->store_arg.size = size_of(arg_node->type);
+        ir->store_arg.size = size_of_real(arg_node->type->type);
         vector_push((*irs)->IRs, ir);
       }
 
@@ -855,7 +860,7 @@ static size_t *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->mem.offset = 0;
       size_t *reg_ptr = gen_reg();
       ir->mem.reg = *reg_ptr;
-      ir->mem.size = size_of(node->type);
+      ir->mem.size = size_of_real(node->type->type);
       vector_push((*irs)->IRs, ir);
       return reg_ptr;
     }
@@ -897,6 +902,8 @@ static size_t *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->kind = IR_NEQ;
       ir->bin_op.lhs_reg = *lhs_reg;
       ir->bin_op.rhs_reg = *rhs_reg;
+      ir->bin_op.lhs_size = size_of_real(node->lhs->type->type);
+      ir->bin_op.rhs_size = size_of_real(TYPE_INT);
       size_t *dst_reg_ptr = gen_reg();
       ir->bin_op.dst_reg = *dst_reg_ptr;
       vector_push((*irs)->IRs, ir);
@@ -956,8 +963,8 @@ static size_t *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
         size_t *rhs_reg =
             gen_stmt(blocks, labels, irs, new_node_num(node->num_val));
         ir->bin_op.rhs_reg = *rhs_reg;
-        ir->bin_op.lhs_size = size_of(node->lhs->type);
-        ir->bin_op.rhs_size = 8;
+        ir->bin_op.lhs_size = size_of_real(node->lhs->type->type);
+        ir->bin_op.rhs_size = size_of_real(TYPE_INT);
         ir->bin_op.dst_reg = *post_reg;
       }
       vector_push((*irs)->IRs, ir);
@@ -967,7 +974,7 @@ static size_t *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       assign->mem.reg = *post_reg;
       assign->mem.mem_reg = *lhs_addr_ptr;
       assign->mem.offset = 0;
-      assign->mem.size = size_of(node->type);
+      assign->mem.size = size_of_real(node->type->type);
       vector_push((*irs)->IRs, assign);
 
       if (node->kind == ND_PREINCREMENT || node->kind == ND_PREDECREMENT)
@@ -1020,8 +1027,8 @@ static size_t *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
         error_at(node->token->str, node->token->len, "invalid operator");
       ir->bin_op.lhs_reg = *lhs_ptr;
       ir->bin_op.rhs_reg = *rhs_ptr;
-      ir->bin_op.lhs_size = size_of(node->lhs->type);
-      ir->bin_op.rhs_size = size_of(node->rhs->type);
+      ir->bin_op.lhs_size = size_of_real(node->lhs->type->type);
+      ir->bin_op.rhs_size = size_of_real(node->rhs->type->type);
       size_t *dst_reg_ptr = gen_reg();
       ir->bin_op.dst_reg = *dst_reg_ptr;
       vector_push((*irs)->IRs, ir);

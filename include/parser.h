@@ -229,4 +229,43 @@ FuncBlock *parser();
 Node *declarator_no_side_effect(Type **type, uint8_t storage_class_specifier);
 Node *assignment_expression();
 
+// walk child node
+// Note: node->lhs, node->rhs, and ND_BLOCK are not walked
+#define visit_children(node, visitor, ...)                                     \
+  do                                                                           \
+  {                                                                            \
+    if (!(node))                                                               \
+      break;                                                                   \
+    if ((node)->kind == ND_TERNARY)                                            \
+      (node)->control.ternary_child =                                          \
+          visitor((node)->control.ternary_child, ##__VA_ARGS__);               \
+    if ((node)->kind == ND_IF || (node)->kind == ND_ELIF ||                    \
+        (node)->kind == ND_FOR || (node)->kind == ND_WHILE ||                  \
+        (node)->kind == ND_DO || (node)->kind == ND_SWITCH)                    \
+    {                                                                          \
+      (node)->control.condition =                                              \
+          visitor((node)->control.condition, ##__VA_ARGS__);                   \
+      (node)->control.true_code =                                              \
+          visitor((node)->control.true_code, ##__VA_ARGS__);                   \
+      (node)->control.false_code =                                             \
+          visitor((node)->control.false_code, ##__VA_ARGS__);                  \
+      (node)->control.init = visitor((node)->control.init, ##__VA_ARGS__);     \
+      (node)->control.update = visitor((node)->control.update, ##__VA_ARGS__); \
+    }                                                                          \
+    if ((node)->kind == ND_LABEL || (node)->kind == ND_CASE)                   \
+      (node)->jump.statement_child =                                           \
+          visitor((node)->jump.statement_child, ##__VA_ARGS__);                \
+    if ((node)->kind == ND_FUNCCALL || (node)->kind == ND_FUNCDEF)             \
+      for (size_t i = 1; i <= vector_size((node)->func.expr); i++)             \
+      {                                                                        \
+        Node *result =                                                         \
+            visitor(vector_peek_at((node)->func.expr, i), ##__VA_ARGS__);      \
+        vector_replace_at((node)->func.expr, i, result);                       \
+      }                                                                        \
+    if ((node)->kind == ND_INITIALIZER)                                        \
+      for (size_t i = 1; i <= vector_size((node)->initialize.init_list); i++)  \
+        visitor(vector_peek_at((node)->initialize.init_list, i),               \
+                ##__VA_ARGS__);                                                \
+  } while (0)
+
 #endif  // PARSER_C_COMPILER

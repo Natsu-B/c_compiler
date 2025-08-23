@@ -12,6 +12,7 @@
 #include "include/generator.h"
 #include "include/ir_generator.h"
 #include "include/ir_optimizer.h"
+#include "include/optimizer.h"
 #include "include/parser.h"
 #include "include/preprocessor.h"
 #include "include/tokenizer.h"
@@ -103,11 +104,15 @@ int main(int argc, char **argv)
   }
   // Analyzer (semantic analysis)
   FuncBlock *analyze_result = analyzer(parse_result);
+
+  // Optimizer
+  if ((optimize_level & ~(1 << 7)) == 1)
+    analyze_result = optimizer(analyze_result);
+
   // IR generator
   IRProgram *ir_program = gen_ir(analyze_result);
   // IR optimizer
-  if ((optimize_level & ~(1 << 7)) == 1)
-    ir_program = optimize_ir(ir_program);
+  ir_program = optimize_ir(ir_program);
 
   if (output_ir)
   {

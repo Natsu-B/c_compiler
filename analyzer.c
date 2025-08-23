@@ -340,7 +340,6 @@ static void add_type_internal(Node *const node)
         error_at(node->token->str, node->token->len,
                  "Cannot dereference a void pointer.");
       node->type = node->lhs->type->ptr_to;
-      size_of(node->type);  // check if it's a valid type
       return;
     case ND_UNARY_PLUS:
     case ND_UNARY_MINUS:
@@ -572,64 +571,36 @@ static void add_type_internal(Node *const node)
   }
 }
 
-Node *analyze_type(Node *node, bool is_root, size_t recursion_limit)
-{
+static void analyze_children(Node *node, size_t recursion_limit) {
+  size_t next_recursion_limit = recursion_limit ? recursion_limit - 1 : 0;
+  if (node->kind == ND_SWITCH)
+    node->control.case_list = switch_new(node->control.label);
+
+  if (node->lhs)
+    node->lhs = analyze_type(node->lhs, node->kind == ND_DECLARATOR_LIST,
+                             next_recursion_limit);
+  if (node->rhs)
+    node->rhs = analyze_type(node->rhs, node->kind == ND_DECLARATOR_LIST,
+                             next_recursion_limit);
+
+  if (node->kind == ND_BLOCK) {
+    offset_enter_nest();
+    for (NDBlock *tmp = node->func.stmt; tmp; tmp = tmp->next)
+      tmp->node = analyze_type(tmp->node, true, next_recursion_limit);
+    offset_exit_nest();
+  }
+
+  visit_children(node, analyze_type, false, next_recursion_limit);
+
+  if (node->kind == ND_SWITCH)
+    switch_end();
+}
+
+Node *analyze_type(Node *node, bool is_root, size_t recursion_limit) {
   if (!node || node->kind == ND_NOP)
     return NULL;
-  if (recursion_limit != 1)
-  {
-    size_t next_recursion_limit = recursion_limit ? recursion_limit - 1 : 0;
-    if (node->kind == ND_SWITCH)
-      node->control.case_list = switch_new(node->control.label);
-
-    if (node->lhs)
-      node->lhs = analyze_type(node->lhs, node->kind == ND_DECLARATOR_LIST,
-                               next_recursion_limit);
-    if (node->rhs)
-      node->rhs = analyze_type(node->rhs, node->kind == ND_DECLARATOR_LIST,
-                               next_recursion_limit);
-    if (node->kind == ND_TERNARY)
-      node->control.ternary_child = analyze_type(node->control.ternary_child,
-                                                 false, next_recursion_limit);
-    if (node->kind == ND_IF || node->kind == ND_ELIF || node->kind == ND_FOR ||
-        node->kind == ND_WHILE || node->kind == ND_DO ||
-        node->kind == ND_SWITCH)
-    {
-      node->control.condition =
-          analyze_type(node->control.condition, false, next_recursion_limit);
-      node->control.true_code =
-          analyze_type(node->control.true_code, false, next_recursion_limit);
-      node->control.false_code =
-          analyze_type(node->control.false_code, false, next_recursion_limit);
-      node->control.init =
-          analyze_type(node->control.init, false, next_recursion_limit);
-      node->control.update =
-          analyze_type(node->control.update, false, next_recursion_limit);
-    }
-    if (node->kind == ND_LABEL || node->kind == ND_CASE)
-      node->jump.statement_child =
-          analyze_type(node->jump.statement_child, false, next_recursion_limit);
-    if (node->kind == ND_FUNCCALL || node->kind == ND_FUNCDEF)
-      for (size_t i = 1; i <= vector_size(node->func.expr); i++)
-      {
-        Node *result = analyze_type(vector_peek_at(node->func.expr, i), false,
-                                    next_recursion_limit);
-        vector_replace_at(node->func.expr, i, result);
-      }
-    if (node->kind == ND_BLOCK)
-    {
-      offset_enter_nest();
-      for (NDBlock *tmp = node->func.stmt; tmp; tmp = tmp->next)
-        tmp->node = analyze_type(tmp->node, true, next_recursion_limit);
-      offset_exit_nest();
-    }
-    if (node->kind == ND_INITIALIZER)
-      for (size_t i = 1; i <= vector_size(node->initialize.init_list); i++)
-        analyze_type(vector_peek_at(node->initialize.init_list, i), false,
-                     next_recursion_limit);
-
-    if (node->kind == ND_SWITCH)
-      switch_end();
+  if (recursion_limit != 1) {
+    analyze_children(node, recursion_limit);
   }
 
   add_type_internal(node);
@@ -637,42 +608,40 @@ Node *analyze_type(Node *node, bool is_root, size_t recursion_limit)
   if (recursion_limit)
     return node;
 
-  switch (node->kind)
-  {
-    case ND_DEREF:
-      // When the dereferenced type is a multidimensional array
-      if (node->type->type == TYPE_ARRAY)
-      {
-        node->lhs->type = node->type;
-        return node->lhs;
-      }
-      break;
-    case ND_SIZEOF:
-      node->kind = ND_NUM;
-      node->num_val = size_of(node->lhs->type);
-      break;
-    case ND_VAR:
-      if (node->variable.var->is_local &&
-          !(node->variable.var->storage_class_specifier & 1 << 1) &&
-          node->variable.is_new_var)
-        node->variable.var->offset =
-            calculate_offset(size_of(node->type), align_of(node->type));
-      if (is_root)
-        node->kind = ND_NOP;
-      break;
-    case ND_STRING:
-      // TODO: Behavior is different for ND_ARRAY
-      node->literal_name = add_string_literal(node->token);
-      break;
-    case ND_CAST:
-      if (node->type->type == TYPE_VOID)
-      {
-        node->kind = ND_NOP;
-        return node;
-      }
+  switch (node->kind) {
+  case ND_DEREF:
+    // When the dereferenced type is a multidimensional array
+    if (node->type->type == TYPE_ARRAY) {
       node->lhs->type = node->type;
       return node->lhs;
-    default: break;
+    }
+    break;
+  case ND_SIZEOF:
+    node->kind = ND_NUM;
+    node->num_val = size_of(node->lhs->type);
+    break;
+  case ND_VAR:
+    if (node->variable.var->is_local &&
+        !(node->variable.var->storage_class_specifier & 1 << 1) &&
+        node->variable.is_new_var)
+      node->variable.var->offset =
+          calculate_offset(size_of(node->type), align_of(node->type));
+    if (is_root)
+      node->kind = ND_NOP;
+    break;
+  case ND_STRING:
+    // TODO: Behavior is different for ND_ARRAY
+    node->literal_name = add_string_literal(node->token);
+    break;
+  case ND_CAST:
+    if (node->type->type == TYPE_VOID) {
+      node->kind = ND_NOP;
+      return node;
+    }
+    node->lhs->type = node->type;
+    return node->lhs;
+  default:
+    break;
   }
   return node;
 }

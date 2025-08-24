@@ -163,6 +163,7 @@ struct IR
     struct
     {
       size_t src_reg;
+      bool return_void;
     } ret;
 
     // IR_LABEL

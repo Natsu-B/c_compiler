@@ -398,7 +398,13 @@ static size_t *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       size_t *src_ptr = gen_stmt(blocks, labels, irs, node->lhs);
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_RET;
-      ir->ret.src_reg = *src_ptr;
+      if (src_ptr)
+      {
+        ir->ret.src_reg = *src_ptr;
+        ir->ret.return_void = false;
+      }
+      else
+        ir->ret.return_void = true;
       vector_push((*irs)->IRs, ir);
       *irs = new_ir_blocks();
       vector_push(blocks, *irs);
@@ -986,7 +992,7 @@ static size_t *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     case ND_SUB:
     case ND_MUL:
     case ND_DIV:
-    case ND_IDIV:
+    case ND_REM:
     case ND_EQ:
     case ND_NEQ:
     case ND_LT:
@@ -1007,7 +1013,7 @@ static size_t *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
         case ND_SUB: ir->kind = IR_SUB; break;
         case ND_MUL: ir->kind = IR_MUL; break;
         case ND_DIV: ir->kind = IR_OP_DIV; break;
-        case ND_IDIV: ir->kind = IR_OP_IDIV; break;
+        case ND_REM: ir->kind = IR_OP_IDIV; break;
         case ND_EQ: ir->kind = IR_EQ; break;
         case ND_NEQ: ir->kind = IR_NEQ; break;
         case ND_LT: ir->kind = IR_LT; break;

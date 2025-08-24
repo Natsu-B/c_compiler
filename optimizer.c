@@ -23,7 +23,7 @@ static Node* constant_folding(Node* node)
     case ND_SUB:
     case ND_MUL:
     case ND_DIV:
-    case ND_IDIV:
+    case ND_REM:
     case ND_EQ:
     case ND_NEQ:
     case ND_LT:
@@ -61,7 +61,7 @@ static Node* constant_folding(Node* node)
           result_val = lhs_val * rhs_val;
           break;
         case ND_DIV:
-        case ND_IDIV:
+        case ND_REM:
           if (rhs_val == 0)
             break;
           result_val = lhs_val / rhs_val;

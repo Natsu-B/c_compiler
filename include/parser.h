@@ -25,7 +25,7 @@ typedef enum
   ND_SUB,              // -
   ND_MUL,              // *
   ND_DIV,              // /
-  ND_IDIV,             // %
+  ND_REM,             // %
   ND_EQ,               // ==
   ND_NEQ,              // !=
   ND_LT,               // <
@@ -120,7 +120,7 @@ enum function_type
 
 // For debug use. Must be added if NodeKind is added.
 #define NodeKindTable                                                         \
-  "ND_NOP", "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_IDIV", "ND_EQ",       \
+  "ND_NOP", "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_REM", "ND_EQ",       \
       "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF",        \
       "ND_LOGICAL_NOT", "ND_NOT", "ND_UNARY_PLUS", "ND_UNARY_MINUS",          \
       "ND_PREINCREMENT", "ND_PREDECREMENT", "ND_POSTINCREMENT",               \

@@ -311,7 +311,7 @@ static void add_type_internal(Node *const node)
       return;
     case ND_MUL:
     case ND_DIV:
-    case ND_IDIV:
+    case ND_REM:
     {
       if (!is_integer_type(node->lhs->type) ||
           !is_integer_type(node->rhs->type))

@@ -98,8 +98,6 @@ bool analyze_live_variable_add_out(IR_Blocks* blocks, IR_Blocks* child)
 
 void add_reg_use(IR_Blocks* blocks, size_t reg, Vector* defined)
 {
-  if (reg > 1000)
-    unreachable();
   for (size_t i = 1; i <= vector_size(defined); i++)
     if (reg == *(size_t*)vector_peek_at(defined, i))
       return;

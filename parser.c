@@ -808,7 +808,7 @@ Node *assignment_expression()
                     new_node(ND_DIV, node, assignment_expression(), old), old);
   else if (consume("%=", TK_RESERVED))
     node = new_node(ND_ASSIGNMENT, NULL,
-                    new_node(ND_IDIV, node, assignment_expression(), old), old);
+                    new_node(ND_REM, node, assignment_expression(), old), old);
   else if (consume("+=", TK_RESERVED))
     node = new_node(ND_ASSIGNMENT, NULL,
                     new_node(ND_ADD, node, assignment_expression(), old), old);
@@ -1011,7 +1011,7 @@ Node *multiplicative_expression()
     else if (consume("/", TK_RESERVED))
       node = new_node(ND_DIV, node, cast_expression(), get_old_token());
     else if (consume("%", TK_RESERVED))
-      node = new_node(ND_IDIV, node, cast_expression(), get_old_token());
+      node = new_node(ND_REM, node, cast_expression(), get_old_token());
     else
       return node;
   }

@@ -144,6 +144,14 @@ bool vector_compare(Vector *vec1, Vector *vec2)
          0;
 }
 
+size_t vector_search(Vector *vec, void *key)
+{
+  for (size_t i = 1; i <= vector_size(vec); i++)
+    if (vector_peek_at(vec, i) == key)
+      return i;
+  return 0;
+}
+
 void vector_free(Vector *vec)
 {
   if (vec->data)

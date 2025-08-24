@@ -63,6 +63,29 @@ void make_cfg(IRProgram* progarm)
   }
 }
 
+void remove_parent(IRFunc* func, IR_Blocks* blocks, IR_Blocks* removed)
+{
+  for (size_t i = 1; i <= vector_size(blocks->parent); i++)
+  {
+    IR_Blocks* tmp = vector_peek_at(blocks->parent, i);
+    if (tmp == removed)
+    {
+      vector_pop_at(blocks->parent, i);
+      if (!vector_size(blocks->parent))
+      {
+        vector_pop_at(func->IR_Blocks, vector_search(func->IR_Blocks, blocks));
+        if (blocks->lhs)
+          remove_parent(func, blocks->lhs, blocks);
+        if (blocks->rhs)
+          remove_parent(func, blocks->rhs, blocks);
+      }
+      goto exit;
+    }
+  }
+  unreachable();
+exit:
+}
+
 void analyze_cfg(IRProgram* program)
 {
   for (size_t i = 1; i <= vector_size(program->functions); i++)
@@ -74,7 +97,13 @@ void analyze_cfg(IRProgram* program)
       {
         IR_Blocks* block = vector_peek_at(function->IR_Blocks, j);
         if (!vector_size(block->parent))
-          vector_pop_at(function->IR_Blocks, j--);
+        {  // remove unused blocks
+          IR_Blocks* removed = vector_pop_at(function->IR_Blocks, j--);
+          if (removed->lhs)
+            remove_parent(function, removed->lhs, removed);
+          if (removed->rhs)
+            remove_parent(function, removed->rhs, removed);
+        }
       }
     }
   }

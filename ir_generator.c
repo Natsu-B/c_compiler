@@ -1201,6 +1201,10 @@ static size_t *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       gen_stmt(blocks, labels, irs, node->rhs);
       return NULL;
     }
+    case ND_CAST:
+    case ND_SIGN_EXTEND:
+    case ND_ZERO_EXTEND:
+    case ND_TRUNCATE: return gen_stmt(blocks, labels, irs, node->lhs);
     default:
       error_exit("unexpected node kind: %d", node->kind);
       return 0;  // Unreachable

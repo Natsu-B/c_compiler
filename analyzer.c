@@ -243,6 +243,33 @@ static bool check_initializer_type(Type *type, Node *init_list, bool is_root)
   return true;
 }
 
+static Node *create_implicit_cast_node(Node *node, Type *type)
+{
+  if (is_equal_type(node->type, type))
+    return node;
+
+  if (size_of_real(node->type->type) == size_of_real(type->type))
+    return node;
+
+  Node *cast = new_node(ND_NOP, node, NULL, node->token);
+  cast->type = type;
+
+  if (size_of_real(type->type) < size_of_real(node->type->type))
+  {
+    cast->kind = ND_TRUNCATE;
+  }
+  else
+  {
+    if (node->type->is_signed)
+      cast->kind = ND_SIGN_EXTEND;
+    else
+      cast->kind = ND_ZERO_EXTEND;
+  }
+  return cast;
+}
+
+static Type *ret_type;
+
 static void add_type_internal(Node *const node)
 {
   switch (node->kind)
@@ -273,7 +300,11 @@ static void add_type_internal(Node *const node)
         return;
       }
 
-      node->type = implicit_type_conversion(node->lhs->type, node->rhs->type);
+      Type *conv_type =
+          implicit_type_conversion(node->lhs->type, node->rhs->type);
+      node->lhs = create_implicit_cast_node(node->lhs, conv_type);
+      node->rhs = create_implicit_cast_node(node->rhs, conv_type);
+      node->type = conv_type;
       return;
     }
 
@@ -307,7 +338,11 @@ static void add_type_internal(Node *const node)
                  "Invalid operands to binary -");
       }
 
-      node->type = implicit_type_conversion(node->lhs->type, node->rhs->type);
+      Type *conv_type =
+          implicit_type_conversion(node->lhs->type, node->rhs->type);
+      node->lhs = create_implicit_cast_node(node->lhs, conv_type);
+      node->rhs = create_implicit_cast_node(node->rhs, conv_type);
+      node->type = conv_type;
       return;
     case ND_MUL:
     case ND_DIV:
@@ -318,13 +353,17 @@ static void add_type_internal(Node *const node)
         error_at(node->token->str, node->token->len,
                  "Operands for '%s' must be integer types.",
                  (node->kind == ND_MUL ? "*" : "/"));
-      node->type = implicit_type_conversion(node->lhs->type, node->rhs->type);
+      Type *conv_type =
+          implicit_type_conversion(node->lhs->type, node->rhs->type);
+      node->lhs = create_implicit_cast_node(node->lhs, conv_type);
+      node->rhs = create_implicit_cast_node(node->rhs, conv_type);
+      node->type = conv_type;
       return;
     }
     case ND_EQ:
     case ND_NEQ:
     case ND_LT:
-    case ND_LTE: node->type = alloc_type(TYPE_BOOL); return;
+    case ND_LTE: node->type = alloc_type(TYPE_INT); return;
     case ND_ASSIGN: add_type_for_assignment(node); return;
     case ND_ADDR:
     {
@@ -354,7 +393,11 @@ static void add_type_internal(Node *const node)
         node->type = alloc_type(TYPE_INT);
       }
       else
-        node->type = promote_integer(node->lhs->type, node->token);
+      {
+        Type *promoted_type = promote_integer(node->lhs->type, node->token);
+        node->lhs = create_implicit_cast_node(node->lhs, promoted_type);
+        node->type = promoted_type;
+      }
       return;
     case ND_PREINCREMENT:
     case ND_PREDECREMENT:
@@ -427,7 +470,15 @@ static void add_type_internal(Node *const node)
       return;
     }
     case ND_BUILTINFUNC:
-    case ND_RETURN: node->type = alloc_type(TYPE_VOID); return;
+    case ND_RETURN:
+    {
+      if (node->lhs)
+      {
+        node->lhs = create_implicit_cast_node(node->lhs, ret_type);
+      }
+      node->type = alloc_type(TYPE_VOID);
+    }
+      return;
     case ND_SIZEOF:
     {
       Type *t = alloc_type(TYPE_LONG);
@@ -468,7 +519,11 @@ static void add_type_internal(Node *const node)
 
       if (is_integer_type(lhs_type) && is_integer_type(rhs_type))
       {
-        node->type = implicit_type_conversion(lhs_type, rhs_type);
+        Type *conv_type = implicit_type_conversion(lhs_type, rhs_type);
+        node->control.ternary_child =
+            create_implicit_cast_node(node->control.ternary_child, conv_type);
+        node->rhs = create_implicit_cast_node(node->rhs, conv_type);
+        node->type = conv_type;
         return;
       }
 
@@ -487,17 +542,23 @@ static void add_type_internal(Node *const node)
       if (!is_integer_type(rhs) && !is_pointer_type(rhs))
         error_at(node->rhs->token->str, node->rhs->token->len,
                  "Scalar type required.");
-      node->type = alloc_type(TYPE_BOOL);
+      node->type = alloc_type(TYPE_INT);
       return;
     }
     case ND_INCLUSIVE_OR:
     case ND_EXCLUSIVE_OR:
     case ND_AND:
+    {
       if (!is_integer_type(node->lhs->type) ||
           !is_integer_type(node->rhs->type))
         error_at(node->token->str, node->token->len,
                  "Operands for bitwise op must be integer types.");
-      node->type = implicit_type_conversion(node->lhs->type, node->rhs->type);
+      Type *conv_type =
+          implicit_type_conversion(node->lhs->type, node->rhs->type);
+      node->lhs = create_implicit_cast_node(node->lhs, conv_type);
+      node->rhs = create_implicit_cast_node(node->rhs, conv_type);
+      node->type = conv_type;
+    }
       return;
     case ND_LEFT_SHIFT:
     case ND_RIGHT_SHIFT:
@@ -563,7 +624,30 @@ static void add_type_internal(Node *const node)
           error_at(node->token->str, node->token->len, "invalid initializer");
       }
       break;
-    case ND_CAST: node->type = node->rhs->type; return;
+    case ND_CAST:
+    {
+      node->type = node->rhs->type;
+      if (node->type->type == TYPE_VOID)
+        break;
+      size_t after = size_of_real(node->type->type);
+      size_t before = size_of_real(node->lhs->type->type);
+      if (after < before)
+      {
+        node->kind = ND_TRUNCATE;
+        return;
+      }
+      if (after == before)
+        return;
+      // after > before
+      if (node->lhs->type->is_signed)
+        node->kind = ND_SIGN_EXTEND;
+      else
+        node->kind = ND_ZERO_EXTEND;
+    }
+      return;
+    case ND_SIGN_EXTEND:
+    case ND_ZERO_EXTEND:
+    case ND_TRUNCATE: return;
     case ND_EVAL: node->type = alloc_type(TYPE_INT); return;
     case ND_DECLARATOR_LIST: node->type = alloc_type(TYPE_VOID); return;
     case ND_VARIABLE_ARGS:
@@ -571,7 +655,8 @@ static void add_type_internal(Node *const node)
   }
 }
 
-static void analyze_children(Node *node, size_t recursion_limit) {
+static void analyze_children(Node *node, size_t recursion_limit)
+{
   size_t next_recursion_limit = recursion_limit ? recursion_limit - 1 : 0;
   if (node->kind == ND_SWITCH)
     node->control.case_list = switch_new(node->control.label);
@@ -583,7 +668,8 @@ static void analyze_children(Node *node, size_t recursion_limit) {
     node->rhs = analyze_type(node->rhs, node->kind == ND_DECLARATOR_LIST,
                              next_recursion_limit);
 
-  if (node->kind == ND_BLOCK) {
+  if (node->kind == ND_BLOCK)
+  {
     offset_enter_nest();
     for (NDBlock *tmp = node->func.stmt; tmp; tmp = tmp->next)
       tmp->node = analyze_type(tmp->node, true, next_recursion_limit);
@@ -596,10 +682,12 @@ static void analyze_children(Node *node, size_t recursion_limit) {
     switch_end();
 }
 
-Node *analyze_type(Node *node, bool is_root, size_t recursion_limit) {
+Node *analyze_type(Node *node, bool is_root, size_t recursion_limit)
+{
   if (!node || node->kind == ND_NOP)
     return NULL;
-  if (recursion_limit != 1) {
+  if (recursion_limit != 1)
+  {
     analyze_children(node, recursion_limit);
   }
 
@@ -608,40 +696,46 @@ Node *analyze_type(Node *node, bool is_root, size_t recursion_limit) {
   if (recursion_limit)
     return node;
 
-  switch (node->kind) {
-  case ND_DEREF:
-    // When the dereferenced type is a multidimensional array
-    if (node->type->type == TYPE_ARRAY) {
-      node->lhs->type = node->type;
-      return node->lhs;
-    }
-    break;
-  case ND_SIZEOF:
-    node->kind = ND_NUM;
-    node->num_val = size_of(node->lhs->type);
-    break;
-  case ND_VAR:
-    if (node->variable.var->is_local &&
-        !(node->variable.var->storage_class_specifier & 1 << 1) &&
-        node->variable.is_new_var)
-      node->variable.var->offset =
-          calculate_offset(size_of(node->type), align_of(node->type));
-    if (is_root)
-      node->kind = ND_NOP;
-    break;
-  case ND_STRING:
-    // TODO: Behavior is different for ND_ARRAY
-    node->literal_name = add_string_literal(node->token);
-    break;
-  case ND_CAST:
-    if (node->type->type == TYPE_VOID) {
-      node->kind = ND_NOP;
+  switch (node->kind)
+  {
+    case ND_DEREF:
+      // When the dereferenced type is a multidimensional array
+      if (node->type->type == TYPE_ARRAY)
+      {
+        node->lhs->type = node->type;
+        return node->lhs;
+      }
+      break;
+    case ND_SIZEOF:
+      node->kind = ND_NUM;
+      node->num_val = size_of(node->lhs->type);
+      break;
+    case ND_VAR:
+      if (node->variable.var->is_local &&
+          !(node->variable.var->storage_class_specifier & 1 << 1) &&
+          node->variable.is_new_var)
+        node->variable.var->offset =
+            calculate_offset(size_of(node->type), align_of(node->type));
+      if (is_root)
+      {
+        node->kind = ND_NOP;
+        node->lhs = NULL;
+        node->rhs = NULL;
+      }
+      break;
+    case ND_STRING:
+      // TODO: Behavior is different for ND_ARRAY
+      node->literal_name = add_string_literal(node->token);
+      break;
+    case ND_CAST:
+      if (node->type->type == TYPE_VOID)
+      {
+        node->kind = ND_NOP;
+        node->lhs = NULL;
+        node->rhs = NULL;
+      }
       return node;
-    }
-    node->lhs->type = node->type;
-    return node->lhs;
-  default:
-    break;
+    default: break;
   }
   return node;
 }
@@ -658,6 +752,7 @@ FuncBlock *analyzer(FuncBlock *funcblock)
     if (node->kind == ND_FUNCDEF)
     {
       init_nest();
+      ret_type = vector_peek_at(node->type->param_list, 1);
       for (size_t i = 1; i <= vector_size(node->func.expr); i++)
       {
         Node *result =

@@ -63,14 +63,12 @@ struct Type
 {
   TypeKind type;
   Type *ptr_to;        // Used for TYPE_PTR, TYPE_ARRAY, TYPE_TYPEDEF
-                       // union
-                       // {
+                       // MUST NOT be a union
   bool is_signed;      // Used for integer types like TYPE_INT
   size_t size;         // Used for TYPE_ARRAY 0 is unknown
   size_t type_num;     // Used for TYPE_STRUCT
   Vector *param_list;  // Used for TYPE_FUNC, first argument is return type,
                        // others are argument types,
-  // };
 };
 
 typedef struct Node Node;  // Define only to include parser.h

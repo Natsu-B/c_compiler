@@ -139,7 +139,7 @@ extern long long include_level;
 
 bool ident_replacement_recursive(Token *token, Vector *hide_set)
 {
-  if (token->len == 8)
+  if (token->kind != TK_STRING && token->len == 8)
   {
     if (!strncmp(token->str, "__FILE__", 8))
     {

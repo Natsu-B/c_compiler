@@ -25,7 +25,7 @@ typedef enum
   ND_SUB,              // -
   ND_MUL,              // *
   ND_DIV,              // /
-  ND_REM,             // %
+  ND_REM,              // %
   ND_EQ,               // ==
   ND_NEQ,              // !=
   ND_LT,               // <
@@ -77,6 +77,9 @@ typedef enum
   ND_COMMA,            // Comma operator
   ND_INITIALIZER,      // array or struct initializer
   ND_CAST,             // Type cast
+  ND_SIGN_EXTEND,      // signed extend
+  ND_ZERO_EXTEND,      // unsigned exten
+  ND_TRUNCATE,         // truncation
   ND_EVAL,             // Cast to bool
   ND_DECLARATOR_LIST,  // declarator list
   ND_VARIABLE_ARGS,    // Variadic arguments
@@ -120,7 +123,7 @@ enum function_type
 
 // For debug use. Must be added if NodeKind is added.
 #define NodeKindTable                                                         \
-  "ND_NOP", "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_REM", "ND_EQ",       \
+  "ND_NOP", "ND_ADD", "ND_SUB", "ND_MUL", "ND_DIV", "ND_REM", "ND_EQ",        \
       "ND_NEQ", "ND_LT", "ND_LTE", "ND_ASSIGN", "ND_ADDR", "ND_DEREF",        \
       "ND_LOGICAL_NOT", "ND_NOT", "ND_UNARY_PLUS", "ND_UNARY_MINUS",          \
       "ND_PREINCREMENT", "ND_PREDECREMENT", "ND_POSTINCREMENT",               \
@@ -131,8 +134,8 @@ enum function_type
       "ND_RIGHT_SHIFT", "ND_ASSIGNMENT", "ND_VAR", "ND_ARRAY", "ND_DOT",      \
       "ND_ARROW", "ND_FIELD", "ND_NUM", "ND_BLOCK", "ND_DISCARD_EXPR",        \
       "ND_STIRNG", "ND_GOTO", "ND_LABEL", "ND_CASE", "ND_SWITCH", "ND_COMMA", \
-      "ND_INITIALIZER", "ND_CAST", "ND_EVAL", "ND_DECLARATOR_LIST",           \
-      "ND_VARIABLE_ARGS"
+      "ND_INITIALIZER", "ND_CAST", "ND_SIGN_EXTEND", "ND_ZERO_EXTEND",        \
+      "ND_TRUNCATE", "ND_EVAL", "ND_DECLARATOR_LIST", "ND_VARIABLE_ARGS"
 extern const char *nodekindlist[ND_END];
 
 struct Node

@@ -82,10 +82,19 @@ typedef enum
   IR_STRING,  // string literal
 } IRKind;
 
+typedef enum
+{
+  SIZE_RESERVED,
+  SIZE_BYTE,   // 1byte
+  SIZE_WORD,   // 2byte
+  SIZE_DWORD,  // 4byte
+  SIZE_QWORD,  // 8byte
+} OperandSize;
+
 typedef struct
 {
   size_t reg_num;
-  size_t reg_size;
+  OperandSize reg_size;
   Vector *used_list;  // list of IR which is used the IR_REG
 } IR_REG;
 

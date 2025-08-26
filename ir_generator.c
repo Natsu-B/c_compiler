@@ -67,6 +67,18 @@ static char *gen_label()
   return name;
 }
 
+OperandSize num2OpSize(size_t num)
+{
+  switch (num)
+  {
+    case 1: return SIZE_BYTE;
+    case 2: return SIZE_WORD;
+    case 4: return SIZE_DWORD;
+    case 8: return SIZE_QWORD;
+    default: unreachable(); return SIZE_RESERVED;
+  }
+}
+
 // Forward declarations
 static IR_REG *gen_addr(Vector *blocks, Vector *labels, IR_Blocks **irs,
                         Node *node);
@@ -299,6 +311,7 @@ static IR_REG *gen_addr(Vector *blocks, Vector *labels, IR_Blocks **irs,
       else
         ir->lea.var_offset = node->variable.var->offset;
       IR_REG *dst_reg_ptr = gen_reg();
+      dst_reg_ptr->reg_size = SIZE_QWORD;  // ptr
       vector_push(dst_reg_ptr->used_list, ir);
       ir->lea.dst_reg = dst_reg_ptr;
       output_debug("gen_addr: LEA var name = %.*s", (int)ir->lea.var_name_len,
@@ -328,6 +341,7 @@ static IR_REG *gen_addr(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->bin_op.rhs_reg = offset_val;
       vector_push(offset_val->used_list, ir);
       IR_REG *dst_reg = gen_reg();
+      dst_reg->reg_size = SIZE_QWORD;  // ptr
       ir->bin_op.dst_reg = dst_reg;
       vector_push(dst_reg->used_list, ir);
       vector_push((*irs)->IRs, ir);
@@ -353,6 +367,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->mov.is_imm = true;
       ir->mov.imm_val = node->num_val;
       IR_REG *dst_reg_ptr = gen_reg();
+      dst_reg_ptr->reg_size = SIZE_DWORD;  // int
       ir->mov.dst_reg = dst_reg_ptr;
       vector_push(dst_reg_ptr->used_list, ir);
       vector_push((*irs)->IRs, ir);
@@ -375,6 +390,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       vector_push(addr_reg_ptr->used_list, ir);
       ir->mem.offset = 0;
       IR_REG *reg_ptr = gen_reg();
+      reg_ptr->reg_size = num2OpSize(size_of_real(node->type->type));
       ir->mem.reg = reg_ptr;
       vector_push(reg_ptr->used_list, ir);
       ir->mem.size = size_of_real(node->type->type);
@@ -394,6 +410,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
         unreachable();
       ir->lea.var_name_len = strlen(node->literal_name);
       IR_REG *dst_reg_ptr = gen_reg();
+      dst_reg_ptr->reg_size = SIZE_DWORD;  // ptr
       ir->lea.dst_reg = dst_reg_ptr;
       vector_push(dst_reg_ptr->used_list, ir);
       vector_push((*irs)->IRs, ir);
@@ -657,6 +674,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       char *false_label = gen_label();
       char *end_label = gen_label();
       IR_REG *dst_reg_ptr = gen_reg();
+      dst_reg_ptr->reg_size = num2OpSize(size_of_real(node->type->type));
 
       IR_REG *condition = gen_stmt(blocks, labels, irs, node->lhs);
       IR *jump = calloc(1, sizeof(IR));
@@ -760,6 +778,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
           cmp->bin_op.rhs_reg = rhs_reg;
           vector_push(rhs_reg->used_list, cmp);
           IR_REG *cmp_result = gen_reg();
+          cmp_result->reg_size = SIZE_DWORD;  // int
           cmp->bin_op.dst_reg = cmp_result;
           vector_push(cmp_result->used_list, cmp);
           vector_push((*irs)->IRs, cmp);
@@ -829,6 +848,8 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->call.func_name_size = node->token->len;
       ir->call.args = args;
       IR_REG *dst_reg_ptr = gen_reg();  // Register to receive the return value.
+      dst_reg_ptr->reg_size = num2OpSize(size_of_real(
+          ((Type *)vector_peek_at(node->type->param_list, 1))->type));
       ir->call.dst_reg = dst_reg_ptr;
       vector_push(dst_reg_ptr->used_list, ir);
       vector_push((*irs)->IRs, ir);
@@ -893,6 +914,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       vector_push(addr_reg_ptr->used_list, ir);
       ir->mem.offset = 0;
       IR_REG *reg_ptr = gen_reg();
+      reg_ptr->reg_size = num2OpSize(size_of_real(node->type->type));
       ir->mem.reg = reg_ptr;
       vector_push(reg_ptr->used_list, ir);
       ir->mem.size = size_of_real(node->type->type);
@@ -920,6 +942,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->un_op.src_reg = src_reg_ptr;
       vector_push(src_reg_ptr->used_list, ir);
       IR_REG *dst_reg_ptr = gen_reg();
+      dst_reg_ptr = num2OpSize(size_of_real(node->type->type));
       ir->un_op.dst_reg = dst_reg_ptr;
       vector_push(dst_reg_ptr->used_list, ir);
       vector_push((*irs)->IRs, ir);
@@ -942,6 +965,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->bin_op.rhs_reg = rhs_reg;
       vector_push(rhs_reg->used_list, ir);
       IR_REG *dst_reg_ptr = gen_reg();
+      dst_reg_ptr->reg_size = SIZE_BYTE;  // bool
       ir->bin_op.dst_reg = dst_reg_ptr;
       vector_push(dst_reg_ptr->used_list, ir);
       vector_push((*irs)->IRs, ir);
@@ -978,6 +1002,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     {
       IR_REG *pre_reg = gen_stmt(blocks, labels, irs, node->lhs);
       IR_REG *post_reg = gen_reg();
+      post_reg->reg_size = num2OpSize(size_of_real(node->type->type));
       bool is_inc =
           node->kind == ND_PREINCREMENT || node->kind == ND_POSTINCREMENT;
       IR *ir = calloc(1, sizeof(IR));
@@ -1072,6 +1097,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->bin_op.rhs_reg = rhs_ptr;
       vector_push(rhs_ptr->used_list, ir);
       IR_REG *dst_reg_ptr = gen_reg();
+      dst_reg_ptr->reg_size = num2OpSize(size_of_real(node->type->type));
       ir->bin_op.dst_reg = dst_reg_ptr;
       vector_push(dst_reg_ptr->used_list, ir);
       vector_push((*irs)->IRs, ir);
@@ -1082,6 +1108,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       char *false_label = gen_label();
       char *end_label = gen_label();
       IR_REG *dst_reg_ptr = gen_reg();
+      dst_reg_ptr->reg_size = SIZE_DWORD;  // int
 
       IR_REG *lhs_ptr = gen_stmt(blocks, labels, irs, node->lhs);
       IR *ir1 = calloc(1, sizeof(IR));
@@ -1147,6 +1174,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       char *false_label = gen_label();
       char *end_label = gen_label();
       IR_REG *dst_reg_ptr = gen_reg();
+      dst_reg_ptr->reg_size = SIZE_DWORD;  // int
 
       IR_REG *lhs_ptr = gen_stmt(blocks, labels, irs, node->lhs);
       IR *ir1 = calloc(1, sizeof(IR));
@@ -1246,10 +1274,28 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       gen_stmt(blocks, labels, irs, node->rhs);
       return NULL;
     }
-    case ND_CAST:
+    case ND_CAST: return gen_stmt(blocks, labels, irs, node->lhs);
     case ND_SIGN_EXTEND:
     case ND_ZERO_EXTEND:
-    case ND_TRUNCATE: return gen_stmt(blocks, labels, irs, node->lhs);
+    case ND_TRUNCATE:
+    {
+      IR *ir = calloc(1, sizeof(IR));
+      switch (node->kind)
+      {
+        case ND_SIGN_EXTEND: ir->kind = IR_SIGN_EXTEND; break;
+        case ND_ZERO_EXTEND: ir->kind = IR_ZERO_EXTEND; break;
+        case ND_TRUNCATE: ir->kind = IR_TRUNCATE; break;
+        default: unreachable(); break;
+      }
+      IR_REG *src_reg = gen_stmt(blocks, labels, irs, node->lhs);
+      ir->memsize.src_reg = src_reg;
+      vector_push(src_reg->used_list, ir);
+      IR_REG *dst_reg = gen_reg();
+      dst_reg->reg_size = num2OpSize(size_of_real(node->type->type));
+      ir->memsize.dst_reg = dst_reg;
+      vector_push(dst_reg->used_list, ir);
+      return dst_reg;
+    }
     default:
       error_exit("unexpected node kind: %d", node->kind);
       return 0;  // Unreachable

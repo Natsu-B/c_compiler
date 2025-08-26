@@ -121,21 +121,13 @@ typedef struct
   };
 } X86_Operand;
 
-typedef enum
-{
-  SIZE_8,   // byte (e.g., al, dil)
-  SIZE_16,  // word (e.g., ax, dx)
-  SIZE_32,  // dword (e.g., eax, edx)
-  SIZE_64,  // qword (e.g., rax, rdx)
-} X86_OperandSize;
-
 // TODO: IMUL 3 operand instruction
 #define MAX_OPERANDS 2
 
 typedef struct
 {
   X86_ASMKind kind;
-  X86_OperandSize size;
+  OperandSize size;
   X86_Operand operands[MAX_OPERANDS];
   char* jump_target_label;
   // Bitmask: the bit corresponding to enum register_name

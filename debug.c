@@ -555,8 +555,13 @@ static void fprint_ir(FILE *fp, IR *ir, bool mermaid_escape)
   {
     case IR_CALL:
     {
-      fprintf(fp, "CALL r%zu, %.*s, (", ir->call.dst_reg->reg_num,
-              (int)ir->call.func_name_size, ir->call.func_name);
+      if (ir->call.dst_reg)
+        fprintf(fp, "CALL r%zu, %.*s, (", ir->call.dst_reg->reg_num,
+                (int)ir->call.func_name_size, ir->call.func_name);
+      else
+        fprintf(fp, "CALL %.*s, (", (int)ir->call.func_name_size,
+                ir->call.func_name);
+
       for (size_t k = 0; k < vector_size(ir->call.args); k++)
       {
         IR_REG *reg = vector_peek_at(ir->call.args, k + 1);
@@ -568,13 +573,31 @@ static void fprint_ir(FILE *fp, IR *ir, bool mermaid_escape)
     }
     case IR_FUNC_PROLOGUE: fprintf(fp, "PROLOGUE"); break;
     case IR_FUNC_EPILOGUE: fprintf(fp, "EPILOGUE"); break;
-    case IR_RET: fprintf(fp, "RET r%zu", ir->ret.src_reg->reg_num); break;
+    case IR_RET:
+      if (ir->ret.return_void)
+        fprintf(fp, "RET");
+      else
+        fprintf(fp, "RET r%zu", ir->ret.src_reg->reg_num);
+      break;
     case IR_MOV:
       if (ir->mov.is_imm)
-        fprintf(fp, "MOV r%zu, %lld", ir->mov.dst_reg->reg_num, ir->mov.imm_val);
+        fprintf(fp, "MOV r%zu, %lld", ir->mov.dst_reg->reg_num,
+                ir->mov.imm_val);
       else
         fprintf(fp, "MOV r%zu, r%zu", ir->mov.dst_reg->reg_num,
                 ir->mov.src_reg->reg_num);
+      break;
+    case IR_SIGN_EXTEND:
+      fprintf(fp, "SIGN_EXTEND r%zu, r%zu", ir->memsize.dst_reg->reg_num,
+              ir->memsize.src_reg->reg_num);
+      break;
+    case IR_ZERO_EXTEND:
+      fprintf(fp, "ZERO_EXTEND r%zu, r%zu", ir->memsize.dst_reg->reg_num,
+              ir->memsize.src_reg->reg_num);
+      break;
+    case IR_TRUNCATE:
+      fprintf(fp, "TRUNCATE r%zu, r%zu", ir->memsize.dst_reg->reg_num,
+              ir->memsize.src_reg->reg_num);
       break;
     case IR_ADD:
       fprintf(fp, "ADD %s r%zu, r%zu, r%zu",
@@ -728,6 +751,21 @@ static void fprint_ir(FILE *fp, IR *ir, bool mermaid_escape)
   }
 }
 
+static void check_reg_used_list(IR_REG *reg, IR *ir_to_find)
+{
+  if (!reg)
+    return;
+  if (reg->reg_size == SIZE_RESERVED)
+    error_exit("r%zu size is not yet specified\n", reg->reg_num);
+  for (size_t i = 1; i <= vector_size(reg->used_list); i++)
+  {
+    if (vector_peek_at(reg->used_list, i) == ir_to_find)
+    {
+      return;
+    }
+  }
+  error_exit("IR not found in used_list for r%zu\n", reg->reg_num);
+}
 
 void dump_ir_fp(IRProgram *program, FILE *fp)
 {
@@ -787,6 +825,89 @@ void dump_ir_fp(IRProgram *program, FILE *fp)
       for (size_t k = 0; k < vector_size(irs->IRs); k++)
       {
         IR *ir = vector_peek_at(irs->IRs, k + 1);
+        // Check used_list for all registers in the IR
+        switch (ir->kind)
+        {
+          case IR_CALL:
+            if (ir->call.dst_reg)
+              check_reg_used_list(ir->call.dst_reg, ir);
+            for (size_t arg_idx = 1; arg_idx <= vector_size(ir->call.args);
+                 arg_idx++)
+            {
+              check_reg_used_list(vector_peek_at(ir->call.args, arg_idx), ir);
+            }
+            break;
+          case IR_BUILTIN_VA_LIST:
+            check_reg_used_list(ir->va_list.va_reg, ir);
+            break;
+          case IR_MOV:
+            check_reg_used_list(ir->mov.dst_reg, ir);
+            if (!ir->mov.is_imm)
+            {
+              check_reg_used_list(ir->mov.src_reg, ir);
+            }
+            break;
+          case IR_SIGN_EXTEND:
+          case IR_ZERO_EXTEND:
+          case IR_TRUNCATE:
+            check_reg_used_list(ir->memsize.dst_reg, ir);
+            check_reg_used_list(ir->memsize.src_reg, ir);
+            break;
+          case IR_ADD:
+          case IR_SUB:
+          case IR_MUL:
+          case IR_OP_DIV:
+          case IR_OP_IDIV:
+          case IR_EQ:
+          case IR_NEQ:
+          case IR_LT:
+          case IR_LTE:
+          case IR_OR:
+          case IR_XOR:
+          case IR_AND:
+          case IR_SHL:
+          case IR_SHR:
+          case IR_SAL:
+          case IR_SAR:
+            check_reg_used_list(ir->bin_op.dst_reg, ir);
+            check_reg_used_list(ir->bin_op.lhs_reg, ir);
+            check_reg_used_list(ir->bin_op.rhs_reg, ir);
+            break;
+          case IR_NEG:
+          case IR_NOT:
+          case IR_BIT_NOT:
+            check_reg_used_list(ir->un_op.dst_reg, ir);
+            check_reg_used_list(ir->un_op.src_reg, ir);
+            break;
+          case IR_JNE:
+          case IR_JE: check_reg_used_list(ir->jmp.cond_reg, ir); break;
+          case IR_STORE_ARG:
+            check_reg_used_list(ir->store_arg.dst_reg, ir);
+            break;
+          case IR_LOAD:
+            check_reg_used_list(ir->mem.reg, ir);
+            check_reg_used_list(ir->mem.mem_reg, ir);
+            break;
+          case IR_STORE:
+            check_reg_used_list(ir->mem.reg, ir);
+            check_reg_used_list(ir->mem.mem_reg, ir);
+            break;
+          case IR_LEA: check_reg_used_list(ir->lea.dst_reg, ir); break;
+          case IR_RET:
+            if (!ir->ret.return_void)
+            {
+              check_reg_used_list(ir->ret.src_reg, ir);
+            }
+            break;
+          // No registers to check for other IR kinds
+          case IR_FUNC_PROLOGUE:
+          case IR_FUNC_EPILOGUE:
+          case IR_BUILTIN_ASM:
+          case IR_BUILTIN_VA_ARGS:
+          case IR_JMP:
+          case IR_LABEL:
+          case IR_STRING: break;
+        }
         fprintf(fp, "  ");
         fprint_ir(fp, ir, false);
         fprintf(fp, "\n");
@@ -794,7 +915,6 @@ void dump_ir_fp(IRProgram *program, FILE *fp)
     }
   }
 }
-
 
 void dump_ir(IRProgram *program, char *path)
 {

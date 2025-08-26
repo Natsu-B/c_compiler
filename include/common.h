@@ -56,6 +56,11 @@ typedef enum
   IR_STORE_ARG,
   IR_LEA,
 
+  // memory size
+  IR_SIGN_EXTEND,
+  IR_ZERO_EXTEND,
+  IR_TRUNCATE,
+
   // bitwise operations
   IR_AND,      // &
   IR_OR,       // |
@@ -77,6 +82,13 @@ typedef enum
   IR_STRING,  // string literal
 } IRKind;
 
+typedef struct
+{
+  size_t reg_num;
+  size_t reg_size;
+  Vector *used_list;  // list of IR which is used the IR_REG
+} IR_REG;
+
 typedef struct IR IR;
 struct IR
 {
@@ -89,69 +101,73 @@ struct IR
       char *func_name;
       size_t func_name_size;
       Vector *args;  // Vector of virtual registers
-      size_t dst_reg;
+      IR_REG *dst_reg;
     } call;
 
     // IR_BUILTIN_VA_LIST
     struct
     {
-      size_t va_reg;  // virtual register for va_list
+      IR_REG *va_reg;  // virtual register for va_list
     } va_list;
 
     // IR_MOV
     struct
     {
-      size_t dst_reg;
-      size_t src_reg;
+      IR_REG *dst_reg;
+      IR_REG *src_reg;
       long long imm_val;  // for immediate value
       bool is_imm;
     } mov;
 
+    // memory size
+    struct
+    {
+      IR_REG *dst_reg;
+      IR_REG *src_reg;
+    } memsize;
+
     // Arithmetic, bitwise, compare operators
     struct
     {
-      size_t dst_reg;
-      size_t lhs_reg;
-      size_t rhs_reg;
-      size_t lhs_size;
-      size_t rhs_size;
+      IR_REG *dst_reg;
+      IR_REG *lhs_reg;
+      IR_REG *rhs_reg;
     } bin_op;
 
     // Unary operators
     struct
     {
-      size_t dst_reg;
-      size_t src_reg;
+      IR_REG *dst_reg;
+      IR_REG *src_reg;
     } un_op;
 
     // IR_JMP, IR_JNE, IR_JE
     struct
     {
       char *label;
-      size_t cond_reg;  // not used for IR_JMP
+      IR_REG *cond_reg;  // not used for IR_JMP
     } jmp;
 
     // IR_STORE_ARG
     struct
     {
-      size_t dst_reg;
-      int arg_index;
-      size_t size;
+      IR_REG *dst_reg;
+      size_t arg_index;
     } store_arg;
 
     // IR_LOAD, IR_STORE
     struct
     {
-      size_t reg;
-      size_t mem_reg;  // register holding memory address
-      int offset;
+      IR_REG *reg;
+      IR_REG *mem_reg;  // register holding memory address
+      size_t offset;
       size_t size;  // Size of the data being accessed
     } mem;
 
     // IR_LEA
     struct
     {
-      size_t dst_reg;
+      IR_REG *dst_reg;
       bool is_local;
       bool is_static;
       char *var_name;
@@ -162,7 +178,7 @@ struct IR
     // IR_RET
     struct
     {
-      size_t src_reg;
+      IR_REG *src_reg;
       bool return_void;
     } ret;
 
@@ -180,6 +196,7 @@ struct IR
       char *str;
     } string;
 
+    // IR_BUILTIN_ASM
     struct
     {
       char *asm_str;
@@ -212,8 +229,8 @@ typedef struct
       char *function_name;
       size_t function_name_size;
       bool is_static;
-      size_t stack_size;        // Total stack size for local variables
-      size_t num_virtual_regs;  // Number of virtual registers used
+      size_t stack_size;         // Total stack size for local variables
+      Vector *num_virtual_regs;  // List of virtual registers
     } user_defined;
   };
 } IRFunc;

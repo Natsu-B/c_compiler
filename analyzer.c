@@ -474,6 +474,7 @@ static void add_type_internal(Node *const node)
     {
       if (node->lhs)
       {
+        // TODO: check type conversion
         node->lhs = create_implicit_cast_node(node->lhs, ret_type);
       }
       node->type = alloc_type(TYPE_VOID);

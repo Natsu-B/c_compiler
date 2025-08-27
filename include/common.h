@@ -33,17 +33,22 @@ typedef enum
   IR_MOV,
 
   // arithmetic operator
-  IR_ADD,      // +
-  IR_SUB,      // -
-  IR_MUL,      // *
-  IR_OP_DIV,   // /
-  IR_OP_IDIV,  // %
+  IR_ADD,   // +
+  IR_SUB,   // -
+  IR_MUL,   // * (signed)
+  IR_MULU,  // * (unsigned)
+  IR_DIV,   // / (signed)
+  IR_DIVU,  // / (unsigned)
+  IR_REM,   // % (signed)
+  IR_REMU,  // % (unsigned)
 
   // compare
-  IR_EQ,   // ==
-  IR_NEQ,  // !=
-  IR_LT,   // <
-  IR_LTE,  // <=
+  IR_EQ,    // ==
+  IR_NEQ,   // !=
+  IR_LT,    // < (signed)
+  IR_LTU,   // < (unsigned)
+  IR_LTE,   // <= (signed)
+  IR_LTEU,  // <= (unsigned)
 
   // jump instruction
   IR_JMP,  // TERMINATOR: jmp

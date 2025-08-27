@@ -1072,21 +1072,21 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       {
         case ND_ADD: ir->kind = IR_ADD; break;
         case ND_SUB: ir->kind = IR_SUB; break;
-        case ND_MUL: ir->kind = IR_MUL; break;
-        case ND_DIV: ir->kind = IR_OP_DIV; break;
-        case ND_REM: ir->kind = IR_OP_IDIV; break;
+        case ND_MUL: ir->kind = node->type->is_signed ? IR_MUL : IR_MULU; break;
+        case ND_DIV: ir->kind = node->type->is_signed ? IR_DIV : IR_DIVU; break;
+        case ND_REM: ir->kind = node->type->is_signed ? IR_REM : IR_REMU; break;
         case ND_EQ: ir->kind = IR_EQ; break;
         case ND_NEQ: ir->kind = IR_NEQ; break;
-        case ND_LT: ir->kind = IR_LT; break;
-        case ND_LTE: ir->kind = IR_LTE; break;
+        case ND_LT: ir->kind = node->type->is_signed ? IR_LT : IR_LTU; break;
+        case ND_LTE: ir->kind = node->type->is_signed ? IR_LTE : IR_LTEU; break;
         case ND_INCLUSIVE_OR: ir->kind = IR_OR; break;
         case ND_EXCLUSIVE_OR: ir->kind = IR_XOR; break;
         case ND_AND: ir->kind = IR_AND; break;
         case ND_LEFT_SHIFT:
-          ir->kind = node->lhs->type->is_signed ? IR_SAL : IR_SHL;
+          ir->kind = node->type->is_signed ? IR_SAL : IR_SHL;
           break;
         case ND_RIGHT_SHIFT:
-          ir->kind = node->lhs->type->is_signed ? IR_SAR : IR_SHR;
+          ir->kind = node->type->is_signed ? IR_SAR : IR_SHR;
           break;
         default: unreachable();
       }

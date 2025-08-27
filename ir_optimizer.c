@@ -173,12 +173,17 @@ void analyze_live_variable_internal(IR_Blocks* blocks)
       case IR_ADD:
       case IR_SUB:
       case IR_MUL:
-      case IR_OP_DIV:
-      case IR_OP_IDIV:
+      case IR_MULU:
+      case IR_DIV:
+      case IR_DIVU:
+      case IR_REM:
+      case IR_REMU:
       case IR_EQ:
       case IR_NEQ:
       case IR_LT:
+      case IR_LTU:
       case IR_LTE:
+      case IR_LTEU:
       case IR_OR:
       case IR_XOR:
       case IR_AND:

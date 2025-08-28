@@ -753,6 +753,10 @@ FuncBlock *analyzer(FuncBlock *funcblock)
     if (node->kind == ND_FUNCDEF)
     {
       init_nest();
+      if (node->token->len == 4 && !strncmp(node->token->str, "main", 4) &&
+          node->type->type == TYPE_INT)
+        error_at(node->token->str, node->token->len,
+                 "main function should return int type");
       ret_type = vector_peek_at(node->type->param_list, 1);
       for (size_t i = 1; i <= vector_size(node->func.expr); i++)
       {

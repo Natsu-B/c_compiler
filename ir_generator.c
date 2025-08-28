@@ -172,11 +172,11 @@ IRProgram *gen_ir(FuncBlock *parsed)
         vector_push(func->IR_Blocks, irs);
 
         reg_id = 0;  // Reset register ID for each function
+        virtual_regs = func->user_defined.num_virtual_regs = vector_new();
         gen_stmt(func->IR_Blocks, func->labels, &irs,
                  fb->node);  // Generate IR for statements
 
         func->user_defined.stack_size = fb->stacksize;
-        virtual_regs = func->user_defined.num_virtual_regs = vector_new();
         vector_push(program->functions, func);
         break;
       }
@@ -263,7 +263,7 @@ static IR_REG *gen_assign(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->mem.mem_reg = lhs_addr_ptr;
       vector_push(lhs_addr_ptr->used_list, ir);
       ir->mem.offset = padding + done_init;
-      ir->mem.size = size;
+      ir->mem.size = num2OpSize(size);
       vector_push((*irs)->IRs, ir);
       done_init += size;
     }
@@ -282,7 +282,7 @@ static IR_REG *gen_assign(Vector *blocks, Vector *labels, IR_Blocks **irs,
     ir->mem.mem_reg = lhs_addr_ptr;
     vector_push(lhs_addr_ptr->used_list, ir);
     ir->mem.offset = padding;
-    ir->mem.size = assign_size;
+    ir->mem.size = num2OpSize(assign_size);
     vector_push((*irs)->IRs, ir);
     return rhs_ptr;  // The result of an assignment expression is the RHS
                      // value.
@@ -309,7 +309,7 @@ static IR_REG *gen_addr(Vector *blocks, Vector *labels, IR_Blocks **irs,
         ir->lea.var_name_len = node->variable.var->len;
       }
       else
-        ir->lea.var_offset = node->variable.var->offset;
+        ir->lea.var_offset = -node->variable.var->offset;
       IR_REG *dst_reg_ptr = gen_reg();
       dst_reg_ptr->reg_size = SIZE_QWORD;  // ptr
       vector_push(dst_reg_ptr->used_list, ir);
@@ -393,7 +393,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       reg_ptr->reg_size = num2OpSize(size_of_real(node->type->type));
       ir->mem.reg = reg_ptr;
       vector_push(reg_ptr->used_list, ir);
-      ir->mem.size = size_of_real(node->type->type);
+      ir->mem.size = num2OpSize(size_of_real(node->type->type));
       vector_push((*irs)->IRs, ir);
       return reg_ptr;
     }
@@ -929,7 +929,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       reg_ptr->reg_size = num2OpSize(size_of_real(node->type->type));
       ir->mem.reg = reg_ptr;
       vector_push(reg_ptr->used_list, ir);
-      ir->mem.size = size_of_real(node->type->type);
+      ir->mem.size = num2OpSize(size_of_real(node->type->type));
       vector_push((*irs)->IRs, ir);
       return reg_ptr;
     }
@@ -954,7 +954,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->un_op.src_reg = src_reg_ptr;
       vector_push(src_reg_ptr->used_list, ir);
       IR_REG *dst_reg_ptr = gen_reg();
-      dst_reg_ptr = num2OpSize(size_of_real(node->type->type));
+      dst_reg_ptr->reg_size = num2OpSize(size_of_real(node->type->type));
       ir->un_op.dst_reg = dst_reg_ptr;
       vector_push(dst_reg_ptr->used_list, ir);
       vector_push((*irs)->IRs, ir);
@@ -1053,7 +1053,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       assign->mem.mem_reg = lhs_addr_ptr;
       vector_push(lhs_addr_ptr->used_list, assign);
       assign->mem.offset = 0;
-      assign->mem.size = size_of_real(node->type->type);
+      assign->mem.size = num2OpSize(size_of_real(node->type->type));
       vector_push((*irs)->IRs, assign);
 
       if (node->kind == ND_PREINCREMENT || node->kind == ND_PREDECREMENT)

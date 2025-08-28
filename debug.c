@@ -533,17 +533,17 @@ void print_definition()
   }
 }
 
-static const char *get_size_prefix(size_t size)
+static const char *get_size_prefix(OperandSize size)
 {
   switch (size)
   {
-    case 1: return "BYTE";
-    case 2: return "WORD";
-    case 4: return "DWORD";
-    case 8: return "QWORD";
+    case SIZE_BYTE: return "BYTE";
+    case SIZE_WORD: return "WORD";
+    case SIZE_DWORD: return "DWORD";
+    case SIZE_QWORD: return "QWORD";
     default:
     {
-      error_exit("invalid access size: %u", size);
+      error_exit("invalid access size: %d", size);
       return NULL;
     }
   }
@@ -617,14 +617,32 @@ static void fprint_ir(FILE *fp, IR *ir, bool mermaid_escape)
               ir->bin_op.dst_reg->reg_num, ir->bin_op.lhs_reg->reg_num,
               ir->bin_op.rhs_reg->reg_num);
       break;
-    case IR_OP_DIV:
+    case IR_MULU:
+      fprintf(fp, "MULU %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_reg->reg_size),
+              ir->bin_op.dst_reg->reg_num, ir->bin_op.lhs_reg->reg_num,
+              ir->bin_op.rhs_reg->reg_num);
+      break;
+    case IR_DIV:
       fprintf(fp, "DIV %s r%zu, r%zu, r%zu",
               get_size_prefix(ir->bin_op.lhs_reg->reg_size),
               ir->bin_op.dst_reg->reg_num, ir->bin_op.lhs_reg->reg_num,
               ir->bin_op.rhs_reg->reg_num);
       break;
-    case IR_OP_IDIV:
-      fprintf(fp, "IDIV %s r%zu, r%zu, r%zu",
+    case IR_DIVU:
+      fprintf(fp, "DIVU %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_reg->reg_size),
+              ir->bin_op.dst_reg->reg_num, ir->bin_op.lhs_reg->reg_num,
+              ir->bin_op.rhs_reg->reg_num);
+      break;
+    case IR_REM:
+      fprintf(fp, "REM %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_reg->reg_size),
+              ir->bin_op.dst_reg->reg_num, ir->bin_op.lhs_reg->reg_num,
+              ir->bin_op.rhs_reg->reg_num);
+      break;
+    case IR_REMU:
+      fprintf(fp, "REMU %s r%zu, r%zu, r%zu",
               get_size_prefix(ir->bin_op.lhs_reg->reg_size),
               ir->bin_op.dst_reg->reg_num, ir->bin_op.lhs_reg->reg_num,
               ir->bin_op.rhs_reg->reg_num);
@@ -647,8 +665,20 @@ static void fprint_ir(FILE *fp, IR *ir, bool mermaid_escape)
               ir->bin_op.dst_reg->reg_num, ir->bin_op.lhs_reg->reg_num,
               ir->bin_op.rhs_reg->reg_num);
       break;
+    case IR_LTU:
+      fprintf(fp, "LTU %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_reg->reg_size),
+              ir->bin_op.dst_reg->reg_num, ir->bin_op.lhs_reg->reg_num,
+              ir->bin_op.rhs_reg->reg_num);
+      break;
     case IR_LTE:
       fprintf(fp, "LTE %s r%zu, r%zu, r%zu",
+              get_size_prefix(ir->bin_op.lhs_reg->reg_size),
+              ir->bin_op.dst_reg->reg_num, ir->bin_op.lhs_reg->reg_num,
+              ir->bin_op.rhs_reg->reg_num);
+      break;
+    case IR_LTEU:
+      fprintf(fp, "LTEU %s r%zu, r%zu, r%zu",
               get_size_prefix(ir->bin_op.lhs_reg->reg_size),
               ir->bin_op.dst_reg->reg_num, ir->bin_op.lhs_reg->reg_num,
               ir->bin_op.rhs_reg->reg_num);
@@ -707,11 +737,11 @@ static void fprint_ir(FILE *fp, IR *ir, bool mermaid_escape)
       fprintf(fp, "JE %s, r%zu", ir->jmp.label, ir->jmp.cond_reg->reg_num);
       break;
     case IR_LOAD:
-      fprintf(fp, "LOAD %s r%zu, [r%zu + %zu]", get_size_prefix(ir->mem.size),
+      fprintf(fp, "LOAD %s r%zu, [r%zu + %d]", get_size_prefix(ir->mem.size),
               ir->mem.reg->reg_num, ir->mem.mem_reg->reg_num, ir->mem.offset);
       break;
     case IR_STORE:
-      fprintf(fp, "STORE %s [r%zu + %zu], r%zu", get_size_prefix(ir->mem.size),
+      fprintf(fp, "STORE %s [r%zu + %d], r%zu", get_size_prefix(ir->mem.size),
               ir->mem.mem_reg->reg_num, ir->mem.offset, ir->mem.reg->reg_num);
       break;
     case IR_STORE_ARG:
@@ -721,7 +751,7 @@ static void fprint_ir(FILE *fp, IR *ir, bool mermaid_escape)
       break;
     case IR_LEA:
       if (ir->lea.is_local)
-        fprintf(fp, "LEA r%zu, LOCAL %zu", ir->lea.dst_reg->reg_num,
+        fprintf(fp, "LEA r%zu, LOCAL %d", ir->lea.dst_reg->reg_num,
                 ir->lea.var_offset);
       else if (ir->lea.is_static)
         fprintf(fp, "LEA r%zu, STATIC %.*s", ir->lea.dst_reg->reg_num,
@@ -739,6 +769,10 @@ static void fprint_ir(FILE *fp, IR *ir, bool mermaid_escape)
       fprintf(fp, "NOT r%zu, r%zu", ir->un_op.dst_reg->reg_num,
               ir->un_op.src_reg->reg_num);
       break;
+    case IR_PHI:
+      fprintf(fp, "PHI r%zu, r%zu, r%zu", ir->phi.dst_reg->reg_num,
+              ir->phi.lhs_reg->reg_num, ir->phi.rhs_reg->reg_num);
+      break;
     case IR_BUILTIN_ASM:
       if (mermaid_escape)
         fprintf(fp, "ASM #%.*s#", (int)ir->builtin_asm.asm_len,
@@ -747,7 +781,8 @@ static void fprint_ir(FILE *fp, IR *ir, bool mermaid_escape)
         fprintf(fp, "ASM \"%.*s\"", (int)ir->builtin_asm.asm_len,
                 ir->builtin_asm.asm_str);
       break;
-    default: fprintf(fp, "unimplemented IR"); break;
+    case IR_BUILTIN_VA_ARGS:
+    case IR_BUILTIN_VA_LIST: break;
   }
 }
 
@@ -856,12 +891,17 @@ void dump_ir_fp(IRProgram *program, FILE *fp)
           case IR_ADD:
           case IR_SUB:
           case IR_MUL:
-          case IR_OP_DIV:
-          case IR_OP_IDIV:
+          case IR_MULU:
+          case IR_DIV:
+          case IR_DIVU:
+          case IR_REM:
+          case IR_REMU:
           case IR_EQ:
           case IR_NEQ:
           case IR_LT:
+          case IR_LTU:
           case IR_LTE:
+          case IR_LTEU:
           case IR_OR:
           case IR_XOR:
           case IR_AND:
@@ -872,6 +912,11 @@ void dump_ir_fp(IRProgram *program, FILE *fp)
             check_reg_used_list(ir->bin_op.dst_reg, ir);
             check_reg_used_list(ir->bin_op.lhs_reg, ir);
             check_reg_used_list(ir->bin_op.rhs_reg, ir);
+            break;
+          case IR_PHI:
+            check_reg_used_list(ir->phi.dst_reg, ir);
+            check_reg_used_list(ir->phi.lhs_reg, ir);
+            check_reg_used_list(ir->phi.rhs_reg, ir);
             break;
           case IR_NEG:
           case IR_NOT:
@@ -905,8 +950,7 @@ void dump_ir_fp(IRProgram *program, FILE *fp)
           case IR_BUILTIN_ASM:
           case IR_BUILTIN_VA_ARGS:
           case IR_JMP:
-          case IR_LABEL:
-          case IR_STRING: break;
+          case IR_LABEL: break;
         }
         fprintf(fp, "  ");
         fprint_ir(fp, ir, false);

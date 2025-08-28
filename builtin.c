@@ -34,6 +34,7 @@ bool is_builtin_function(Node** node, Token* token, bool is_root)
 }
 
 // parse escape sequences
+// argument len is used both in/out
 char* parse_string_literal(char* str, size_t* len)
 {
   char* string = malloc(*len);

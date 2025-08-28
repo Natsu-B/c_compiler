@@ -15,7 +15,7 @@
 #endif
 
 #include "include/error.h"
-#include "include/generator_x86.h"
+#include "include/generator_x64.h"
 #include "include/ir_generator.h"
 #include "include/vector.h"
 
@@ -94,7 +94,7 @@ void generator(IRProgram *program, char *output_filename)
   for (size_t i = 0; i < vector_size(program->functions); i++)
   {
     IRFunc *func = vector_peek_at(program->functions, i + 1);
-    generate_x86(func);
+    generate_x64(func);
   }
 
   fclose(fout);

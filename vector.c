@@ -152,6 +152,15 @@ size_t vector_search(Vector *vec, void *key)
   return 0;
 }
 
+Vector *vector_allocate(size_t size)
+{
+  Vector *vec = vector_new();
+  vec->capacity = (size + 7) / 8 * 8;
+  vec->len = size;
+  vec->data = calloc(1, sizeof(void *) * vec->capacity);
+  return vec;
+}
+
 void vector_free(Vector *vec)
 {
   if (vec->data)

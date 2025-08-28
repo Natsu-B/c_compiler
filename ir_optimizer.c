@@ -156,19 +156,20 @@ void analyze_live_variable_internal(IR_Blocks* blocks)
         for (size_t j = 1; j <= vector_size(ir->call.args); j++)
           add_reg_use(blocks, *(size_t*)vector_peek_at(ir->call.args, j),
                       defined);
-        add_reg_def(blocks, ir->call.dst_reg, defined);
+        add_reg_def(blocks, ir->call.dst_reg->reg_num, defined);
         break;
       case IR_FUNC_PROLOGUE:
       case IR_FUNC_EPILOGUE:
       case IR_BUILTIN_ASM:
       case IR_JMP:
-      case IR_LABEL:
-      case IR_STRING: break;
-      case IR_RET: add_reg_use(blocks, ir->ret.src_reg, defined); break;
+      case IR_LABEL: break;
+      case IR_RET:
+        add_reg_use(blocks, ir->ret.src_reg->reg_num, defined);
+        break;
       case IR_MOV:
         if (!ir->mov.is_imm)
-          add_reg_use(blocks, ir->mov.src_reg, defined);
-        add_reg_def(blocks, ir->mov.dst_reg, defined);
+          add_reg_use(blocks, ir->mov.src_reg->reg_num, defined);
+        add_reg_def(blocks, ir->mov.dst_reg->reg_num, defined);
         break;
       case IR_ADD:
       case IR_SUB:
@@ -191,40 +192,44 @@ void analyze_live_variable_internal(IR_Blocks* blocks)
       case IR_SHL:
       case IR_SAR:
       case IR_SHR:
-        add_reg_use(blocks, ir->bin_op.lhs_reg, defined);
-        add_reg_use(blocks, ir->bin_op.rhs_reg, defined);
-        add_reg_def(blocks, ir->bin_op.dst_reg, defined);
+        add_reg_use(blocks, ir->bin_op.lhs_reg->reg_num, defined);
+        add_reg_use(blocks, ir->bin_op.rhs_reg->reg_num, defined);
+        add_reg_def(blocks, ir->bin_op.dst_reg->reg_num, defined);
         break;
       case IR_PHI:
-        add_reg_use(blocks, ir->phi.lhs_reg, defined);
-        add_reg_use(blocks, ir->phi.rhs_reg, defined);
-        add_reg_def(blocks, ir->phi.dst_reg, defined);
+        add_reg_use(blocks, ir->phi.lhs_reg->reg_num, defined);
+        add_reg_use(blocks, ir->phi.rhs_reg->reg_num, defined);
+        add_reg_def(blocks, ir->phi.dst_reg->reg_num, defined);
         break;
       case IR_JNE:
-      case IR_JE: add_reg_use(blocks, ir->jmp.cond_reg, defined); break;
+      case IR_JE:
+        add_reg_use(blocks, ir->jmp.cond_reg->reg_num, defined);
+        break;
       case IR_LOAD:
-        add_reg_use(blocks, ir->mem.mem_reg, defined);
-        add_reg_def(blocks, ir->mem.reg, defined);
+        add_reg_use(blocks, ir->mem.mem_reg->reg_num, defined);
+        add_reg_def(blocks, ir->mem.reg->reg_num, defined);
         break;
       case IR_STORE:
-        add_reg_use(blocks, ir->mem.mem_reg, defined);
-        add_reg_use(blocks, ir->mem.reg, defined);
+        add_reg_use(blocks, ir->mem.mem_reg->reg_num, defined);
+        add_reg_use(blocks, ir->mem.reg->reg_num, defined);
         break;
       case IR_STORE_ARG:
-        add_reg_def(blocks, ir->store_arg.dst_reg, defined);
+        add_reg_def(blocks, ir->store_arg.dst_reg->reg_num, defined);
         break;
-      case IR_LEA: add_reg_def(blocks, ir->lea.dst_reg, defined); break;
+      case IR_LEA:
+        add_reg_def(blocks, ir->lea.dst_reg->reg_num, defined);
+        break;
       case IR_NOT:
       case IR_BIT_NOT:
       case IR_NEG:
-        add_reg_use(blocks, ir->un_op.src_reg, defined);
-        add_reg_def(blocks, ir->un_op.dst_reg, defined);
+        add_reg_use(blocks, ir->un_op.src_reg->reg_num, defined);
+        add_reg_def(blocks, ir->un_op.dst_reg->reg_num, defined);
         break;
       case IR_SIGN_EXTEND:
       case IR_ZERO_EXTEND:
       case IR_TRUNCATE:
-        add_reg_use(blocks, ir->memsize.src_reg, defined);
-        add_reg_def(blocks, ir->memsize.dst_reg, defined);
+        add_reg_use(blocks, ir->memsize.src_reg->reg_num, defined);
+        add_reg_def(blocks, ir->memsize.dst_reg->reg_num, defined);
         break;
       default: unreachable(); break;
     }

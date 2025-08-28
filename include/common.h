@@ -85,9 +85,6 @@ typedef enum
 
   // label
   IR_LABEL,  // LEADER: jump label
-
-  // string
-  IR_STRING,  // string literal
 } IRKind;
 
 typedef enum
@@ -184,9 +181,9 @@ struct IR
     struct
     {
       IR_REG *reg;
-      IR_REG *mem_reg;  // register holding memory address
-      size_t offset;
-      size_t size;  // Size of the data being accessed
+      IR_REG *mem_reg;   // register holding memory address
+      int offset;        // 32bit
+      OperandSize size;  // Size of the data being accessed
     } mem;
 
     // IR_LEA
@@ -197,7 +194,7 @@ struct IR
       bool is_static;
       char *var_name;
       size_t var_name_len;
-      size_t var_offset;
+      int var_offset;  // 32bit
     } lea;
 
     // IR_RET

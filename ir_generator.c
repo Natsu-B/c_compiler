@@ -673,8 +673,11 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     {
       char *false_label = gen_label();
       char *end_label = gen_label();
+      IR_REG *dst_reg_ptr1 = gen_reg();
+      IR_REG *dst_reg_ptr2 = gen_reg();
       IR_REG *dst_reg_ptr = gen_reg();
-      dst_reg_ptr->reg_size = num2OpSize(size_of_real(node->type->type));
+      dst_reg_ptr->reg_size = dst_reg_ptr1->reg_size = dst_reg_ptr2->reg_size =
+          num2OpSize(size_of_real(node->type->type));
 
       IR_REG *condition = gen_stmt(blocks, labels, irs, node->lhs);
       IR *jump = calloc(1, sizeof(IR));
@@ -693,8 +696,8 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       mov_true->mov.is_imm = false;
       mov_true->mov.src_reg = true_reg;
       vector_push(true_reg->used_list, mov_true);
-      mov_true->mov.dst_reg = dst_reg_ptr;
-      vector_push(dst_reg_ptr->used_list, mov_true);
+      mov_true->mov.dst_reg = dst_reg_ptr1;
+      vector_push(dst_reg_ptr1->used_list, mov_true);
       vector_push((*irs)->IRs, mov_true);
       IR *jump_end = calloc(1, sizeof(IR));
       jump_end->kind = IR_JMP;
@@ -718,8 +721,8 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       mov_false->mov.is_imm = false;
       mov_false->mov.src_reg = false_reg;
       vector_push(false_reg->used_list, mov_false);
-      mov_false->mov.dst_reg = dst_reg_ptr;
-      vector_push(dst_reg_ptr->used_list, mov_false);
+      mov_false->mov.dst_reg = dst_reg_ptr2;
+      vector_push(dst_reg_ptr2->used_list, mov_false);
       vector_push((*irs)->IRs, mov_false);
       if (vector_size((*irs)->IRs))
       {
@@ -731,6 +734,17 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       vector_push((*irs)->IRs, label_end);
       assert(vector_size((*irs)->IRs) == 1);
       vector_push(labels, *irs);
+
+      // phi instruction
+      IR *phi = calloc(1, sizeof(IR));
+      phi->kind = IR_PHI;
+      phi->phi.dst_reg = dst_reg_ptr;
+      phi->phi.lhs_reg = dst_reg_ptr1;
+      phi->phi.rhs_reg = dst_reg_ptr2;
+      vector_push(dst_reg_ptr1->used_list, phi);
+      vector_push(dst_reg_ptr2->used_list, phi);
+      vector_push(dst_reg_ptr->used_list, phi);
+      vector_push((*irs)->IRs, phi);
       return dst_reg_ptr;
     }
     case ND_CASE:
@@ -865,9 +879,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     {
       // Generate code for each statement in the block sequentially.
       for (NDBlock *b = node->func.stmt; b; b = b->next)
-      {
         gen_stmt(blocks, labels, irs, b->node);
-      }
       return NULL;
     }
     case ND_FUNCDEF:
@@ -1104,143 +1116,88 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       return dst_reg_ptr;
     }
     case ND_LOGICAL_OR:
-    {
-      char *false_label = gen_label();
-      char *end_label = gen_label();
-      IR_REG *dst_reg_ptr = gen_reg();
-      dst_reg_ptr->reg_size = SIZE_DWORD;  // int
-
-      IR_REG *lhs_ptr = gen_stmt(blocks, labels, irs, node->lhs);
-      IR *ir1 = calloc(1, sizeof(IR));
-      ir1->kind = IR_JE;
-      ir1->jmp.label = false_label;
-      ir1->jmp.cond_reg = lhs_ptr;
-      vector_push(lhs_ptr->used_list, ir1);
-      vector_push((*irs)->IRs, ir1);
-      *irs = new_ir_blocks();
-      vector_push(blocks, *irs);
-
-      IR *ir2 = calloc(1, sizeof(IR));
-      ir2->kind = IR_MOV;
-      ir2->mov.is_imm = true;
-      ir2->mov.imm_val = 1;
-      ir2->mov.dst_reg = dst_reg_ptr;
-      vector_push(dst_reg_ptr->used_list, ir2);
-      vector_push((*irs)->IRs, ir2);
-
-      IR *ir3 = calloc(1, sizeof(IR));
-      ir3->kind = IR_JMP;
-      ir3->jmp.label = end_label;
-      vector_push((*irs)->IRs, ir3);
-      *irs = new_ir_blocks();
-      vector_push(blocks, *irs);
-
-      if (vector_size((*irs)->IRs))
-      {
-        vector_push(blocks, *irs = new_ir_blocks());
-      }
-      IR *ir4 = calloc(1, sizeof(IR));
-      ir4->kind = IR_LABEL;
-      ir4->label.name = false_label;
-      vector_push((*irs)->IRs, ir4);
-      assert(vector_size((*irs)->IRs) == 1);
-      vector_push(labels, *irs);
-
-      IR_REG *rhs_ptr = gen_stmt(blocks, labels, irs, node->rhs);
-      IR *ir5 = calloc(1, sizeof(IR));
-      ir5->kind = IR_MOV;
-      ir5->mov.is_imm = false;
-      ir5->mov.src_reg = rhs_ptr;
-      vector_push(rhs_ptr->used_list, ir5);
-      ir5->mov.dst_reg = dst_reg_ptr;
-      vector_push(dst_reg_ptr->used_list, ir5);
-      vector_push((*irs)->IRs, ir5);
-
-      if (vector_size((*irs)->IRs))
-      {
-        vector_push(blocks, *irs = new_ir_blocks());
-      }
-      IR *ir6 = calloc(1, sizeof(IR));
-      ir6->kind = IR_LABEL;
-      ir6->label.name = end_label;
-      vector_push((*irs)->IRs, ir6);
-      assert(vector_size((*irs)->IRs) == 1);
-      vector_push(labels, *irs);
-
-      return dst_reg_ptr;
-    }
     case ND_LOGICAL_AND:
     {
-      char *false_label = gen_label();
+      char *shortcut_label = gen_label();
       char *end_label = gen_label();
+      IR_REG *result1 = gen_reg();
+      IR_REG *result2 = gen_reg();
       IR_REG *dst_reg_ptr = gen_reg();
-      dst_reg_ptr->reg_size = SIZE_DWORD;  // int
+      dst_reg_ptr->reg_size = result1->reg_size = result2->reg_size =
+          num2OpSize(size_of_real(node->type->type));
 
       IR_REG *lhs_ptr = gen_stmt(blocks, labels, irs, node->lhs);
       IR *ir1 = calloc(1, sizeof(IR));
-      ir1->kind = IR_JE;
-      ir1->jmp.label = false_label;
+      ir1->kind = (node->kind == ND_LOGICAL_OR) ? IR_JNE : IR_JE;
+      ir1->jmp.label = shortcut_label;
       ir1->jmp.cond_reg = lhs_ptr;
       vector_push(lhs_ptr->used_list, ir1);
       vector_push((*irs)->IRs, ir1);
       *irs = new_ir_blocks();
       vector_push(blocks, *irs);
 
+      // Path where short-circuit does not happen
       IR_REG *rhs_ptr = gen_stmt(blocks, labels, irs, node->rhs);
-      IR *ir2 = calloc(1, sizeof(IR));
-      ir2->kind = IR_JE;
-      ir2->jmp.label = false_label;
-      ir2->jmp.cond_reg = rhs_ptr;
-      vector_push(rhs_ptr->used_list, ir2);
-      vector_push((*irs)->IRs, ir2);
+      IR *mov_rhs = calloc(1, sizeof(IR));
+      mov_rhs->kind = IR_NEQ;  // convert to bool
+      mov_rhs->bin_op.lhs_reg = rhs_ptr;
+      vector_push(rhs_ptr->used_list, mov_rhs);
+      IR_REG *zero = gen_stmt(blocks, labels, irs, new_node_num(0));
+      mov_rhs->bin_op.rhs_reg = zero;
+      vector_push(zero->used_list, mov_rhs);
+      mov_rhs->bin_op.dst_reg = result1;
+      vector_push(result1->used_list, mov_rhs);
+      vector_push((*irs)->IRs, mov_rhs);
+
+      IR *jmp_end = calloc(1, sizeof(IR));
+      jmp_end->kind = IR_JMP;
+      jmp_end->jmp.label = end_label;
+      vector_push((*irs)->IRs, jmp_end);
       *irs = new_ir_blocks();
       vector_push(blocks, *irs);
 
-      IR *ir3 = calloc(1, sizeof(IR));
-      ir3->kind = IR_MOV;
-      ir3->mov.is_imm = true;
-      ir3->mov.imm_val = 1;
-      ir3->mov.dst_reg = dst_reg_ptr;
-      vector_push(dst_reg_ptr->used_list, ir3);
-      vector_push((*irs)->IRs, ir3);
+      // shortcut_label:
+      if (vector_size((*irs)->IRs))
+      {
+        vector_push(blocks, *irs = new_ir_blocks());
+      }
+      IR *label_short = calloc(1, sizeof(IR));
+      label_short->kind = IR_LABEL;
+      label_short->label.name = shortcut_label;
+      vector_push((*irs)->IRs, label_short);
+      assert(vector_size((*irs)->IRs) == 1);
+      vector_push(labels, *irs);
 
-      IR *ir4 = calloc(1, sizeof(IR));
-      ir4->kind = IR_JMP;
-      ir4->jmp.label = end_label;
-      vector_push((*irs)->IRs, ir4);
-      *irs = new_ir_blocks();
-      vector_push(blocks, *irs);
+      // Path where short-circuit happens
+      IR *mov_short = calloc(1, sizeof(IR));
+      mov_short->kind = IR_MOV;
+      mov_short->mov.is_imm = true;
+      mov_short->mov.imm_val = (node->kind == ND_LOGICAL_OR) ? 1 : 0;
+      mov_short->mov.dst_reg = result2;
+      vector_push(result2->used_list, mov_short);
+      vector_push((*irs)->IRs, mov_short);
 
       if (vector_size((*irs)->IRs))
       {
         vector_push(blocks, *irs = new_ir_blocks());
       }
-      IR *ir5 = calloc(1, sizeof(IR));
-      ir5->kind = IR_LABEL;
-      ir5->label.name = false_label;
-      vector_push((*irs)->IRs, ir5);
+      IR *label_end = calloc(1, sizeof(IR));
+      label_end->kind = IR_LABEL;
+      label_end->label.name = end_label;
+      vector_push((*irs)->IRs, label_end);
       assert(vector_size((*irs)->IRs) == 1);
       vector_push(labels, *irs);
 
-      IR *ir6 = calloc(1, sizeof(IR));
-      ir6->kind = IR_MOV;
-      ir6->mov.is_imm = true;
-      ir6->mov.imm_val = 0;
-      ir6->mov.dst_reg = dst_reg_ptr;
-      vector_push(dst_reg_ptr->used_list, ir6);
-      vector_push((*irs)->IRs, ir6);
-
-      if (vector_size((*irs)->IRs))
-      {
-        vector_push(blocks, *irs = new_ir_blocks());
-      }
-      IR *ir7 = calloc(1, sizeof(IR));
-      ir7->kind = IR_LABEL;
-      ir7->label.name = end_label;
-      vector_push((*irs)->IRs, ir7);
-      assert(vector_size((*irs)->IRs) == 1);
-      vector_push(labels, *irs);
-
+      // phi instruction
+      IR *phi = calloc(1, sizeof(IR));
+      phi->kind = IR_PHI;
+      phi->phi.dst_reg = dst_reg_ptr;
+      phi->phi.lhs_reg = result1;
+      phi->phi.rhs_reg = result2;
+      vector_push(result1->used_list, phi);
+      vector_push(result2->used_list, phi);
+      vector_push(dst_reg_ptr->used_list, phi);
+      vector_push((*irs)->IRs, phi);
       return dst_reg_ptr;
     }
     case ND_COMMA:

@@ -80,6 +80,9 @@ typedef enum
   // unary
   IR_NEG,  // negate
 
+  // phi
+  IR_PHI,
+
   // label
   IR_LABEL,  // LEADER: jump label
 
@@ -147,6 +150,14 @@ struct IR
       IR_REG *lhs_reg;
       IR_REG *rhs_reg;
     } bin_op;
+
+    // phi
+    struct
+    {
+      IR_REG *dst_reg;
+      IR_REG *lhs_reg;
+      IR_REG *rhs_reg;
+    } phi;
 
     // Unary operators
     struct

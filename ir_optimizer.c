@@ -195,6 +195,11 @@ void analyze_live_variable_internal(IR_Blocks* blocks)
         add_reg_use(blocks, ir->bin_op.rhs_reg, defined);
         add_reg_def(blocks, ir->bin_op.dst_reg, defined);
         break;
+      case IR_PHI:
+        add_reg_use(blocks, ir->phi.lhs_reg, defined);
+        add_reg_use(blocks, ir->phi.rhs_reg, defined);
+        add_reg_def(blocks, ir->phi.dst_reg, defined);
+        break;
       case IR_JNE:
       case IR_JE: add_reg_use(blocks, ir->jmp.cond_reg, defined); break;
       case IR_LOAD:
@@ -214,6 +219,12 @@ void analyze_live_variable_internal(IR_Blocks* blocks)
       case IR_NEG:
         add_reg_use(blocks, ir->un_op.src_reg, defined);
         add_reg_def(blocks, ir->un_op.dst_reg, defined);
+        break;
+      case IR_SIGN_EXTEND:
+      case IR_ZERO_EXTEND:
+      case IR_TRUNCATE:
+        add_reg_use(blocks, ir->memsize.src_reg, defined);
+        add_reg_def(blocks, ir->memsize.dst_reg, defined);
         break;
       default: unreachable(); break;
     }

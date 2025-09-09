@@ -401,6 +401,8 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     {
       // For a string literal, add it to the global string list and then
       // generate a LEA instruction to get its address.
+      pr_debug("IR: handling ND_STRING literal %s",
+               node->literal_name ? node->literal_name : "(null)");
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_LEA;
       ir->lea.is_local = false;
@@ -425,7 +427,9 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     {
       // For a return statement, evaluate the return value and generate a RET
       // instruction.
-      IR_REG *src_ptr = gen_stmt(blocks, labels, irs, node->lhs);
+      IR_REG *src_ptr = NULL;
+      if (node->lhs)
+        src_ptr = gen_stmt(blocks, labels, irs, node->lhs);
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_RET;
       if (src_ptr)
@@ -846,6 +850,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     {
       // Generate a CALL instruction.
       IR *ir = calloc(1, sizeof(IR));
+      pr_debug("IR: generating CALL to %.*s", (int)node->token->len, node->token->str);
 
       // Evaluate each argument expression.
       Vector *args = vector_new();
@@ -856,17 +861,28 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
         vector_push(reg_val->used_list, ir);
         vector_push(args, reg_val);
       }
+      pr_debug("IR: CALL args prepared: %zu", vector_size(args));
 
       ir->kind = IR_CALL;
       ir->call.func_name = node->token->str;
       ir->call.func_name_size = node->token->len;
       ir->call.args = args;
-      IR_REG *dst_reg_ptr = gen_reg();  // Register to receive the return value.
-      dst_reg_ptr->reg_size = num2OpSize(size_of_real(
-          ((Type *)vector_peek_at(node->type->param_list, 1))->type));
-      ir->call.dst_reg = dst_reg_ptr;
-      vector_push(dst_reg_ptr->used_list, ir);
+      // Node's type is the function result type after analysis.
+      // If the function returns void, there is no destination register.
+      // Fall back to int if missing (undeclared function defaults to int).
+      Type *ret_ty = node->type ? node->type : alloc_type(TYPE_INT);
+      pr_debug("IR: CALL return type kind=%d", (int)ret_ty->type);
+      IR_REG *dst_reg_ptr = NULL;
+      if (ret_ty->type != TYPE_VOID)
+      {
+        dst_reg_ptr = gen_reg();  // Register to receive the return value.
+        dst_reg_ptr->reg_size = num2OpSize(size_of_real(ret_ty->type));
+        ir->call.dst_reg = dst_reg_ptr;
+        vector_push(dst_reg_ptr->used_list, ir);
+      }
       vector_push((*irs)->IRs, ir);
+      pr_debug("IR: CALL complete, dst vreg=%s",
+               dst_reg_ptr ? "assigned" : "void");
       return dst_reg_ptr;
     }
     case ND_DISCARD_EXPR:
@@ -1236,12 +1252,18 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     case ND_ZERO_EXTEND:
     case ND_TRUNCATE:
     {
+      if (node->kind == ND_TRUNCATE)
+      {
+        // For now, treat truncation as a no-op and rely on destination size
+        // at the use site. This avoids creating an unused vreg and fixes
+        // cases like returning sizeof(...) where the source is already 32-bit.
+        return gen_stmt(blocks, labels, irs, node->lhs);
+      }
       IR *ir = calloc(1, sizeof(IR));
       switch (node->kind)
       {
         case ND_SIGN_EXTEND: ir->kind = IR_SIGN_EXTEND; break;
         case ND_ZERO_EXTEND: ir->kind = IR_ZERO_EXTEND; break;
-        case ND_TRUNCATE: ir->kind = IR_TRUNCATE; break;
         default: unreachable(); break;
       }
       IR_REG *src_reg = gen_stmt(blocks, labels, irs, node->lhs);
@@ -1251,6 +1273,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       dst_reg->reg_size = num2OpSize(size_of_real(node->type->type));
       ir->memsize.dst_reg = dst_reg;
       vector_push(dst_reg->used_list, ir);
+      vector_push((*irs)->IRs, ir);
       return dst_reg;
     }
     default:

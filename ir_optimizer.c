@@ -153,10 +153,12 @@ void analyze_live_variable_internal(IR_Blocks* blocks)
     switch (ir->kind)
     {
       case IR_CALL:
+        // Use all arg regs; define dst only if present (non-void calls)
         for (size_t j = 1; j <= vector_size(ir->call.args); j++)
           add_reg_use(blocks, *(size_t*)vector_peek_at(ir->call.args, j),
                       defined);
-        add_reg_def(blocks, ir->call.dst_reg->reg_num, defined);
+        if (ir->call.dst_reg)
+          add_reg_def(blocks, ir->call.dst_reg->reg_num, defined);
         break;
       case IR_FUNC_PROLOGUE:
       case IR_FUNC_EPILOGUE:
@@ -164,7 +166,9 @@ void analyze_live_variable_internal(IR_Blocks* blocks)
       case IR_JMP:
       case IR_LABEL: break;
       case IR_RET:
-        add_reg_use(blocks, ir->ret.src_reg->reg_num, defined);
+        // void return has no src_reg; guard before use
+        if (!ir->ret.return_void && ir->ret.src_reg)
+          add_reg_use(blocks, ir->ret.src_reg->reg_num, defined);
         break;
       case IR_MOV:
         if (!ir->mov.is_imm)

@@ -107,12 +107,19 @@ int main(int argc, char **argv)
 
   // Optimizer
   if ((optimize_level & ~(1 << 7)) == 1)
+  {
+    pr_debug("Start high-level optimizer");
     analyze_result = optimizer(analyze_result);
+    pr_debug("High-level optimizer done");
+  }
 
   // IR generator
+  pr_debug("Start IR generator");
   IRProgram *ir_program = gen_ir(analyze_result);
+  pr_debug("IR gen done");
   // IR optimizer
   ir_program = optimize_ir(ir_program);
+  pr_debug("IR optimize done");
 
   if (output_ir)
   {
@@ -120,7 +127,9 @@ int main(int argc, char **argv)
     return 0;
   }
   // Code generator
+  pr_debug("Start code generator");
   generator(ir_program, output_file_name);
+  pr_debug("Code generator done");
 
   return 0;
 }

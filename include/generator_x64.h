@@ -136,6 +136,17 @@ typedef struct
       OperandSize mov_size;
     } mem;
   };
+  // Constraint metadata for register allocation on MIR
+  struct
+  {
+    // If true, this operand must be allocated a real register
+    bool require_register;
+    // If true, this operand must be allocated to the fixed real register
+    bool has_fixed_register;
+    enum register_name fixed_register;
+    // Optional register-class mask (e.g., GPR vs byte-capable). 0 = any GPR
+    unsigned int reg_class_mask;
+  } constraint;
 } X64_Operand;
 
 // TODO: IMUL 3 operand instruction
@@ -153,6 +164,8 @@ typedef struct
       // Bitmask: the bit corresponding to enum register_name
       // 1 if the register is in use, 0 if unused
       unsigned int implicit_used_registers;  // 32bit
+      // Optional instruction ID to aid MIR liveness/interval mapping
+      size_t insn_id;
     };
     struct
     {
@@ -185,6 +198,13 @@ typedef struct
   size_t stack_size;        // Total stack size for local variables
   size_t num_virtual_regs;  // Number of virtual registers used
   Vector* virtual_regs;  // array of X64_REG Access with IR register_number + 1
+  // Register allocation results
+  // Per-virtual register real assignment (enum register_name as size_t*)
+  Vector* vreg_real;
+  // Per-virtual register stack slot offset (size_t*), 0 means unassigned
+  Vector* vreg_stack_slot;
+  // Total spill space used for virtuals without a real reg
+  size_t spill_stack_size;
 } X64_FUNC;
 
 void generate_x64(IRFunc* program);

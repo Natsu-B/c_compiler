@@ -16,12 +16,14 @@
 #include "include/parser.h"
 #include "include/preprocessor.h"
 #include "include/tokenizer.h"
+#include "include/target.h"
 
 bool output_preprocess;
 bool gcc_compatible;
 bool output_ir;
 bool output_mermaid;
 uint8_t optimize_level = 1;
+target_arch g_target_arch = TGT_X86_64; // default
 
 // Argument processing
 // -E: Execute preprocessor and output
@@ -52,39 +54,70 @@ int main(int argc, char **argv)
   char *input_file_name = NULL;
   char *output_file_name = NULL;
   char *input = NULL;
-  // Process arguments
+  // Process arguments (simplified to avoid miscompilation of complex ||/&&)
   for (int i = 1; i < argc; i++)
   {
-    if (argv[i][0] == '-')
+    char *a = argv[i];
+    if (a[0] != '-') continue;
+
+    // Single-letter options
+    if (a[1] == 'E' && a[2] == '\0')
+      output_preprocess = true;
+    else if (a[1] == 'g' && a[2] == '\0')
+      gcc_compatible = true;
+    else if (a[1] == 'o' && a[2] == '\0')
     {
-      if (!strcmp(argv[i], "-E"))
-        output_preprocess = true;
-      else if (!strcmp(argv[i], "-g"))
-        gcc_compatible = true;
-      else if (!strcmp(argv[i], "-emit-ir"))
-        output_ir = true;
-      else if (!strcmp(argv[i], "-emit-mermaid"))
-        output_mermaid = true;
-      else if (!strcmp(argv[i], "-O0") && !(optimize_level & 1 << 7))
-        optimize_level = 0 | 1 << 7;
-      else if (!strcmp(argv[i], "-O1") && !(optimize_level & 1 << 7))
-        optimize_level = 1 | 1 << 7;
-      else if (!strcmp(argv[i], "-o") && ++i < argc)
-        output_file_name = argv[i];
-      else if (!strcmp(argv[i], "-i") && ++i < argc)
-        input_file_name = argv[i];
-      else if (!strcmp(argv[i], "-I"))
+      if (++i < argc) output_file_name = argv[i]; else error_exit("Invalid arguments.");
+    }
+    else if (a[1] == 'i' && a[2] == '\0')
+    {
+      if (++i < argc) input_file_name = argv[i]; else error_exit("Invalid arguments.");
+    }
+    else if (a[1] == 'I' && a[2] == '\0')
+    {
+      if (++i < argc) { input = argv[i]; break; } else error_exit("Invalid arguments.");
+    }
+    // Multi-letter options
+    else if (!strcmp(a, "-emit-ir"))
+      output_ir = true;
+    else if (!strcmp(a, "-emit-mermaid"))
+      output_mermaid = true;
+    else if (!strcmp(a, "-O0") && !(optimize_level & 1 << 7))
+      optimize_level = 0 | 1 << 7;
+    else if (!strcmp(a, "-O1") && !(optimize_level & 1 << 7))
+      optimize_level = 1 | 1 << 7;
+    else if (!strcmp(a, "-target"))
+    {
+      if (++i < argc)
       {
-        input = argv[++i];
-        break;
+        if (!strcmp(argv[i], "x86_64"))
+          g_target_arch = TGT_X86_64;
+        else if (!strcmp(argv[i], "aarch64"))
+          g_target_arch = TGT_AARCH64;
+        else
+          error_exit("Invalid arguments.");
       }
       else
         error_exit("Invalid arguments.");
     }
+    else
+      error_exit("Invalid arguments.");
   }
+
   if (input_file_name)
     input = openfile(input_file_name);
-  if (!input || !output_file_name || (gcc_compatible && !output_preprocess))
+  // Debug: print parsed arg state before validation (helps self-host debug)
+  fprintf(stderr, "[argcheck] input=%p, output=%p, gcc=%d, pp=%d, tgt=%d\n",
+          (void *)input, (void *)output_file_name, (int)gcc_compatible,
+          (int)output_preprocess, (int)g_target_arch);
+  // Validate required arguments separately to avoid depending on
+  // complex short-circuit expressions that our early self-hosted
+  // backend may miscompile.
+  if (!input)
+    error_exit("Invalid arguments.");
+  if (!output_file_name)
+    error_exit("Invalid arguments.");
+  if (gcc_compatible && !output_preprocess)
     error_exit("Invalid arguments.");
   pr_debug("output_file_name: %s", output_file_name);
   pr_debug("input_file_name: %s", input_file_name);

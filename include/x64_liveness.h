@@ -10,5 +10,7 @@ void x64_number_program_points(X64_FUNC* func_x64);
 // Build MIR-level liveness (block-level in/out) using IR CFG and X64 operands
 void x64_build_mir_liveness(IRFunc* func_ir, X64_FUNC* func_x64);
 
-#endif
+// Debug: dump MIR CFG, block in/out sets, and instruction IDs
+void x64_dump_mir_cfg(IRFunc* func_ir, X64_FUNC* func_x64);
 
+#endif

@@ -44,6 +44,7 @@ typedef enum
   X64_IDIV,  // Signed Divide (RDX:RAX / operand)
   X64_DIV,   // Unsigned Divide (RDX:RAX / operand)
   X64_CQO,   // Convert Quadword to Octoword (Sign-extend RAX into RDX)
+  X64_CDQ,   // Convert Doubleword to Quadword (Sign-extend EAX into EDX)
   X64_NEG,   // Negate (Two's Complement)
 
   // Logical Instructions
@@ -203,8 +204,23 @@ typedef struct
   Vector* vreg_real;
   // Per-virtual register stack slot offset (size_t*), 0 means unassigned
   Vector* vreg_stack_slot;
+  // Optional end program-point (insn_id) where real register assignment stays valid.
+  // 0 means valid for the entire live range (no split). When non-zero, the
+  // emitter treats the vreg as spilled after this point.
+  Vector* vreg_real_end;  // size_t*
   // Total spill space used for virtuals without a real reg
   size_t spill_stack_size;
+  // Rematerialization hints
+  // If non-zero, vreg can be rematerialized as an immediate with this value.
+  Vector* vreg_is_remat_imm;     // size_t* as bool
+  Vector* vreg_remat_imm_value;  // long long*
+  // If non-zero, vreg can be rematerialized as LEA of an address
+  Vector* vreg_is_remat_lea;     // size_t* as bool
+  Vector* vreg_lea_is_rbp;       // size_t* as bool
+  Vector* vreg_lea_is_rip;       // size_t* as bool
+  Vector* vreg_lea_disp;         // int*
+  Vector* vreg_lea_var_name;     // char** (only valid when RIP-relative)
+  Vector* vreg_lea_var_name_len; // size_t* (only valid when RIP-relative)
 } X64_FUNC;
 
 void generate_x64(IRFunc* program);

@@ -8,6 +8,7 @@
 
 #include "include/error.h"
 #include "include/vector.h"
+#include "include/generator_x64.h"
 
 static void vec_push_unique(Vector* v, void* p)
 {
@@ -82,6 +83,7 @@ static void compute_use_def_for_insn(X64_ASM* as, Vector* uses, Vector* defs)
     case X64_IDIV:
     case X64_DIV:
     case X64_CQO:
+    case X64_CDQ:
       // implicit uses/defs in RAX/RDX are modeled via implicit_used_registers.
       // For MIR liveness we only track virtual regs; operand 0 (divisor) is use.
       use_op(&as->operands[0], uses);
@@ -247,6 +249,42 @@ void x64_build_mir_liveness(IRFunc* func_ir, X64_FUNC* func_x64)
       // detect changes
       if (!vector_compare(in_old, blk->in))
         changed = true;
+    }
+  }
+}
+
+static void dump_reg_set(const char* tag, Vector* regs)
+{
+  pr_debug("  %s:", (char*)tag);
+  for (size_t i = 1; i <= vector_size(regs); i++)
+  {
+    X64_REG* r = vector_peek_at(regs, i);
+    if (r && r->reg_type == virtual_regs)
+      pr_debug("    v%zu", r->reg_id);
+  }
+}
+
+void x64_dump_mir_cfg(IRFunc* func_ir, X64_FUNC* func_x64)
+{
+  pr_debug("x64-mir: function %.*s blocks=%zu", (int)func_ir->user_defined.function_name_size,
+           func_ir->user_defined.function_name, vector_size(func_x64->asm_blocks));
+  for (size_t bi = 1; bi <= vector_size(func_x64->asm_blocks); bi++)
+  {
+    IR_Blocks* irb = vector_peek_at(func_ir->IR_Blocks, bi);
+    X64_Blocks* xb = vector_peek_at(func_x64->asm_blocks, bi);
+    pr_debug(" block %zu: insns=%zu", bi, vector_size(xb->asm_list));
+    // successors
+    size_t lhs = irb->lhs ? vector_search(func_ir->IR_Blocks, irb->lhs) : 0;
+    size_t rhs = irb->rhs ? vector_search(func_ir->IR_Blocks, irb->rhs) : 0;
+    if (lhs) pr_debug("  succ lhs=%zu", lhs);
+    if (rhs) pr_debug("  succ rhs=%zu", rhs);
+    dump_reg_set("in", xb->in);
+    dump_reg_set("out", xb->out);
+    // instruction IDs
+    for (size_t j = 1; j <= vector_size(xb->asm_list); j++)
+    {
+      X64_ASM* as = vector_peek_at(xb->asm_list, j);
+      pr_debug("    #%zu kind=%d", as->insn_id, (int)as->kind);
     }
   }
 }

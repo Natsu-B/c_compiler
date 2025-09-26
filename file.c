@@ -44,11 +44,24 @@ char *file_read(FILE *fin)
 // Internally uses calloc
 char *openfile(char *filename)
 {
+  // Validate and sanitize filename
+  if (!filename)
+    error_exit("Invalid filename (null)");
+
+  // Skip leading whitespace to avoid accidental empty/blank names
+  while (*filename && isspace((unsigned char)*filename)) filename++;
+  if (!*filename)
+  {
+    error_exit("Invalid filename (empty)");
+  }
+
   FILE *fin = fopen(filename, "r");
   if (!fin)
   {
-    error_exit("Invalid filename: %s", filename);
+    error_exit("Failed to open '%s': %s", filename, strerror(errno));
   }
   pr_debug("File opened.");
-  return file_read(fin);
+  char *buf = file_read(fin);
+  fclose(fin);
+  return buf;
 }

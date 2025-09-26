@@ -16,6 +16,10 @@
 
 #include "include/error.h"
 #include "include/generator_x64.h"
+#include "include/x64_emit.h"
+#include "include/generator_aarch64.h"
+#include "include/a64_emit.h"
+#include "include/target.h"
 #include "include/ir_generator.h"
 #include "include/vector.h"
 
@@ -30,7 +34,11 @@ void generator(IRProgram *program, char *output_filename)
   if (fout == NULL)
     error_exit("cannot written to file");
   pr_debug("output file open");
-  output_file("    .intel_syntax noprefix\n");
+  // Delegate target-specific preamble to backend
+  if (g_target_arch == TGT_AARCH64)
+    a64_emit_file_preamble();
+  else
+    x64_emit_file_preamble();
 
   // Global variables
   for (size_t i = 0; i < vector_size(program->global_vars); i++)
@@ -94,7 +102,10 @@ void generator(IRProgram *program, char *output_filename)
   for (size_t i = 0; i < vector_size(program->functions); i++)
   {
     IRFunc *func = vector_peek_at(program->functions, i + 1);
-    generate_x64(func);
+    if (g_target_arch == TGT_AARCH64)
+      generate_aarch64(func);
+    else
+      generate_x64(func);
   }
 
   fclose(fout);

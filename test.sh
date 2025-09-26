@@ -1,5 +1,8 @@
-#!/bin/sh
+#!/usr/bin/env bash
 COMPILER=${1:-./main}
+COMPILER_ARGS=${2:-}
+AS_CMD=${3:-gcc}
+TEST_CC=${4:-gcc}
 
 show_compiler_output_and_exit() {
   local message="$1"
@@ -26,18 +29,18 @@ assert_print() {
   local compiler_stdout="out/compiler.stdout"
 
   echo "$input" > out/tmp.c
-  if ! gcc -I./test -include gcc.h -o out/gcc out/tmp.c; then
+  if ! "$TEST_CC" -I./test -include gcc.h -o out/gcc out/tmp.c; then
     echo "ERROR: Reference build with GCC failed for input: '$input'"
     exit 1
   fi
   ./out/gcc > out/gcc.txt
   expected_exit_code="$?"
 
-  if ! "$COMPILER" -i out/tmp.c -o out/out.s > "$compiler_stdout"; then
+  if ! "$COMPILER" $COMPILER_ARGS -i out/tmp.c -o out/out.s > "$compiler_stdout"; then
     show_compiler_output_and_exit "COMPILATION FAILED" "$compiler_stdout" "$input"
   fi
 
-  if ! gcc -z noexecstack -o out/out out/out.s; then
+  if ! "$AS_CMD" -z noexecstack -o out/out out/out.s; then
     show_compiler_output_and_exit "LINKING FAILED" "$compiler_stdout" "$input"
   fi
 
@@ -60,15 +63,15 @@ assert() {
 
   echo "$input" > out/tmp.c
 
-  gcc -I./test -include gcc.h -o out/gcc out/tmp.c
+  "$TEST_CC" -I./test -include gcc.h -o out/gcc out/tmp.c
   ./out/gcc
   expected="$?"
 
-  if ! "$COMPILER" -i out/tmp.c -o out/out.s > "$compiler_stdout"; then
+  if ! "$COMPILER" $COMPILER_ARGS -i out/tmp.c -o out/out.s > "$compiler_stdout"; then
     show_compiler_output_and_exit "COMPILATION FAILED" "$compiler_stdout" "$input"
   fi
 
-  if ! gcc -z noexecstack -o out/out out/out.s; then
+  if ! "$AS_CMD" -z noexecstack -o out/out out/out.s; then
     show_compiler_output_and_exit "LINKING FAILED" "$compiler_stdout" "$input"
   fi
 
@@ -90,15 +93,15 @@ assert_with_outer_code() {
 
   echo "$input" > out/tmp.c
 
-  gcc -I./test -include gcc.h -o out/gcc out/tmp.c "${linkcode[@]}"
+  "$TEST_CC" -I./test -include gcc.h -o out/gcc out/tmp.c "${linkcode[@]}"
   ./out/gcc
   expected="$?"
 
-  if ! "$COMPILER" -i out/tmp.c -o out/out.s > "$compiler_stdout"; then
+  if ! "$COMPILER" $COMPILER_ARGS -i out/tmp.c -o out/out.s > "$compiler_stdout"; then
     show_compiler_output_and_exit "COMPILATION FAILED" "$compiler_stdout" "$input"
   fi
 
-  if ! gcc -z noexecstack -o out/out out/out.s "${linkcode[@]}"; then
+  if ! "$AS_CMD" -z noexecstack -o out/out out/out.s "${linkcode[@]}"; then
     show_compiler_output_and_exit "LINKING FAILED" "$compiler_stdout" "$input"
   fi
 
@@ -116,7 +119,8 @@ mkdir -p out
 
 (
   cd test
-  make
+  make clean
+  make CC="$TEST_CC"
 )
 assert 'int main() {return 0;}'
 assert 'int main() {return 42; }'
@@ -308,6 +312,15 @@ assert 'int main() {int x = 1; switch (x) { case 0: x = x + 10; break; default: 
 assert 'int main() {printf("\e[35mhe\e[90mllo\e[37m\n");}'
 assert 'void test(void) {printf("hello\n"); return;} int main() {test();}'
 assert 'int main() {int x, y[2]; y[1] = 10; x = 9; y[0] = 2; return y[0] + y[1] - x; }'
+
+# Nested loops + calls (stack alignment across calls and control flow)
+assert_with_outer_code 'int fibonacci(int a, int b); int main(){int x=0,y=1,sum=0; int i=0; int j=0; for(i=0;i<3;i=i+1){ j=0; for(j=0;j<3;j=j+1){ x=fibonacci(x,y); y=fibonacci(x,y);} sum = sum + y;} return sum;}' './test/fibonacci.o'
+
+# Division/remainder edge cases (signed/unsigned semantics)
+assert 'int main(){ int a=-10; int b=3; unsigned ua=10, ub=3; int ok=0; if (a/b==-3) ok++; if (a%b==-1) ok++; if (ua/ub==3) ok++; if (ua%ub==1) ok++; return ok==4?0:1; }'
+
+# Phi convergence test with branches and loop
+assert 'int main(){ int acc=0; for(int i=0;i<6;i=i+1){ int t; if (i&1) t=3; else t=2; acc=acc+t;} return acc; }'
 
 # assert 'int func() {static int x = 0; x++; return x;} int main() {if (func() != 1) return 1; if (func() != 2) return 1; if (func() != 3) return 1; return 0;}'
 # sleep 0.5

@@ -677,7 +677,33 @@ static void analyze_children(Node *node, size_t recursion_limit)
     offset_exit_nest();
   }
 
-  visit_children(node, analyze_type, false, next_recursion_limit);
+  // For 'for' statements, ensure we analyze the initializer first so that
+  // variables declared there receive stack offsets before analyzing the
+  // condition/body that may reference them. The generic visitor analyzes
+  // condition/true/false before init, which can assign overlapping offsets
+  // to inner-block locals (e.g., for(int i=0){ int t; ... }).
+  if (node->kind == ND_FOR)
+  {
+    if (node->control.init)
+      node->control.init =
+          analyze_type(node->control.init, false, next_recursion_limit);
+    if (node->control.condition)
+      node->control.condition =
+          analyze_type(node->control.condition, false, next_recursion_limit);
+    if (node->control.true_code)
+      node->control.true_code =
+          analyze_type(node->control.true_code, false, next_recursion_limit);
+    if (node->control.false_code)
+      node->control.false_code =
+          analyze_type(node->control.false_code, false, next_recursion_limit);
+    if (node->control.update)
+      node->control.update =
+          analyze_type(node->control.update, false, next_recursion_limit);
+  }
+  else
+  {
+    visit_children(node, analyze_type, false, next_recursion_limit);
+  }
 
   if (node->kind == ND_SWITCH)
     switch_end();

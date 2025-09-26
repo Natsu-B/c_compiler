@@ -66,18 +66,22 @@ void _error(char *file, int line, const char *func, char *fmt, ...)
 {
   va_list ap;
   va_start(ap, fmt);
-  fprintf(stderr, "\e[31m[ERROR] \e[37m");
-  _debug2(file, line, func, fmt, ap);
-  fprintf(stderr, "\nError while compiling %s\n", file_name);
+  // Print error header and actual formatted message to stderr
+  fprintf(stderr, "\e[31m[ERROR] \e[37m%.*s:%d:%s(): ", (int)strlen(file), file,
+          line, func);
+  vfprintf(stderr, fmt, ap);
+  fprintf(stderr, "\nError while compiling %s\n",
+          file_name ? file_name : "(no input)");
+  va_end(ap);
   exit(1);
 }
 
 void _info_at_(size_t log_level, char *location, size_t len, char *file,
                int line, const char *func, char *fmt, va_list ap)
 {
-  char *color_ansi;
+  char *color_ansi = "";
   char *default_ansi = "\e[37m";
-  char *info;
+  char *info = "";
   switch (log_level)
   {
     case 0:  // error red

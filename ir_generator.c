@@ -412,7 +412,8 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
         unreachable();
       ir->lea.var_name_len = strlen(node->literal_name);
       IR_REG *dst_reg_ptr = gen_reg();
-      dst_reg_ptr->reg_size = SIZE_DWORD;  // ptr
+      // On x86_64, pointers are 64-bit
+      dst_reg_ptr->reg_size = SIZE_QWORD;
       ir->lea.dst_reg = dst_reg_ptr;
       vector_push(dst_reg_ptr->used_list, ir);
       vector_push((*irs)->IRs, ir);
@@ -917,6 +918,8 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
         ir->store_arg.dst_reg = addr_reg;
         vector_push(addr_reg->used_list, ir);
         ir->store_arg.arg_index = i;
+        // Set the store width based on the argument's type
+        ir->store_arg.size = num2OpSize(size_of_real(arg_node->type->type));
         vector_push((*irs)->IRs, ir);
       }
 
@@ -1105,8 +1108,20 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
         case ND_REM: ir->kind = node->type->is_signed ? IR_REM : IR_REMU; break;
         case ND_EQ: ir->kind = IR_EQ; break;
         case ND_NEQ: ir->kind = IR_NEQ; break;
-        case ND_LT: ir->kind = node->type->is_signed ? IR_LT : IR_LTU; break;
-        case ND_LTE: ir->kind = node->type->is_signed ? IR_LTE : IR_LTEU; break;
+        // For relational operators, signedness is determined by operands,
+        // not the (boolean) result type. Using the result type here caused
+        // us to always select the unsigned variants when the result was
+        // TYPE_BOOL, which is incorrect for signed integers.
+        case ND_LT: {
+          bool signed_cmp = (node->lhs && node->lhs->type && node->lhs->type->is_signed);
+          ir->kind = signed_cmp ? IR_LT : IR_LTU;
+          break;
+        }
+        case ND_LTE: {
+          bool signed_cmp = (node->lhs && node->lhs->type && node->lhs->type->is_signed);
+          ir->kind = signed_cmp ? IR_LTE : IR_LTEU;
+          break;
+        }
         case ND_INCLUSIVE_OR: ir->kind = IR_OR; break;
         case ND_EXCLUSIVE_OR: ir->kind = IR_XOR; break;
         case ND_AND: ir->kind = IR_AND; break;
@@ -1134,14 +1149,15 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     case ND_LOGICAL_OR:
     case ND_LOGICAL_AND:
     {
+      // Generate short-circuit evaluation without PHI by writing the
+      // result into a single destination vreg on both paths.
       char *shortcut_label = gen_label();
       char *end_label = gen_label();
-      IR_REG *result1 = gen_reg();
-      IR_REG *result2 = gen_reg();
-      IR_REG *dst_reg_ptr = gen_reg();
-      dst_reg_ptr->reg_size = result1->reg_size = result2->reg_size =
-          num2OpSize(size_of_real(node->type->type));
 
+      IR_REG *dst = gen_reg();
+      dst->reg_size = num2OpSize(size_of_real(node->type->type));
+
+      // Evaluate LHS and jump to shortcut if it determines the result.
       IR_REG *lhs_ptr = gen_stmt(blocks, labels, irs, node->lhs);
       IR *ir1 = calloc(1, sizeof(IR));
       ir1->kind = (node->kind == ND_LOGICAL_OR) ? IR_JNE : IR_JE;
@@ -1152,19 +1168,32 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       *irs = new_ir_blocks();
       vector_push(blocks, *irs);
 
-      // Path where short-circuit does not happen
+      // Path where short-circuit does not happen: result = (rhs != 0)
       IR_REG *rhs_ptr = gen_stmt(blocks, labels, irs, node->rhs);
-      IR *mov_rhs = calloc(1, sizeof(IR));
-      mov_rhs->kind = IR_NEQ;  // convert to bool
-      mov_rhs->bin_op.lhs_reg = rhs_ptr;
-      vector_push(rhs_ptr->used_list, mov_rhs);
+      IR *rhs_cmp = calloc(1, sizeof(IR));
+      rhs_cmp->kind = IR_NEQ;  // convert RHS to bool
+      rhs_cmp->bin_op.lhs_reg = rhs_ptr;
+      vector_push(rhs_ptr->used_list, rhs_cmp);
       IR_REG *zero = gen_stmt(blocks, labels, irs, new_node_num(0));
-      mov_rhs->bin_op.rhs_reg = zero;
-      vector_push(zero->used_list, mov_rhs);
-      mov_rhs->bin_op.dst_reg = result1;
-      vector_push(result1->used_list, mov_rhs);
-      vector_push((*irs)->IRs, mov_rhs);
+      rhs_cmp->bin_op.rhs_reg = zero;
+      vector_push(zero->used_list, rhs_cmp);
+      IR_REG *rhs_bool = gen_reg();
+      rhs_bool->reg_size = dst->reg_size;
+      rhs_cmp->bin_op.dst_reg = rhs_bool;
+      vector_push(rhs_bool->used_list, rhs_cmp);
+      vector_push((*irs)->IRs, rhs_cmp);
 
+      // Move computed bool into destination
+      IR *mov_rhs_to_dst = calloc(1, sizeof(IR));
+      mov_rhs_to_dst->kind = IR_MOV;
+      mov_rhs_to_dst->mov.is_imm = false;
+      mov_rhs_to_dst->mov.src_reg = rhs_bool;
+      vector_push(rhs_bool->used_list, mov_rhs_to_dst);
+      mov_rhs_to_dst->mov.dst_reg = dst;
+      vector_push(dst->used_list, mov_rhs_to_dst);
+      vector_push((*irs)->IRs, mov_rhs_to_dst);
+
+      // Jump to end after computing RHS
       IR *jmp_end = calloc(1, sizeof(IR));
       jmp_end->kind = IR_JMP;
       jmp_end->jmp.label = end_label;
@@ -1184,15 +1213,16 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       assert(vector_size((*irs)->IRs) == 1);
       vector_push(labels, *irs);
 
-      // Path where short-circuit happens
+      // Path where short-circuit happens: result = (OR?1:0)
       IR *mov_short = calloc(1, sizeof(IR));
       mov_short->kind = IR_MOV;
       mov_short->mov.is_imm = true;
       mov_short->mov.imm_val = (node->kind == ND_LOGICAL_OR) ? 1 : 0;
-      mov_short->mov.dst_reg = result2;
-      vector_push(result2->used_list, mov_short);
+      mov_short->mov.dst_reg = dst;
+      vector_push(dst->used_list, mov_short);
       vector_push((*irs)->IRs, mov_short);
 
+      // end_label:
       if (vector_size((*irs)->IRs))
       {
         vector_push(blocks, *irs = new_ir_blocks());
@@ -1204,17 +1234,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       assert(vector_size((*irs)->IRs) == 1);
       vector_push(labels, *irs);
 
-      // phi instruction
-      IR *phi = calloc(1, sizeof(IR));
-      phi->kind = IR_PHI;
-      phi->phi.dst_reg = dst_reg_ptr;
-      phi->phi.lhs_reg = result1;
-      phi->phi.rhs_reg = result2;
-      vector_push(result1->used_list, phi);
-      vector_push(result2->used_list, phi);
-      vector_push(dst_reg_ptr->used_list, phi);
-      vector_push((*irs)->IRs, phi);
-      return dst_reg_ptr;
+      return dst;
     }
     case ND_COMMA:
     {

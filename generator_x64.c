@@ -4,6 +4,7 @@
 #include "test/compiler_header.h"
 #else
 #include <stdio.h>
+#include <string.h>
 #endif
 
 #include "include/builtin.h"
@@ -14,6 +15,8 @@
 #include "include/x64_liveness.h"
 #include "include/x64_regalloc.h"
 #include "include/x64_emit.h"
+#include "include/x64_opt.h"
+#include "include/x64_validate.h"
 
 // // Registers used for general purpose, arguments, and return values
 // static char *regs_64[] = {"rdi", "rsi", "rdx", "rcx", "r8",  "r9",
@@ -302,6 +305,22 @@ static void generate_x64_asm_no_phi(X64_FUNC *func, X64_Blocks *blocks, IR *ir)
       assign_virtual_regs(func, &mv->operands[1], ir->bin_op.lhs_reg);
       vector_push(blocks->asm_list, mv);
 
+      // For variable shifts, ensure count is in ECX/CL to avoid RA aliasing
+      bool is_shift = (ir->kind == IR_SHL || ir->kind == IR_SHR ||
+                       ir->kind == IR_SAL || ir->kind == IR_SAR);
+      if (is_shift)
+      {
+        X64_ASM *mov_ecx = new_asm();
+        mov_ecx->kind = X64_MOV;
+        // dst: ecx
+        set_regs(&mov_ecx->operands[0],
+                 set_reserved_real_regs(calloc(1, sizeof(X64_REG)), rcx,
+                                        SIZE_DWORD));
+        // src: rhs vreg
+        assign_virtual_regs(func, &mov_ecx->operands[1], ir->bin_op.rhs_reg);
+        vector_push(blocks->asm_list, mov_ecx);
+      }
+
       X64_ASM *op = new_asm();
       switch (ir->kind)
       {
@@ -319,7 +338,17 @@ static void generate_x64_asm_no_phi(X64_FUNC *func, X64_Blocks *blocks, IR *ir)
         default: unreachable(); return;
       }
       assign_virtual_regs(func, &op->operands[0], ir->bin_op.dst_reg);
-      assign_virtual_regs(func, &op->operands[1], ir->bin_op.rhs_reg);
+      if (is_shift)
+      {
+        // Use fixed CL as the count operand
+        set_regs(&op->operands[1],
+                 set_reserved_real_regs(calloc(1, sizeof(X64_REG)), rcx,
+                                        SIZE_DWORD));
+      }
+      else
+      {
+        assign_virtual_regs(func, &op->operands[1], ir->bin_op.rhs_reg);
+      }
       vector_push(blocks->asm_list, op);
     }
     break;
@@ -344,23 +373,27 @@ static void generate_x64_asm_no_phi(X64_FUNC *func, X64_Blocks *blocks, IR *ir)
       prep->implicit_used_registers = 1 << rax;
       vector_push(blocks->asm_list, prep);
 
-      // cqo (sign-extend RAX into RDX) or xor edx, edx for unsigned
-      X64_ASM *cqo = new_asm();
+      // Sign/zero extend high half before division depending on width
+      X64_ASM *ext = new_asm();
       if (ir->kind == IR_DIVU || ir->kind == IR_REMU)
       {
         // For unsigned, clear RDX
-        cqo->kind = X64_XOR;
-        set_regs(&cqo->operands[0],
+        ext->kind = X64_XOR;
+        set_regs(&ext->operands[0],
                  set_reserved_real_regs(calloc(1, sizeof(X64_REG)), rdx,
                                         SIZE_QWORD));
-        set_regs(&cqo->operands[1], cqo->operands[0].reg);
+        set_regs(&ext->operands[1], ext->operands[0].reg);
       }
       else
       {
-        cqo->kind = X64_CQO;
+        // For signed: use CDQ for 32-bit values, CQO for 64-bit
+        if (lhs_reg->size == SIZE_DWORD)
+          ext->kind = X64_CDQ;
+        else
+          ext->kind = X64_CQO;
       }
-      cqo->implicit_used_registers = (1 << rax) | (1 << rdx);
-      vector_push(blocks->asm_list, cqo);
+      ext->implicit_used_registers = (1 << rax) | (1 << rdx);
+      vector_push(blocks->asm_list, ext);
 
       // div/idiv
       X64_ASM *div = new_asm();
@@ -397,10 +430,9 @@ static void generate_x64_asm_no_phi(X64_FUNC *func, X64_Blocks *blocks, IR *ir)
     {
       X64_ASM *cmp = new_asm();
       cmp->kind = X64_CMP;
-      X64_REG *lhs_reg = search_regs(func, ir->bin_op.lhs_reg);
-      X64_REG *rhs_reg = search_regs(func, ir->bin_op.rhs_reg);
-      if (!lhs_reg || !rhs_reg)
-        unreachable();
+      // Use search_and_create_regs to ensure vregs exist for compare operands
+      X64_REG *lhs_reg = search_and_create_regs(func, ir->bin_op.lhs_reg);
+      X64_REG *rhs_reg = search_and_create_regs(func, ir->bin_op.rhs_reg);
       set_regs(&cmp->operands[0], lhs_reg);
       set_regs(&cmp->operands[1], rhs_reg);
       vector_push(blocks->asm_list, cmp);
@@ -477,8 +509,9 @@ static void generate_x64_asm_no_phi(X64_FUNC *func, X64_Blocks *blocks, IR *ir)
       mov->operands[0].kind = OP_MEM;
       mov->operands[0].mem.base = search_regs(func, ir->store_arg.dst_reg);
       mov->operands[0].mem.displacement = 0;
-      // Heuristic: default to DWORD store for integer args
-      mov->operands[0].mem.mov_size = SIZE_DWORD;
+      // Use the width provided by IR for this argument
+      OperandSize arg_sz = ir->store_arg.size ? ir->store_arg.size : SIZE_DWORD;
+      mov->operands[0].mem.mov_size = arg_sz;
       // src: fixed ABI register for first 6, otherwise from caller stack at
       // [rbp + 16 + 8*(arg_index-6)] per SysV AMD64 ABI
       static const enum register_name abi_regs[] = {rdi, rsi, rdx, rcx, r8, r9};
@@ -487,7 +520,7 @@ static void generate_x64_asm_no_phi(X64_FUNC *func, X64_Blocks *blocks, IR *ir)
         mov->operands[1].kind = OP_REG;
         mov->operands[1].reg = calloc(1, sizeof(X64_REG));
         mov->operands[1].reg->reg_type = real_regs;
-        mov->operands[1].reg->size = SIZE_DWORD;  // integer width
+        mov->operands[1].reg->size = arg_sz;
         mov->operands[1].reg->real_reg = abi_regs[ir->store_arg.arg_index];
       }
       else
@@ -500,7 +533,7 @@ static void generate_x64_asm_no_phi(X64_FUNC *func, X64_Blocks *blocks, IR *ir)
         mov->operands[1].mem.displacement = disp;
         mov->operands[1].mem.index = NULL;
         mov->operands[1].mem.scale = SIZE_QWORD;
-        mov->operands[1].mem.mov_size = SIZE_DWORD;  // integer width
+        mov->operands[1].mem.mov_size = arg_sz;
       }
       vector_push(blocks->asm_list, mov);
     }
@@ -747,7 +780,15 @@ void generate_func_x64(IRFunc *func)
   // MIR numbering and liveness (scaffold)
   x64_number_program_points(&func_x64);
   x64_build_mir_liveness(func, &func_x64);
+  // Optional MIR dump (disabled to reduce overhead)
+  // x64_dump_mir_cfg(func, &func_x64);
   x64_regalloc(func, &func_x64);
+  // Simple peephole after allocation to remove redundant moves
+  x64_peephole_optimize(&func_x64);
+  // Drop instructions marked unused to keep the stream minimal
+  x64_compact_unused(&func_x64);
+  // Validate target invariants (e.g., stack alignment at calls)
+  x64_validate(func, &func_x64);
   x64_emit_function(func, &func_x64);
 }
 

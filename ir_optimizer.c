@@ -283,15 +283,167 @@ void analyze_live_variable(IRProgram* program)
   }
 }
 
+// Forward decl for local PHI lowering pass
+static void lower_phi(IRProgram* program);
+
 IRProgram* optimize_ir(IRProgram* program)
 {
   pr_debug("start optimizer");
   make_cfg(program);
   analyze_cfg(program);
+  // Lower PHI nodes to explicit copies on predecessor edges at IR level.
+  // This makes the transformation target-agnostic so backends can assume
+  // SSA has been deconstructed. Place before live-variable analysis so
+  // liveness accounts for the inserted MOVs.
+  lower_phi(program);
   analyze_live_variable(program);
 
 #if DEBUG
   dump_cfg(program, stdout);
 #endif
   return program;
+}
+
+// ------------------------------
+// IR-level PHI lowering
+// ------------------------------
+
+static bool ir_block_defines_reg(IR_Blocks* block, size_t reg_num)
+{
+  // Scan IRs directly to detect whether this block defines the given vreg.
+  // This avoids relying on reg_def being populated before liveness.
+  for (size_t i = 1; i <= vector_size(block->IRs); i++)
+  {
+    IR* ir = vector_peek_at(block->IRs, i);
+    switch (ir->kind)
+    {
+      case IR_CALL:
+        if (ir->call.dst_reg && ir->call.dst_reg->reg_num == reg_num) return true;
+        break;
+      case IR_MOV:
+        if (ir->mov.dst_reg && ir->mov.dst_reg->reg_num == reg_num) return true;
+        break;
+      case IR_ADD: case IR_SUB: case IR_MUL: case IR_MULU:
+      case IR_DIV: case IR_DIVU: case IR_REM: case IR_REMU:
+      case IR_EQ: case IR_NEQ: case IR_LT: case IR_LTU:
+      case IR_LTE: case IR_LTEU: case IR_OR: case IR_XOR:
+      case IR_AND: case IR_SAL: case IR_SHL: case IR_SAR: case IR_SHR:
+        if (ir->bin_op.dst_reg && ir->bin_op.dst_reg->reg_num == reg_num) return true;
+        break;
+      case IR_PHI:
+        if (ir->phi.dst_reg && ir->phi.dst_reg->reg_num == reg_num) return true;
+        break;
+      case IR_LOAD:
+        if (ir->mem.reg && ir->mem.reg->reg_num == reg_num) return true;
+        break;
+      case IR_STORE:
+        break;
+      case IR_STORE_ARG:
+        if (ir->store_arg.dst_reg && ir->store_arg.dst_reg->reg_num == reg_num) return true;
+        break;
+      case IR_LEA:
+        if (ir->lea.dst_reg && ir->lea.dst_reg->reg_num == reg_num) return true;
+        break;
+      case IR_NOT: case IR_BIT_NOT: case IR_NEG:
+        if (ir->un_op.dst_reg && ir->un_op.dst_reg->reg_num == reg_num) return true;
+        break;
+      case IR_SIGN_EXTEND: case IR_ZERO_EXTEND: case IR_TRUNCATE:
+        if (ir->memsize.dst_reg && ir->memsize.dst_reg->reg_num == reg_num) return true;
+        break;
+      default: break;
+    }
+  }
+  return false;
+}
+
+static void ir_insert_before_terminator(IR_Blocks* blk, IR* insn)
+{
+  size_t n = vector_size(blk->IRs);
+  if (n == 0)
+  {
+    vector_push(blk->IRs, insn);
+    return;
+  }
+  IR* last = vector_peek(blk->IRs);
+  switch (last->kind)
+  {
+    case IR_JMP:
+    case IR_JNE:
+    case IR_JE:
+    case IR_RET:
+    case IR_FUNC_EPILOGUE:
+      // Insert before the terminator
+      vector_insert(blk->IRs, n, insn);
+      break;
+    default:
+      vector_push(blk->IRs, insn);
+      break;
+  }
+}
+
+static void lower_phi_in_func(IRFunc* func)
+{
+  // Walk blocks, and for each PHI insert MOV copies on each predecessor edge.
+  for (size_t bi = 1; bi <= vector_size(func->IR_Blocks); bi++)
+  {
+    IR_Blocks* blk = vector_peek_at(func->IR_Blocks, bi);
+    bool has_phi = false;
+    for (size_t ii = 1; ii <= vector_size(blk->IRs); ii++)
+    {
+      IR* ir = vector_peek_at(blk->IRs, ii);
+      if (ir->kind != IR_PHI) continue;
+      has_phi = true;
+
+      // Determine source per predecessor using simple heuristic as in x64 lowering
+      for (size_t pi = 1; pi <= vector_size(blk->parent); pi++)
+      {
+        IR_Blocks* pred = vector_peek_at(blk->parent, pi);
+        IR_REG* src = NULL;
+        if (ir_block_defines_reg(pred, ir->phi.lhs_reg->reg_num))
+          src = ir->phi.lhs_reg;
+        else if (ir_block_defines_reg(pred, ir->phi.rhs_reg->reg_num))
+          src = ir->phi.rhs_reg;
+        else
+        {
+          // Fallback: prefer matching width; else rhs
+          if (ir->phi.lhs_reg->reg_size == ir->phi.dst_reg->reg_size)
+            src = ir->phi.lhs_reg;
+          else
+            src = ir->phi.rhs_reg;
+        }
+
+        // Emit: mov dst, src at the end of predecessor
+        IR* mov = calloc(1, sizeof(IR));
+        mov->kind = IR_MOV;
+        mov->mov.is_imm = false;
+        mov->mov.src_reg = src;
+        mov->mov.dst_reg = ir->phi.dst_reg;
+        vector_push(src->used_list, mov);
+        vector_push(ir->phi.dst_reg->used_list, mov);
+        ir_insert_before_terminator(pred, mov);
+      }
+    }
+    if (has_phi)
+    {
+      // Remove PHI nodes from this block by compacting the IR list
+      Vector* new_list = vector_new();
+      for (size_t ii = 1; ii <= vector_size(blk->IRs); ii++)
+      {
+        IR* ir = vector_peek_at(blk->IRs, ii);
+        if (ir->kind == IR_PHI) continue;
+        vector_push(new_list, ir);
+      }
+      blk->IRs = new_list;
+    }
+  }
+}
+
+__attribute__((unused)) static void lower_phi(IRProgram* program)
+{
+  for (size_t fi = 1; fi <= vector_size(program->functions); fi++)
+  {
+    IRFunc* f = vector_peek_at(program->functions, fi);
+    if (f->builtin_func == FUNC_USER_DEFINED)
+      lower_phi_in_func(f);
+  }
 }

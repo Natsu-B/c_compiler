@@ -175,6 +175,7 @@ struct IR
     {
       IR_REG *dst_reg;
       size_t arg_index;
+      OperandSize size;  // width to store argument (e.g., DWORD for int, QWORD for pointers)
     } store_arg;
 
     // IR_LOAD, IR_STORE

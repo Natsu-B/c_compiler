@@ -40,7 +40,8 @@ static Node* constant_folding(Node* node)
         break;
       long long lhs_val = node->lhs->num_val;
       long long rhs_val = node->rhs->num_val;
-      long long result_val;
+      long long result_val = 0;
+      bool folded = false;
       switch (node->kind)
       {
         case ND_ADD:
@@ -48,37 +49,42 @@ static Node* constant_folding(Node* node)
               (rhs_val < 0 && lhs_val < LLONG_MIN - rhs_val))
             break;
           result_val = lhs_val + rhs_val;
+          folded = true;
           break;
         case ND_SUB:
           if ((rhs_val > 0 && lhs_val < LLONG_MIN + rhs_val) ||
               (rhs_val < 0 && lhs_val > LLONG_MAX + rhs_val))
             break;
           result_val = lhs_val - rhs_val;
+          folded = true;
           break;
         case ND_MUL:
-          if (lhs_val > LLONG_MAX / rhs_val)
+          if (rhs_val != 0 && (lhs_val > LLONG_MAX / rhs_val || lhs_val < LLONG_MIN / rhs_val))
             break;
           result_val = lhs_val * rhs_val;
+          folded = true;
           break;
         case ND_DIV:
         case ND_REM:
           if (rhs_val == 0)
             break;
           result_val = lhs_val / rhs_val;
+          folded = true;
           break;
-        case ND_EQ: result_val = lhs_val == rhs_val; break;
-        case ND_NEQ: result_val = lhs_val != rhs_val; break;
-        case ND_LT: result_val = lhs_val < rhs_val; break;
-        case ND_LTE: result_val = lhs_val <= rhs_val; break;
-        case ND_LOGICAL_OR: result_val = lhs_val || rhs_val; break;
-        case ND_LOGICAL_AND: result_val = lhs_val && rhs_val; break;
-        case ND_INCLUSIVE_OR: result_val = lhs_val | rhs_val; break;
-        case ND_EXCLUSIVE_OR: result_val = lhs_val ^ rhs_val; break;
-        case ND_AND: result_val = lhs_val & rhs_val; break;
-        case ND_LEFT_SHIFT: result_val = lhs_val << rhs_val; break;
-        case ND_RIGHT_SHIFT: result_val = lhs_val >> rhs_val; break;
+        case ND_EQ: result_val = lhs_val == rhs_val; folded = true; break;
+        case ND_NEQ: result_val = lhs_val != rhs_val; folded = true; break;
+        case ND_LT: result_val = lhs_val < rhs_val; folded = true; break;
+        case ND_LTE: result_val = lhs_val <= rhs_val; folded = true; break;
+        case ND_LOGICAL_OR: result_val = lhs_val || rhs_val; folded = true; break;
+        case ND_LOGICAL_AND: result_val = lhs_val && rhs_val; folded = true; break;
+        case ND_INCLUSIVE_OR: result_val = lhs_val | rhs_val; folded = true; break;
+        case ND_EXCLUSIVE_OR: result_val = lhs_val ^ rhs_val; folded = true; break;
+        case ND_AND: result_val = lhs_val & rhs_val; folded = true; break;
+        case ND_LEFT_SHIFT: result_val = lhs_val << rhs_val; folded = true; break;
+        case ND_RIGHT_SHIFT: result_val = lhs_val >> rhs_val; folded = true; break;
         default: break;
       }
+      if (!folded) break;
       node->kind = ND_NUM;
       node->num_val = result_val;
       node->lhs = NULL;
@@ -93,15 +99,17 @@ static Node* constant_folding(Node* node)
       if (node->lhs->kind != ND_NUM)
         break;
       long long defare_val = node->lhs->num_val;
-      long long result_val;
+      long long result_val = 0;
+      bool folded = false;
       switch (node->kind)
       {
-        case ND_LOGICAL_NOT: result_val = !defare_val; break;
-        case ND_NOT: result_val = ~defare_val; break;
-        case ND_UNARY_PLUS: result_val = defare_val; break;
-        case ND_UNARY_MINUS: result_val = -defare_val; break;
+        case ND_LOGICAL_NOT: result_val = !defare_val; folded = true; break;
+        case ND_NOT: result_val = ~defare_val; folded = true; break;
+        case ND_UNARY_PLUS: result_val = defare_val; folded = true; break;
+        case ND_UNARY_MINUS: result_val = -defare_val; folded = true; break;
         default: break;
       }
+      if (!folded) break;
       node->kind = ND_NUM;
       node->num_val = result_val;
       node->lhs = NULL;

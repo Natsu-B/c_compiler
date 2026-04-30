@@ -1,8 +1,21 @@
 #!/usr/bin/env bash
+set -u
+
 COMPILER=${1:-./main}
 COMPILER_ARGS=${2:-}
 AS_CMD=${3:-gcc}
 TEST_CC=${4:-gcc}
+LINK_FLAGS=${5:--no-pie}
+TEST_OUT_PREFIX="${TMPDIR:-/tmp}/compiler-test.$$"
+TMP_C="${TEST_OUT_PREFIX}.c"
+GCC_BIN="${TEST_OUT_PREFIX}.gcc"
+OUT_BIN="${TEST_OUT_PREFIX}.out"
+OUT_S="${TEST_OUT_PREFIX}.s"
+GCC_TXT="${TEST_OUT_PREFIX}.gcc.txt"
+OUT_TXT="${TEST_OUT_PREFIX}.out.txt"
+COMPILER_STDOUT="${TEST_OUT_PREFIX}.compiler.stdout"
+OUT_I="${TEST_OUT_PREFIX}.i"
+EXPECTED_I="${TEST_OUT_PREFIX}.expected.i"
 
 show_compiler_output_and_exit() {
   local message="$1"
@@ -26,31 +39,31 @@ show_compiler_output_and_exit() {
 
 assert_print() {
   input="$1"
-  local compiler_stdout="out/compiler.stdout"
+  local compiler_stdout="$COMPILER_STDOUT"
 
-  echo "$input" > out/tmp.c
-  if ! "$TEST_CC" -I./test -include gcc.h -o out/gcc out/tmp.c; then
+  echo "$input" > "$TMP_C"
+  if ! "$TEST_CC" $LINK_FLAGS -I./test -include gcc.h -o "$GCC_BIN" "$TMP_C"; then
     echo "ERROR: Reference build with GCC failed for input: '$input'"
     exit 1
   fi
-  ./out/gcc > out/gcc.txt
+  "$GCC_BIN" > "$GCC_TXT"
   expected_exit_code="$?"
 
-  if ! "$COMPILER" $COMPILER_ARGS -i out/tmp.c -o out/out.s > "$compiler_stdout"; then
+  if ! "$COMPILER" $COMPILER_ARGS -i "$TMP_C" -o "$OUT_S" > "$compiler_stdout"; then
     show_compiler_output_and_exit "COMPILATION FAILED" "$compiler_stdout" "$input"
   fi
 
-  if ! "$AS_CMD" -z noexecstack -o out/out out/out.s; then
+  if ! "$AS_CMD" $LINK_FLAGS -z noexecstack -o "$OUT_BIN" "$OUT_S"; then
     show_compiler_output_and_exit "LINKING FAILED" "$compiler_stdout" "$input"
   fi
 
-  ./out/out > out/out.txt
+  "$OUT_BIN" > "$OUT_TXT"
   actual_exit_code="$?"
 
   if [ "$actual_exit_code" != "$expected_exit_code" ]; then
     show_compiler_output_and_exit "EXIT CODE MISMATCH: Expected $expected_exit_code, but got $actual_exit_code" "$compiler_stdout" "$input"
   fi
-  if ! cmp -s "out/out.txt" "out/gcc.txt"; then
+  if ! cmp -s "$OUT_TXT" "$GCC_TXT"; then
     show_compiler_output_and_exit "OUTPUT MISMATCH" "$compiler_stdout" "$input"
   fi
 
@@ -59,23 +72,23 @@ assert_print() {
 
 assert() {
   input="$1"
-  local compiler_stdout="out/compiler.stdout"
+  local compiler_stdout="$COMPILER_STDOUT"
 
-  echo "$input" > out/tmp.c
+  echo "$input" > "$TMP_C"
 
-  "$TEST_CC" -I./test -include gcc.h -o out/gcc out/tmp.c
-  ./out/gcc
+  "$TEST_CC" $LINK_FLAGS -I./test -include gcc.h -o "$GCC_BIN" "$TMP_C"
+  "$GCC_BIN"
   expected="$?"
 
-  if ! "$COMPILER" $COMPILER_ARGS -i out/tmp.c -o out/out.s > "$compiler_stdout"; then
+  if ! "$COMPILER" $COMPILER_ARGS -i "$TMP_C" -o "$OUT_S" > "$compiler_stdout"; then
     show_compiler_output_and_exit "COMPILATION FAILED" "$compiler_stdout" "$input"
   fi
 
-  if ! "$AS_CMD" -z noexecstack -o out/out out/out.s; then
+  if ! "$AS_CMD" $LINK_FLAGS -z noexecstack -o "$OUT_BIN" "$OUT_S"; then
     show_compiler_output_and_exit "LINKING FAILED" "$compiler_stdout" "$input"
   fi
 
-  ./out/out
+  "$OUT_BIN"
   actual="$?"
 
   if [ "$actual" = "$expected" ]; then
@@ -85,27 +98,69 @@ assert() {
   fi
 }
 
+assert_compile_fail() {
+  input="$1"
+  local compiler_stdout="$COMPILER_STDOUT"
+
+  echo "$input" > "$TMP_C"
+
+  if ! "$TEST_CC" $LINK_FLAGS -I./test -include gcc.h -o "$GCC_BIN" "$TMP_C"; then
+    echo "ERROR: Reference build with GCC failed for input: '$input'"
+    exit 1
+  fi
+
+  if "$COMPILER" $COMPILER_ARGS -i "$TMP_C" -o "$OUT_S" > "$compiler_stdout" 2>&1; then
+    show_compiler_output_and_exit "COMPILATION UNEXPECTEDLY SUCCEEDED" "$compiler_stdout" "$input"
+  fi
+
+  echo "$input => compile fail (expected)"
+}
+
+assert_preprocess() {
+  input="$1"
+  expected="$2"
+  local compiler_stdout="$COMPILER_STDOUT"
+
+  echo "$input" > "$TMP_C"
+  printf '%s\n' "$expected" > "$EXPECTED_I"
+
+  if ! "$COMPILER" $COMPILER_ARGS -E -i "$TMP_C" -o "$OUT_I" > "$compiler_stdout"; then
+    show_compiler_output_and_exit "PREPROCESSING FAILED" "$compiler_stdout" "$input"
+  fi
+
+  if ! cmp -s "$OUT_I" "$EXPECTED_I"; then
+    echo "--- Expected preprocessed output ---"
+    cat "$EXPECTED_I"
+    echo "--- Actual preprocessed output ---"
+    cat "$OUT_I"
+    echo "----------------------------------"
+    show_compiler_output_and_exit "PREPROCESS OUTPUT MISMATCH" "$compiler_stdout" "$input"
+  fi
+
+  echo "$input => preprocess ok"
+}
+
 assert_with_outer_code() {
   input="$1"
   shift
   linkcode=("$@")
-  local compiler_stdout="out/compiler.stdout"
+  local compiler_stdout="$COMPILER_STDOUT"
 
-  echo "$input" > out/tmp.c
+  echo "$input" > "$TMP_C"
 
-  "$TEST_CC" -I./test -include gcc.h -o out/gcc out/tmp.c "${linkcode[@]}"
-  ./out/gcc
+  "$TEST_CC" $LINK_FLAGS -I./test -include gcc.h -o "$GCC_BIN" "$TMP_C" "${linkcode[@]}"
+  "$GCC_BIN"
   expected="$?"
 
-  if ! "$COMPILER" $COMPILER_ARGS -i out/tmp.c -o out/out.s > "$compiler_stdout"; then
+  if ! "$COMPILER" $COMPILER_ARGS -i "$TMP_C" -o "$OUT_S" > "$compiler_stdout"; then
     show_compiler_output_and_exit "COMPILATION FAILED" "$compiler_stdout" "$input"
   fi
 
-  if ! "$AS_CMD" -z noexecstack -o out/out out/out.s "${linkcode[@]}"; then
+  if ! "$AS_CMD" $LINK_FLAGS -z noexecstack -o "$OUT_BIN" "$OUT_S" "${linkcode[@]}"; then
     show_compiler_output_and_exit "LINKING FAILED" "$compiler_stdout" "$input"
   fi
 
-  ./out/out
+  "$OUT_BIN"
   actual="$?"
 
   if [ "$actual" = "$expected" ]; then
@@ -122,6 +177,9 @@ mkdir -p out
   make clean
   make CC="$TEST_CC"
 )
+
+# Run the regression suite once by default. Use an outer shell loop when
+# stress testing the compiler repeatedly.
 assert 'int main() {return 0;}'
 assert 'int main() {return 42; }'
 assert 'int main ( ) {return 10-1;}'
@@ -132,6 +190,9 @@ assert 'int main(){return 1* 8 * (4 / 2);}'
 assert 'int main(){return -1 + 2;}'
 assert 'int main(){return +9+(-1)+2;}'
 assert  'int main(){return -(+1-2);}'
+assert 'int main() {int b = -1; return b;}'
+assert 'int main() {int b = -1; return b + 2;}'
+assert 'int main() {int x = -1; return x < 0;}'
 assert 'int main(){return 0 == 1;}'
 assert 'int main(){return 0 ==0;}'
 assert 'int main() {return 0 != 0;}'
@@ -188,8 +249,16 @@ assert 'int main() {char i; i= 3; return i;}'
 assert 'int main() {char i[4]; i[3] = 10; i[2] = 0; int j = 2; return i[2] + i[3] +j;}'
 assert 'int main() {char i; char a = 100; char b = 3; char c = 4; i = a * b /c; return i;}'
 assert 'int hoge; int main() {int x = 2; x = hoge; return x;}'
+assert 'long long x = -1; int main() { return x < 0; }'
+assert 'int main() { unsigned int u = 1; unsigned long long x = (unsigned long long)u; return x; }'
+assert 'int arr[] = {-1, 2}; int main() { return arr[0] + arr[1]; }'
+assert 'char s[] = "ab"; char *p[] = {s}; int main() { return p[0][1]; }'
 assert 'int main() {char *i = "abc"; return i[0];}'
 assert 'int main() {char*i = "abc"; return i[2];}'
+assert 'int main(){ char *s = ""; return s[0]; }'
+assert 'int main(){ char *p = 0; char *q = p ? p : "ab"; return q[1]; }'
+assert 'int main(){ char *q = 1 ? "ab" : "cd"; return q[0]; }'
+assert 'int pick(int a, int b, int c) { return c; } int main(){ int x = 0; return pick(1, x ? 2 : 3, 4); }'
 assert 'int i; int main() {int i = 1; {int i = 2; {int i = 3; return i;}}}'
 assert 'int i; int main() {int i = 1; {int i = 2; {int i = 3;} return i;}}'
 assert 'int i; int main() {int i = 1; {int i = 2; {int i = 3;}} return i;}'
@@ -203,10 +272,12 @@ assert '#include <stdbool.h>
 short h; int main() { short i; bool j; if (sizeof(h) != 2) return 0; if (sizeof(i) != 2) return 1; /*if (sizeof(j) != 1) return 2;*/ return 10; }'
 assert '#include <stdbool.h>
 bool f; int main() {if (f) return 1; f = 1; if (f) f; else return 2; f = f + 1; if (f) f; else return 4; return 3;}'
+assert 'int main() { unsigned short int x = 9; long int y = 5; return x + y; }'
 assert 'typedef int hoge; int main() {hoge a = 1; return a;}'
 assert 'int main() { typedef long long fuga; fuga x; return sizeof(x); }'
 assert 'typedef int *hoge; int main() {int y; hoge x = &y; *x = 1; return *x;}'
 assert 'typedef int hoge[2]; int main() {hoge x; x[1] = 10; x[0] = 2; return x[1];}'
+assert 'int foo(); int main() { return 0; }'
 assert 'struct HOGE { int x; int y; }; int main() {struct HOGE x; return sizeof(x);}'
 assert '#include <stdbool.h>
 struct HOGE { int x; int y; }; struct FUGA { bool x; bool y; }; typedef struct FUGA HOGE; int main() {HOGE x; return sizeof(x);}'
@@ -246,6 +317,17 @@ assert 'int main() { typedef int hoge; return sizeof(hoge*); }'
 assert 'int main() { typedef int hoge[2]; return sizeof(hoge); }'
 assert 'int main() { typedef struct HOGE {int x; int y;} hoge; return sizeof(hoge); }'
 assert 'int main() { typedef struct HOGE {int x; int y;} hoge; return sizeof(hoge*); }'
+
+# Known unsupported constructs. These stay as expected failures until the
+# parser/analyzer/IR pipeline can lower them correctly.
+assert_compile_fail 'typedef struct { int x; int y; } S; int main() { S s = { .x = 1, .y = 2 }; return s.x + s.y; }'
+assert_compile_fail 'typedef struct { int x; int y; } S; int main() { S s = {0}; return s.x + s.y; }'
+assert_compile_fail 'int main() { static int x; return x; }'
+assert_compile_fail 'int main() { auto int helper(int x) { return x + 1; } return helper(2); }'
+assert_compile_fail 'struct S { int x; int y; }; int main() { return ((struct S){1, 2}).x; }'
+assert_compile_fail 'int foo() { return 7; } int call(int (*fn)()) { return fn(); } int main() { return call(foo); }'
+assert_compile_fail 'int main() { return "abc"[0]; }'
+assert_compile_fail 'int main() { return __FILE__[0] != 0 ? 0 : 1; }'
 assert 'int main() { return sizeof(int); }'
 assert 'int main() { return sizeof(int*); }'
 assert 'int main() { return sizeof(int**) + 1; }'
@@ -293,6 +375,7 @@ assert 'int main() {int a[] = {1, 2, 3}; return sizeof(a);}'
 assert 'int main() {int a[5] = {1, 2}; return a[0];}'
 assert 'int main() {int a[5] = {1, 2}; return a[1];}'
 assert 'int main() {int a[5] = {1, 2}; return a[2];}'
+assert 'int main() { _Bool a[9] = {1}; return a[0] + a[8]; }'
 assert 'int main() {int a[2][5] = {{1, 2,3, 4, 5}, {4, 5},}; return sizeof(a);}'
 assert 'int main() {int a[2][5] = {{1, 2,3, 4, 5}, {6, 7},}; return a[0][4];}'
 assert 'int main() {int a[3][5] = {{1, 2,3, 4, 5}, {6, 7, 12, 13, 14},{11, 10, 9, 8}}; return a[2][1];}'
@@ -300,10 +383,17 @@ assert 'int main() {int a[2][3] = {{1, 2,3}, {4, 5},}; return a[0][2];}'
 assert 'int main() {int a[2][3] = {{1, 2,3}, {4, 5},}; return a[1][2];}'
 assert 'int main() { struct {int a; int b;} x; return sizeof(x); }'
 assert 'int main() { struct {int a; int b;} x; x.a = 10; x.b = 20; return x.a + x.b; }'
+assert 'typedef struct { int x; int y; } S; int main() { S a; S b; a.x = 3; a.y = 4; b = a; return b.x + b.y; }'
+assert 'typedef struct { char c; long x; } S; int main() { S a; S b; a.c = 5; a.x = 7; b = a; return b.c + b.x; }'
 assert 'struct {union{int x; int y;}; long z;} x; int main() {x.z = 10; x.x = 1; x.y = 2; return x.x + x.y + x.z;}'
 assert_print 'int hoge() {printf("hello world!!!%s:%d:%s",__FILE__, __LINE__, __func__); return 0;} int main() { printf("Hello World!!!%s:%d:%s",__FILE__,__LINE__,__func__); return hoge(); }'
+assert 'int call(char *s) { return s[7] == 95 ? 0 : 1; } int main() { return call("__FILE__"); }'
+assert 'int main() { char *s = "__LINE__"; return s[7] == 95 ? 0 : 1; }'
+assert_preprocess 'int main(){ char *s = "x"; return s[0]; }' 'int main(){ char *s = "x"; return s[0]; }'
+assert_preprocess 'int main(){ char *s = "__FILE__"; return s[0]; }' 'int main(){ char *s = "__FILE__"; return s[0]; }'
 assert 'int arr[] = {1, 2, 3}; int main() { return arr[1]; }'
 assert 'int arr[5] = {10, 20, 30}; int main() { return arr[0] + arr[2]; }'
+assert 'int arr[2][3] = {{1}, {4, 5}}; int main() { return arr[0][2] + arr[1][2]; }'
 assert 'int a[2][5] = {{1, 2,3, 4, 5}, {6, 7},}; int main() {return a[0][4] * 8 + a[1][3];}'
 assert 'int a[2][5] = {{6, 7},{1, 2,3, 4, 5}}; int main() {return a[0][4] * 8 + a[1][3];}'
 assert_print 'int fibonacci1(){for (int i = 0, a = 0, b = 1; i < 10; i++, b = a + b)printf("%d, ", i ? a = b - a : 0);printf("...\n");return 0;}int main(){printf("Hello World!!!"); return fibonacci1();}'

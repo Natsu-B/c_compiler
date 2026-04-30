@@ -42,6 +42,23 @@ void line_count()
   File_Line++;
 }
 
+static void write_string_token(FILE *fout, Token *token)
+{
+  fprintf(fout, "%c", 34);
+  for (size_t i = 0; i < token->len; i++)
+  {
+    switch (token->str[i])
+    {
+      case 92: fprintf(fout, "%c%c", 92, 92); break;
+      case 34: fprintf(fout, "%c%c", 92, 34); break;
+      case 10: fprintf(fout, "%c%c", 92, 110); break;
+      case 9: fprintf(fout, "%c%c", 92, 116); break;
+      default: fprintf(fout, "%c", token->str[i]); break;
+    }
+  }
+  fprintf(fout, "%c", 34);
+}
+
 void token_void(Token *token)
 {
   token->kind = TK_IGNORABLE;
@@ -101,7 +118,7 @@ Token *directive(Token *old)
         Vector *conditional_list;
         for (;;)
         {
-          if (!vector_has_data(Conditional_Inclusion_List))
+          if (vector_size(Conditional_Inclusion_List) == 0)
             unreachable();
           conditional_list = vector_shift(Conditional_Inclusion_List);
           if (old == vector_peek_at(conditional_list, 1))
@@ -124,7 +141,7 @@ Token *directive(Token *old)
         Vector *conditional_list;
         for (;;)
         {
-          if (!vector_has_data(Conditional_Inclusion_List))
+          if (vector_size(Conditional_Inclusion_List) == 0)
             unreachable();
           conditional_list = vector_shift(Conditional_Inclusion_List);
           if (old == vector_peek_at(conditional_list, 1))
@@ -248,7 +265,7 @@ Token *directive(Token *old)
         Vector *conditional_list;
         for (;;)
         {
-          if (!vector_has_data(Conditional_Inclusion_List))
+          if (vector_size(Conditional_Inclusion_List) == 0)
             unreachable();
           conditional_list = vector_shift(Conditional_Inclusion_List);
           if (old == vector_peek_at(conditional_list, 1))
@@ -265,6 +282,7 @@ Token *directive(Token *old)
         {
           token_void(token);
           Token *next = token->next;
+          size_t gcc_predef_len = gcc_predef_end - gcc_predef_start;
           token->kind = TK_IDENT;
           token->str = "char";
           token->len = 4;
@@ -281,17 +299,11 @@ Token *directive(Token *old)
           token->str = "=";
           token->len = 1;
           token = token->next = malloc(sizeof(Token));
-          char *gcc_predef_str = malloc(gcc_predef_start - gcc_predef_end +
-                                        3 /* null terminator*/);
-          *(gcc_predef_str) = *(gcc_predef_str + (size_t)gcc_predef_start -
-                                (size_t)gcc_predef_end + 1) = '"';
-          *(gcc_predef_str + (size_t)gcc_predef_start - (size_t)gcc_predef_end +
-            2) = '\0';
-          strncpy(gcc_predef_str + 1, gcc_predef_start,
-                  gcc_predef_end - gcc_predef_start + 1);
+          char *gcc_predef_str = malloc(gcc_predef_len ? gcc_predef_len : 1);
+          memcpy(gcc_predef_str, gcc_predef_start, gcc_predef_len);
           token->kind = TK_STRING;
           token->str = gcc_predef_str;
-          token->len = gcc_predef_end - gcc_predef_start + 3;
+          token->len = gcc_predef_len;
           token->next = next;
           return next;
         }
@@ -360,8 +372,11 @@ Token *directive(Token *old)
         {  // Read stdlib
           for (size_t i = 0; i < sizeof(lib_path) / sizeof(char *); i++)
           {
+            char *shifted_name = file_name;
+            if (i)
+              shifted_name = file_name + lib_path_size[i - 1] - 1;
             memmove(file_name + lib_path_size[i] - 1,
-                    file_name + (i ? lib_path_size[i - 1] - 1 : 0),
+                    shifted_name,
                     file_len + 1);
             memcpy(file_name, lib_path[i], lib_path_size[i] - 1);
             pr_debug("file path: %s", file_name);
@@ -424,7 +439,9 @@ Token *preprocess(char *input, char *end, char *file_name, Token *token)
   char *old_file_start = File_Start;
   Vector *old_conditional_inclusion_list = Conditional_Inclusion_List;
   Conditional_Inclusion_List = vector_new();
-  Token *next_token = token ? token->next : NULL;
+  Token *next_token = NULL;
+  if (token)
+    next_token = token->next;
   File_Name = file_name;
   File_Line = 1;
   File_Start = input;
@@ -436,7 +453,7 @@ Token *preprocess(char *input, char *end, char *file_name, Token *token)
     token = token_first;
   include_level++;
   preprocessor();
-#ifdef DEBUG
+#if DEBUG
   print_definition();
 #endif
   include_level--;
@@ -464,7 +481,6 @@ void set_default_definition()
     preprocess(gcc_predef_start, gcc_predef_end, NULL, NULL);
 }
 
-[[noreturn]]
 void preprocessed_file_writer(Token *token, char *output_filename)
 {
   FILE *fout = fopen(output_filename, "w");
@@ -476,7 +492,10 @@ void preprocessed_file_writer(Token *token, char *output_filename)
   {
     if (!token)
       break;
-    fprintf(fout, "%.*s", (int)token->len, token->str);
+    if (token->kind == TK_STRING)
+      write_string_token(fout, token);
+    else
+      fprintf(fout, "%.*s", (int)token->len, token->str);
     token = token->next;
   }
   exit(0);

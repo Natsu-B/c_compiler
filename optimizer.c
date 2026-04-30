@@ -1,6 +1,13 @@
 #include "include/optimizer.h"
 
+#ifdef SELF_HOST
+#define MYCC_LLONG_MAX 9223372036854775807
+#define MYCC_LLONG_MIN (-9223372036854775807 - 1)
+#else
 #include <limits.h>
+#define MYCC_LLONG_MAX LLONG_MAX
+#define MYCC_LLONG_MIN LLONG_MIN
+#endif
 
 #include "include/parser.h"
 
@@ -45,21 +52,23 @@ static Node* constant_folding(Node* node)
       switch (node->kind)
       {
         case ND_ADD:
-          if ((rhs_val > 0 && lhs_val > LLONG_MAX - rhs_val) ||
-              (rhs_val < 0 && lhs_val < LLONG_MIN - rhs_val))
+          if ((rhs_val > 0 && lhs_val > MYCC_LLONG_MAX - rhs_val) ||
+              (rhs_val < 0 && lhs_val < MYCC_LLONG_MIN - rhs_val))
             break;
           result_val = lhs_val + rhs_val;
           folded = true;
           break;
         case ND_SUB:
-          if ((rhs_val > 0 && lhs_val < LLONG_MIN + rhs_val) ||
-              (rhs_val < 0 && lhs_val > LLONG_MAX + rhs_val))
+          if ((rhs_val > 0 && lhs_val < MYCC_LLONG_MIN + rhs_val) ||
+              (rhs_val < 0 && lhs_val > MYCC_LLONG_MAX + rhs_val))
             break;
           result_val = lhs_val - rhs_val;
           folded = true;
           break;
         case ND_MUL:
-          if (rhs_val != 0 && (lhs_val > LLONG_MAX / rhs_val || lhs_val < LLONG_MIN / rhs_val))
+          if (rhs_val != 0 &&
+              (lhs_val > MYCC_LLONG_MAX / rhs_val ||
+               lhs_val < MYCC_LLONG_MIN / rhs_val))
             break;
           result_val = lhs_val * rhs_val;
           folded = true;

@@ -18,6 +18,9 @@
 #include "include/x64_opt.h"
 #include "include/x64_validate.h"
 
+static const enum register_name x64_abi_arg_regs[] = {rdi, rsi, rdx, rcx, r8,
+                                                      r9};
+
 // // Registers used for general purpose, arguments, and return values
 // static char *regs_64[] = {"rdi", "rsi", "rdx", "rcx", "r8",  "r9",
 //                           "r10", "r11", "rax", "rbx", "rsp", "rbp",
@@ -107,17 +110,28 @@ static void generate_x64_asm_no_phi(X64_FUNC *func, X64_Blocks *blocks, IR *ir)
     {
       // Move args into ABI registers/stack then emit CALL
       size_t nargs = vector_size(ir->call.args);
-      static const enum register_name abi_regs[] = {rdi, rsi, rdx, rcx, r8, r9};
-      for (size_t i = 0; i < nargs && i < sizeof(abi_regs) / sizeof(abi_regs[0]); i++)
+      for (size_t i = 0;
+           i < nargs &&
+           i < sizeof(x64_abi_arg_regs) / sizeof(x64_abi_arg_regs[0]);
+           i++)
       {
         IR_REG *arg = vector_peek_at(ir->call.args, i + 1);
         X64_ASM *mov = new_asm();
-        mov->kind = X64_MOV;
+        OperandSize abi_arg_size = arg->reg_size;
+        if (abi_arg_size == SIZE_BYTE || abi_arg_size == SIZE_WORD)
+        {
+          mov->kind = X64_MOVZX;
+          abi_arg_size = SIZE_DWORD;
+        }
+        else
+        {
+          mov->kind = X64_MOV;
+        }
         // dst: fixed arg reg (use real reg to avoid null vreg metadata)
         set_regs(&mov->operands[0], calloc(1, sizeof(X64_REG)));
         mov->operands[0].reg->reg_type = real_regs;
-        mov->operands[0].reg->size = arg->reg_size;
-        mov->operands[0].reg->real_reg = abi_regs[i];
+        mov->operands[0].reg->size = abi_arg_size;
+        mov->operands[0].reg->real_reg = x64_abi_arg_regs[i];
         // src: virtual arg reg
         assign_virtual_regs(func, &mov->operands[1], arg);
         vector_push(blocks->asm_list, mov);
@@ -231,8 +245,10 @@ static void generate_x64_asm_no_phi(X64_FUNC *func, X64_Blocks *blocks, IR *ir)
     break;
     case IR_RET:
     {
+      pr_debug("x64-ret: enter");
       if (!ir->ret.return_void)
       {
+        pr_debug("x64-ret: build value move");
         // Move the return value into RAX via constraint metadata
         X64_ASM *mov = new_asm();
         mov->kind = X64_MOV;
@@ -245,10 +261,13 @@ static void generate_x64_asm_no_phi(X64_FUNC *func, X64_Blocks *blocks, IR *ir)
         // src: original virtual register
         assign_virtual_regs(func, &mov->operands[1], ir->ret.src_reg);
         vector_push(blocks->asm_list, mov);
+        pr_debug("x64-ret: value move queued");
       }
       X64_ASM *leave = new_asm();
       leave->kind = X64_RETURN;
+      pr_debug("x64-ret: return insn allocated");
       vector_push(blocks->asm_list, leave);
+      pr_debug("x64-ret: done");
     }
     break;
     case IR_BUILTIN_ASM:
@@ -485,18 +504,26 @@ static void generate_x64_asm_no_phi(X64_FUNC *func, X64_Blocks *blocks, IR *ir)
       X64_ASM *mov = new_asm();
       mov->kind = X64_MOV;
       X64_REG *mem = search_regs(func, ir->mem.mem_reg);
+      X64_Operand *reg_op = NULL;
       if (!mem)
         unreachable();
-      X64_Operand *op =
-          ir->kind == IR_LOAD ? &mov->operands[1] : &mov->operands[0];
-      op->kind = OP_MEM;
-      op->mem.base = mem;
-      op->mem.displacement = ir->mem.offset;
-      op->mem.mov_size = ir->mem.size;
-
-      assign_virtual_regs(
-          func, ir->kind == IR_LOAD ? &mov->operands[0] : &mov->operands[1],
-          ir->mem.reg);
+      if (ir->kind == IR_LOAD)
+      {
+        reg_op = &mov->operands[0];
+        mov->operands[1].kind = OP_MEM;
+        mov->operands[1].mem.base = mem;
+        mov->operands[1].mem.displacement = ir->mem.offset;
+        mov->operands[1].mem.mov_size = ir->mem.size;
+      }
+      else
+      {
+        reg_op = &mov->operands[1];
+        mov->operands[0].kind = OP_MEM;
+        mov->operands[0].mem.base = mem;
+        mov->operands[0].mem.displacement = ir->mem.offset;
+        mov->operands[0].mem.mov_size = ir->mem.size;
+      }
+      assign_virtual_regs(func, reg_op, ir->mem.reg);
       vector_push(blocks->asm_list, mov);
     }
     break;
@@ -514,14 +541,15 @@ static void generate_x64_asm_no_phi(X64_FUNC *func, X64_Blocks *blocks, IR *ir)
       mov->operands[0].mem.mov_size = arg_sz;
       // src: fixed ABI register for first 6, otherwise from caller stack at
       // [rbp + 16 + 8*(arg_index-6)] per SysV AMD64 ABI
-      static const enum register_name abi_regs[] = {rdi, rsi, rdx, rcx, r8, r9};
-      if (ir->store_arg.arg_index < sizeof(abi_regs) / sizeof(abi_regs[0]))
+      if (ir->store_arg.arg_index <
+          sizeof(x64_abi_arg_regs) / sizeof(x64_abi_arg_regs[0]))
       {
         mov->operands[1].kind = OP_REG;
         mov->operands[1].reg = calloc(1, sizeof(X64_REG));
         mov->operands[1].reg->reg_type = real_regs;
         mov->operands[1].reg->size = arg_sz;
-        mov->operands[1].reg->real_reg = abi_regs[ir->store_arg.arg_index];
+        mov->operands[1].reg->real_reg =
+            x64_abi_arg_regs[ir->store_arg.arg_index];
       }
       else
       {
@@ -613,16 +641,9 @@ static void generate_x64_asm_no_phi(X64_FUNC *func, X64_Blocks *blocks, IR *ir)
       cmp->operands[1].kind = OP_IMM;
       cmp->operands[1].imm = 0;
       vector_push(blocks->asm_list, cmp);
-      // zero clear
-      X64_ASM *xor = new_asm();
-      xor->kind = X64_XOR;
-      assign_virtual_regs(func, &xor->operands[0], ir->un_op.dst_reg);
-      set_regs(&xor->operands[1], xor->operands[0].reg);
-      xor->operands[0].constraint.require_register = true;
-      vector_push(blocks->asm_list, xor);
       X64_ASM *set = new_asm();
       set->kind = X64_SETE;
-      set_regs(&set->operands[0], xor->operands[1].reg);
+      assign_virtual_regs(func, &set->operands[0], ir->un_op.dst_reg);
       set->operands[0].constraint.require_register = true;
       vector_push(blocks->asm_list, set);
     }
@@ -682,47 +703,48 @@ static void lower_block_phis(X64_FUNC *func_x64,
                              Vector *ir_blocks_vec,
                              Vector *x64_blocks_vec)
 {
-  (void)x64_block; // phi copies go to predecessors
+  (void)x64_block;  // phi copies go to predecessors
   // Scan IRs for PHI and emit parallel copies on each predecessor
   for (size_t i = 1; i <= vector_size(ir_block->IRs); i++)
   {
     IR *ir = vector_peek_at(ir_block->IRs, i);
-    if (ir->kind != IR_PHI)
-      continue;
-
-    // For each predecessor, choose corresponding source
-    for (size_t pi = 1; pi <= vector_size(ir_block->parent); pi++)
+    if (ir->kind == IR_PHI)
     {
-      IR_Blocks *pred_ir = vector_peek_at(ir_block->parent, pi);
-      // Map predecessor IR block to the created X64 block
-      size_t pred_index = vector_search(ir_blocks_vec, pred_ir);
-      if (!pred_index)
-        continue;  // safety: skip if predecessor not found
-      X64_Blocks *pred_x64 = vector_peek_at(x64_blocks_vec, pred_index);
-
-      // Decide source: if pred defines lhs, use lhs; else if defines rhs, use rhs; else default to rhs
-      IR_REG *src_reg = NULL;
-      if (block_defines_reg(pred_ir, ir->phi.lhs_reg->reg_num))
-        src_reg = ir->phi.lhs_reg;
-      else if (block_defines_reg(pred_ir, ir->phi.rhs_reg->reg_num))
-        src_reg = ir->phi.rhs_reg;
-      else
+      // For each predecessor, choose corresponding source
+      for (size_t pi = 1; pi <= vector_size(ir_block->parent); pi++)
       {
-        // Fallback: if predecessor has no explicit def, pick the one whose
-        // size matches dst, preferring lhs.
-        if (ir->phi.lhs_reg->reg_size == ir->phi.dst_reg->reg_size)
-          src_reg = ir->phi.lhs_reg;
-        else
-          src_reg = ir->phi.rhs_reg;
-      }
+        IR_Blocks *pred_ir = vector_peek_at(ir_block->parent, pi);
+        // Map predecessor IR block to the created X64 block
+        size_t pred_index = vector_search(ir_blocks_vec, pred_ir);
+        if (pred_index)
+        {
+          X64_Blocks *pred_x64 = vector_peek_at(x64_blocks_vec, pred_index);
 
-      // Emit move: dst <- src at end of predecessor
-      X64_ASM *mov = new_asm();
-      mov->kind = X64_MOV;
-      assign_virtual_regs((X64_FUNC *)func_x64, &mov->operands[0],
-                          ir->phi.dst_reg);
-      assign_virtual_regs((X64_FUNC *)func_x64, &mov->operands[1], src_reg);
-      insert_before_terminator(pred_x64->asm_list, mov);
+          // Decide source: if pred defines lhs, use lhs; else if defines rhs, use rhs; else default to rhs
+          IR_REG *src_reg = NULL;
+          if (block_defines_reg(pred_ir, ir->phi.lhs_reg->reg_num))
+            src_reg = ir->phi.lhs_reg;
+          else if (block_defines_reg(pred_ir, ir->phi.rhs_reg->reg_num))
+            src_reg = ir->phi.rhs_reg;
+          else
+          {
+            // Fallback: if predecessor has no explicit def, pick the one whose
+            // size matches dst, preferring lhs.
+            if (ir->phi.lhs_reg->reg_size == ir->phi.dst_reg->reg_size)
+              src_reg = ir->phi.lhs_reg;
+            else
+              src_reg = ir->phi.rhs_reg;
+          }
+
+          // Emit move: dst <- src at end of predecessor
+          X64_ASM *mov = new_asm();
+          mov->kind = X64_MOV;
+          assign_virtual_regs((X64_FUNC *)func_x64, &mov->operands[0],
+                              ir->phi.dst_reg);
+          assign_virtual_regs((X64_FUNC *)func_x64, &mov->operands[1], src_reg);
+          insert_before_terminator(pred_x64->asm_list, mov);
+        }
+      }
     }
   }
 }
@@ -744,11 +766,16 @@ static void generate_x64_blocks(X64_FUNC *func_x64, IRFunc *func)
   {
     IR_Blocks *ir_block = vector_peek_at(func->IR_Blocks, i);
     X64_Blocks *x64_block = vector_peek_at(x64_blocks, i);
+    pr_debug("x64-blocks: emit block %zu irs=%zu", i,
+             vector_size(ir_block->IRs));
     for (size_t j = 1; j <= vector_size(ir_block->IRs); j++)
     {
       IR *ir = vector_peek_at(ir_block->IRs, j);
+      pr_debug("x64-blocks: emit block %zu ir[%zu/%zu]", i, j,
+               vector_size(ir_block->IRs));
       generate_x64_asm_no_phi(func_x64, x64_block, ir);
     }
+    pr_debug("x64-blocks: emit block %zu done", i);
   }
 
   // Lower PHIs into parallel copies on predecessor edges
@@ -756,8 +783,10 @@ static void generate_x64_blocks(X64_FUNC *func_x64, IRFunc *func)
   {
     IR_Blocks *ir_block = vector_peek_at(func->IR_Blocks, i);
     X64_Blocks *x64_block = vector_peek_at(x64_blocks, i);
+    pr_debug("x64-blocks: lower phi block %zu", i);
     lower_block_phis(func_x64, ir_block, x64_block, func->IR_Blocks,
                      x64_blocks);
+    pr_debug("x64-blocks: lower phi block %zu done", i);
   }
 }
 
@@ -775,21 +804,32 @@ void generate_func_x64(IRFunc *func)
   func_x64.virtual_regs =
       vector_allocate(vector_size(func->user_defined.num_virtual_regs));
 
+  pr_debug("x64-gen: begin blocks for %.*s",
+           (int)func->user_defined.function_name_size,
+           func->user_defined.function_name);
   generate_x64_blocks(&func_x64, func);
+  pr_debug("x64-gen: blocks done");
 
   // MIR numbering and liveness (scaffold)
   x64_number_program_points(&func_x64);
+  pr_debug("x64-gen: numbering done");
   x64_build_mir_liveness(func, &func_x64);
+  pr_debug("x64-gen: liveness done");
   // Optional MIR dump (disabled to reduce overhead)
   // x64_dump_mir_cfg(func, &func_x64);
   x64_regalloc(func, &func_x64);
-  // Simple peephole after allocation to remove redundant moves
-  x64_peephole_optimize(&func_x64);
+  pr_debug("x64-gen: regalloc done");
+  // Disable MIR peephole for now; self-host still miscompiles some continue-heavy
+  // loops in this pass, and correctness matters more than redundant moves here.
+  pr_debug("x64-gen: peephole skipped");
   // Drop instructions marked unused to keep the stream minimal
   x64_compact_unused(&func_x64);
+  pr_debug("x64-gen: compact done");
   // Validate target invariants (e.g., stack alignment at calls)
   x64_validate(func, &func_x64);
+  pr_debug("x64-gen: validate done");
   x64_emit_function(func, &func_x64);
+  pr_debug("x64-gen: emit done");
 }
 
 void generate_x64(IRFunc *func)

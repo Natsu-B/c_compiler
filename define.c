@@ -21,6 +21,13 @@
 Vector *object_like_macro_list;
 Vector *function_like_macro_list;
 
+static char *copy_token_text(char *src, size_t len)
+{
+  char *copy = malloc(len ? len : 1);
+  memcpy(copy, src, len);
+  return copy;
+}
+
 int find_macro_name_without_hide_set(Token *identifier, Vector *hide_set,
                                      Vector **argument_list,
                                      Vector **token_string, Token **token,
@@ -139,15 +146,17 @@ extern long long include_level;
 
 bool ident_replacement_recursive(Token *token, Vector *hide_set)
 {
-  if (token->kind != TK_STRING && token->len == 8)
+  if (token->kind == TK_STRING)
+    return false;
+
+  if (token->len == 8)
   {
     if (!strncmp(token->str, "__FILE__", 8))
     {
       size_t file_name_len = strlen(File_Name);
-      char *file_name = malloc(file_name_len);  // no need for NULL terminator
-      strncpy(file_name, File_Name, file_name_len);
+      char *file_name = copy_token_text(File_Name, file_name_len);
       token->kind = TK_STRING;
-      token->len = file_name_len + 2;
+      token->len = file_name_len;
       token->str = file_name;
       return true;
     }
@@ -180,19 +189,18 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
       char *time_str;
       if (is_date)
       {
-        time_str = malloc(13 * sizeof(char));
-        memcpy(time_str + 1, asctime_str + 4, 7);
-        memcpy(time_str + 8, asctime_str + 20, 4);
-        token->len = 13;
+        time_str = malloc(11);
+        memcpy(time_str, asctime_str + 4, 7);
+        memcpy(time_str + 7, asctime_str + 20, 4);
+        token->len = 11;
       }
       if (is_time)
       {
-        time_str = malloc(10 * sizeof(char));
-        memcpy(time_str + 1, asctime_str + 11, 8);
-        token->len = 10;
+        time_str = malloc(8);
+        memcpy(time_str, asctime_str + 11, 8);
+        token->len = 8;
       }
       token->kind = TK_STRING;
-      time_str[0] = time_str[token->len - 1] = '"';
       token->str = time_str;
       return true;
     }
@@ -212,7 +220,6 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
         if (file_line_len < 0 || file_line_len + 1 > size)
           error_exit("Failed to preprocess __INCLUDE_LEVEL__.");
       }
-      token->kind = TK_STRING;
       token->len = file_line_len;
       token->str = file_line_str;
       return true;
@@ -352,11 +359,15 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
           // check that the last argument of the macro is "..."
           Token *last =
               vector_peek_at(argument_list, vector_size(argument_list));
+          bool invalid_vararg_count = false;
+          if (is_ops)
+            invalid_vararg_count = vector_size(argument_list) - 1 >
+                                   vector_size(argument_real_list);
+          else
+            invalid_vararg_count = vector_size(argument_list) - 1 >=
+                                   vector_size(argument_real_list);
           if (last->len != 3 || strncmp(last->str, "...", 3) ||
-              (is_ops ? vector_size(argument_list) - 1 >
-                            vector_size(argument_real_list)
-                      : vector_size(argument_list) - 1 >=
-                            vector_size(argument_real_list)))
+              invalid_vararg_count)
             error_at(token->str, token->len,
                      "Invalid function-like macro argument.");
           if (is_ops &&
@@ -419,9 +430,9 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
                     stringizing_len_count +=
                         ((Token *)vector_peek_at(result, k))->len;
 
-                  char *stringizing = malloc(stringizing_len_count + 2);
-                  stringizing[0] = stringizing[stringizing_len_count + 1] = '"';
-                  size_t stringizing_ptr = 1;
+                  char *stringizing =
+                      malloc(stringizing_len_count ? stringizing_len_count : 1);
+                  size_t stringizing_ptr = 0;
                   for (size_t k = start; k <= vector_size(result); k++)
                   {
                     Token *tmp = ((Token *)vector_pop_at(result, k));
@@ -431,7 +442,7 @@ bool ident_replacement_recursive(Token *token, Vector *hide_set)
                   Token *tmp = calloc(1, sizeof(Token));
                   tmp->kind = TK_STRING;
                   tmp->str = stringizing;
-                  tmp->len = stringizing_len_count + 2;
+                  tmp->len = stringizing_len_count;
                   vector_push(result, tmp);
                   directive_count = 0;
                 }

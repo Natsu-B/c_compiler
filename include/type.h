@@ -106,6 +106,8 @@ Type *alloc_type(TypeKind kind);
 Type *declaration_specifiers(uint8_t *storage_class_specifier);
 bool add_function_name(Vector *function_list, Token *name,
                        uint8_t storage_class_specifier, bool is_defined);
+bool define_function_name(Vector *function_list, Token *name,
+                          uint8_t storage_class_specifier);
 
 enum member_name
 {

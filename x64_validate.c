@@ -17,6 +17,8 @@
 static void validate_stack_alignment(IRFunc* func_ir, X64_FUNC* fx)
 {
   int sp_mod = 0;  // rsp % 16, relative to post-prologue state
+  char* op = NULL;
+  char* target = NULL;
 
   for (size_t bi = 1; bi <= vector_size(fx->asm_blocks); bi++)
   {
@@ -41,7 +43,11 @@ static void validate_stack_alignment(IRFunc* func_ir, X64_FUNC* fx)
               sp_mod = (sp_mod - k) & 15;
             else
               sp_mod = (sp_mod + k) & 15;
-            pr_debug("x64-validate: rsp %s= %lld -> mod16=%d", as->kind == X64_SUB ? "-" : "+", imm, sp_mod);
+            op = "+";
+            if (as->kind == X64_SUB)
+              op = "-";
+            pr_debug("x64-validate: rsp %s= %lld -> mod16=%d", op, imm,
+                     sp_mod);
           }
           break;
         }
@@ -56,8 +62,11 @@ static void validate_stack_alignment(IRFunc* func_ir, X64_FUNC* fx)
         case X64_CALL:
           if (sp_mod != 0)
           {
+            target = as->jump_target_label;
+            if (!target)
+              target = "<unknown>";
             error_exit("stack alignment error before CALL to %s in %.*s: rsp%%16=%d (expected 0)",
-                      as->jump_target_label ? as->jump_target_label : "<unknown>",
+                      target,
                       (int)func_ir->user_defined.function_name_size,
                       func_ir->user_defined.function_name,
                       sp_mod);
@@ -73,4 +82,3 @@ void x64_validate(IRFunc* func_ir, X64_FUNC* func_x64)
 {
   validate_stack_alignment(func_ir, func_x64);
 }
-

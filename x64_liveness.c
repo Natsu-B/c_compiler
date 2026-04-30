@@ -51,6 +51,8 @@ static void compute_use_def_for_insn(X64_ASM* as, Vector* uses, Vector* defs)
     case X64_MOVSX:
     case X64_MOVSXD:
     case X64_MOVZX:
+      if (as->operands[0].kind == OP_MEM)
+        use_op(&as->operands[0], uses);
       use_op(&as->operands[1], uses);
       def_reg(&as->operands[0], defs);
       break;

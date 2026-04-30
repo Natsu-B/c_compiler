@@ -2,8 +2,6 @@
 
 #ifdef SELF_HOST
 #include "test/compiler_header.h"
-void qsort(void* base, size_t nmemb, size_t size,
-           int (*compar)(const void*, const void*));
 #else
 #include <stdio.h>
 #include <stdlib.h>
@@ -77,15 +75,13 @@ static void account_def(A64_Operand* op, Interval* table, size_t nregs,
 }
 
 static void build_intervals(IRFunc* func_ir, A64_FUNC* func_a64,
-                            Interval* table, size_t nregs,
-                            size_t* coalesce_with, size_t* coalesce_at)
+                            Interval* table, size_t nregs)
 {
   (void)func_ir;
   for (size_t i = 1; i <= nregs; i++)
   {
     table[i].vindex = i; table[i].start = (size_t)-1; table[i].end = 0;
     table[i].must_in_reg = false; table[i].exists = false;
-    coalesce_with[i] = 0; coalesce_at[i] = 0;
   }
 
   size_t* blk_start = calloc(vector_size(func_a64->asm_blocks) + 1, sizeof(size_t));
@@ -108,17 +104,6 @@ static void build_intervals(IRFunc* func_ir, A64_FUNC* func_a64,
         case A64_MOV:
           account_use(&as->operands[1], table, nregs, as->insn_id);
           account_def(&as->operands[0], table, nregs, as->insn_id);
-          // coalesce simple vreg<-vreg
-          if (as->operands[0].kind == A64_OP_REG && as->operands[1].kind == A64_OP_REG &&
-              as->operands[0].reg && as->operands[1].reg &&
-              as->operands[0].reg->reg_type == a64_virtual_regs &&
-              as->operands[1].reg->reg_type == a64_virtual_regs)
-          {
-            size_t d = as->operands[0].reg->reg_id + 1;
-            size_t s = as->operands[1].reg->reg_id + 1;
-            if (d>=1 && d<=nregs && s>=1 && s<=nregs && coalesce_with[d]==0)
-            { coalesce_with[d]=s; coalesce_at[d]=as->insn_id; }
-          }
           break;
         case A64_LDR:
           account_use(&as->operands[1], table, nregs, as->insn_id);
@@ -182,47 +167,86 @@ static void build_intervals(IRFunc* func_ir, A64_FUNC* func_a64,
   free(blk_start); free(blk_end);
 }
 
-static int cmp_start(const void* a, const void* b)
+static int interval_starts_before(Interval* left, Interval* right)
 {
-  const Interval* ia = (const Interval*)a;
-  const Interval* ib = (const Interval*)b;
-  if (ia->start < ib->start) return -1;
-  if (ia->start > ib->start) return 1;
-  if (ia->must_in_reg && !ib->must_in_reg) return -1;
-  if (!ia->must_in_reg && ib->must_in_reg) return 1;
+  if (left->start < right->start) return -1;
+  if (left->start > right->start) return 1;
+  if (left->must_in_reg && !right->must_in_reg) return -1;
+  if (!left->must_in_reg && right->must_in_reg) return 1;
   return 0;
 }
 
-typedef struct { size_t i; a64_register_name real; bool must; size_t end; } Active;
-
-static void regalloc_expire_old(Active* active, size_t* active_n,
-                                bool reg_taken[], size_t cur_start)
+static void regalloc_expire_old(size_t* active_vindex, size_t* active_real,
+                                size_t* active_must, size_t* active_end,
+                                size_t* active_n, size_t* reg_taken,
+                                size_t cur_start)
 {
   size_t k = 0;
   for (size_t j = 0; j < *active_n; j++)
   {
-    if (active[j].end < cur_start)
+    if (active_end[j] < cur_start)
     {
-      if (active[j].real != a64_reg_reserved)
-        reg_taken[active[j].real] = false;
+      if (active_real[j] != a64_reg_reserved)
+        reg_taken[active_real[j]] = false;
     }
     else
     {
-      active[k++] = active[j];
+      active_vindex[k] = active_vindex[j];
+      active_real[k] = active_real[j];
+      active_must[k] = active_must[j];
+      active_end[k] = active_end[j];
+      k++;
     }
   }
   *active_n = k;
 }
 
-static a64_register_name regalloc_get_free(const a64_register_name* pool,
-                                           size_t n, bool reg_taken[])
+static void regalloc_expire_spills(size_t* live_spill_end,
+                                   size_t* live_spill_slot,
+                                   size_t* live_spills_n,
+                                   size_t* free_slots, size_t* free_slots_n,
+                                   size_t cur_start)
 {
-  for (size_t i = 0; i < n; i++)
+  size_t k = 0;
+  for (size_t j = 0; j < *live_spills_n; j++)
   {
-    a64_register_name r = pool[i];
-    if (!reg_taken[r]) return r;
+    if (live_spill_end[j] < cur_start)
+    {
+      free_slots[(*free_slots_n)++] = live_spill_slot[j];
+    }
+    else
+    {
+      live_spill_end[k] = live_spill_end[j];
+      live_spill_slot[k] = live_spill_slot[j];
+      k++;
+    }
   }
-  return a64_reg_reserved;
+  *live_spills_n = k;
+}
+
+static size_t regalloc_allocate_spill_slot(IRFunc* func_ir, A64_FUNC* fa,
+                                           size_t* live_spill_end,
+                                           size_t* live_spill_slot,
+                                           size_t* live_spills_n,
+                                           size_t* free_slots,
+                                           size_t* free_slots_n,
+                                           size_t end_point)
+{
+  size_t slot;
+  if (*free_slots_n > 0)
+  {
+    slot = free_slots[--(*free_slots_n)];
+  }
+  else
+  {
+    fa->spill_stack_size += 8;
+    slot = func_ir->user_defined.stack_size + fa->spill_stack_size;
+  }
+  live_spill_end[*live_spills_n] = end_point;
+  live_spill_slot[*live_spills_n] = slot;
+  (*live_spills_n)++;
+  fa->stack_used = true;
+  return slot;
 }
 
 void a64_regalloc(IRFunc* func_ir, A64_FUNC* fa)
@@ -240,21 +264,26 @@ void a64_regalloc(IRFunc* func_ir, A64_FUNC* fa)
   fa->spill_stack_size = 0;
 
   Interval* table = calloc(nregs + 1, sizeof(Interval));
-  size_t* coalesce_with = calloc(nregs + 1, sizeof(size_t));
-  size_t* coalesce_at   = calloc(nregs + 1, sizeof(size_t));
-  build_intervals(func_ir, fa, table, nregs, coalesce_with, coalesce_at);
+  build_intervals(func_ir, fa, table, nregs);
 
-  bool reg_taken[64] = {0};
-  size_t* free_slots = calloc(nregs ? nregs : 1, sizeof(size_t)); size_t free_n = 0;
-  typedef struct { size_t end; size_t slot; } LiveSpill;
-  LiveSpill* live = calloc(nregs ? nregs : 1, sizeof(LiveSpill)); size_t live_n = 0;
+  size_t* reg_taken = calloc(64, sizeof(size_t));
+  size_t* free_slots = calloc(nregs ? nregs : 1, sizeof(size_t));
+  size_t free_n = 0;
+  size_t* live_spill_end = calloc(nregs ? nregs : 1, sizeof(size_t));
+  size_t* live_spill_slot = calloc(nregs ? nregs : 1, sizeof(size_t));
+  size_t live_n = 0;
 
-  size_t m = 0; for (size_t i = 1; i <= nregs; i++) if (table[i].exists) m++;
-  Interval* list = calloc(m ? m : 1, sizeof(Interval));
-  size_t li = 0; for (size_t i = 1; i <= nregs; i++) if (table[i].exists) list[li++] = table[i];
-  qsort(list, m, sizeof(Interval), cmp_start);
+  size_t m = 0;
+  for (size_t i = 1; i <= nregs; i++)
+    if (table[i].exists)
+      m++;
 
-  Active* active = calloc(m ? m : 1, sizeof(Active)); size_t active_n = 0;
+  size_t* active_vindex = calloc(m ? m : 1, sizeof(size_t));
+  size_t* active_real = calloc(m ? m : 1, sizeof(size_t));
+  size_t* active_must = calloc(m ? m : 1, sizeof(size_t));
+  size_t* active_end = calloc(m ? m : 1, sizeof(size_t));
+  size_t active_n = 0;
+  size_t* interval_done = calloc(nregs + 1, sizeof(size_t));
 
   for (size_t i = 1; i <= nregs; i++)
   {
@@ -289,152 +318,118 @@ void a64_regalloc(IRFunc* func_ir, A64_FUNC* fa)
     }
   }
 
-  auto void expire_spills(size_t cur)
+  for (size_t handled = 0; handled < m; handled++)
   {
-    size_t k = 0; for (size_t j = 0; j < live_n; j++)
+    size_t cur_vindex = 0;
+    for (size_t vindex = 1; vindex <= nregs; vindex++)
     {
-      if (live[j].end < cur) free_slots[free_n++] = live[j].slot;
-      else live[k++] = live[j];
-    }
-    live_n = k;
-  };
-
-  auto size_t alloc_spill(size_t endp)
-  {
-    size_t slot;
-    if (free_n) slot = free_slots[--free_n];
-    else { fa->spill_stack_size += 8; slot = func_ir->user_defined.stack_size + fa->spill_stack_size; }
-    live[live_n++] = (LiveSpill){.end=endp, .slot=slot};
-    fa->stack_used = true;
-    return slot;
-  };
-
-  Vector* call_points = vector_new();
-  for (size_t bi = 1; bi <= vector_size(fa->asm_blocks); bi++)
-  {
-    A64_Blocks* blk = vector_peek_at(fa->asm_blocks, bi);
-    for (size_t ji = 1; ji <= vector_size(blk->asm_list); ji++)
-    {
-      A64_ASM* as = vector_peek_at(blk->asm_list, ji);
-      if (as->kind == A64_CALL)
+      bool pending = table[vindex].exists && !interval_done[vindex];
+      if (pending &&
+          (!cur_vindex ||
+           interval_starts_before(&table[vindex], &table[cur_vindex]) < 0))
       {
-        size_t* idp = malloc(sizeof(size_t)); *idp = as->insn_id; vector_push(call_points, idp);
+        cur_vindex = vindex;
       }
     }
-  }
-  for (size_t i = 2; i <= vector_size(call_points); i++)
-  {
-    size_t* key = vector_peek_at(call_points, i); size_t j = i;
-    while (j > 1)
-    {
-      size_t* prev = vector_peek_at(call_points, j-1);
-      if (*prev <= *key)
-        break;
-      vector_replace_at(call_points, j, prev);
-      j--;
-    }
-    vector_replace_at(call_points, j, key);
-  }
-  size_t call_idx = 1;
+    if (!cur_vindex)
+      break;
+    interval_done[cur_vindex] = 1;
 
-  auto void split_active_at(size_t at)
-  {
-    size_t j = 0;
-    while (j < active_n)
-    {
-      if (!active[j].must && active[j].end > at)
-      {
-        size_t vindex = list[active[j].i].vindex;
-        size_t* rend = vector_peek_at(fa->vreg_real_end, vindex); if (rend) *rend = at;
-        size_t* slot = vector_peek_at(fa->vreg_stack_slot, vindex);
-        if (slot && *slot == 0) *slot = alloc_spill(active[j].end);
-        if (active[j].real != a64_reg_reserved) reg_taken[active[j].real] = false;
-        for (size_t k = j + 1; k < active_n; k++) active[k-1] = active[k];
-        active_n--; continue;
-      }
-      j++;
-    }
-  };
+    size_t cur_start = table[cur_vindex].start;
+    size_t cur_end = table[cur_vindex].end;
+    bool cur_must_in_reg = table[cur_vindex].must_in_reg;
 
-  for (size_t i = 0; i < m; i++)
-  {
-    Interval cur = list[i];
-    regalloc_expire_old(active, &active_n, reg_taken, cur.start);
-    expire_spills(cur.start);
-    while (call_idx <= vector_size(call_points))
-    {
-      size_t* cp = vector_peek_at(call_points, call_idx);
-      if (!cp || *cp >= cur.start)
-        break;
-      split_active_at(*cp);
-      call_idx++;
-    }
+    regalloc_expire_old(active_vindex, active_real, active_must, active_end,
+                        &active_n, reg_taken, cur_start);
+    regalloc_expire_spills(live_spill_end, live_spill_slot, &live_n,
+                           free_slots, &free_n, cur_start);
 
     a64_register_name r = a64_reg_reserved;
-    size_t src_idx = coalesce_with[cur.vindex];
-    if (src_idx)
+    for (size_t p = 0; p < pool_n; p++)
     {
-      size_t* src_real = vector_peek_at(fa->vreg_real, src_idx);
-      if (src_real && *src_real != a64_reg_reserved)
+      a64_register_name candidate = alloc_pool[p];
+      if (!reg_taken[candidate])
       {
-        a64_register_name try_r = (a64_register_name)(*src_real);
-        bool free_r = !reg_taken[try_r];
-        bool non_overlap = table[src_idx].end <= cur.start;
-        if (free_r && non_overlap) r = try_r;
-        else if (!free_r)
-        {
-          for (size_t j = 0; j < active_n; j++)
-          {
-            if (active[j].real == try_r)
-            {
-              size_t victim = list[active[j].i].vindex; if (victim == src_idx) break;
-              if (!active[j].must)
-              {
-                size_t* rend = vector_peek_at(fa->vreg_real_end, victim);
-                if (rend) *rend = (cur.start > 0 ? cur.start - 1 : 0);
-                size_t* slot = vector_peek_at(fa->vreg_stack_slot, victim);
-                if (slot && *slot == 0) *slot = alloc_spill(active[j].end);
-                for (size_t k = j + 1; k < active_n; k++) active[k-1] = active[k];
-                active_n--; reg_taken[try_r] = false; r = try_r;
-              }
-              break;
-            }
-          }
-        }
+        r = candidate;
+        break;
       }
     }
-    if (r == a64_reg_reserved) r = regalloc_get_free(alloc_pool, pool_n, reg_taken);
+
+    bool assigned_current = false;
+    bool active_entry_recorded = false;
     if (r == a64_reg_reserved)
     {
-      if (cur.must_in_reg)
+      if (cur_must_in_reg)
       {
         size_t victim = (size_t)-1; size_t vend = 0;
         for (size_t j = 0; j < active_n; j++)
-          if (!active[j].must && active[j].end >= vend) { victim = j; vend = active[j].end; }
+        {
+          if (!active_must[j] && active_end[j] >= vend)
+          {
+            victim = j;
+            vend = active_end[j];
+          }
+        }
         if (victim != (size_t)-1)
         {
-          a64_register_name freed = active[victim].real;
-          size_t vindex = list[active[victim].i].vindex;
+          a64_register_name freed = (a64_register_name)active_real[victim];
+          size_t vindex = active_vindex[victim];
           size_t* slot = vector_peek_at(fa->vreg_stack_slot, vindex);
           size_t* rend = vector_peek_at(fa->vreg_real_end, vindex);
-          if (rend) *rend = (cur.start > 0 ? cur.start - 1 : 0);
-          if (slot && *slot == 0) *slot = alloc_spill(active[victim].end);
+          if (rend) *rend = (cur_start > 0 ? cur_start - 1 : 0);
+          if (slot && *slot == 0)
+            *slot = regalloc_allocate_spill_slot(
+                func_ir, fa, live_spill_end, live_spill_slot, &live_n,
+                free_slots, &free_n, active_end[victim]);
           r = freed; reg_taken[r] = true;
-          active[victim].i = i; active[victim].real = r; active[victim].must = cur.must_in_reg; active[victim].end = cur.end;
-          size_t* real_cur = vector_peek_at(fa->vreg_real, cur.vindex); *real_cur = r;
-          fa->used_registers |= (1u << r);
-          continue;
+          active_vindex[victim] = cur_vindex;
+          active_real[victim] = r;
+          active_must[victim] = cur_must_in_reg ? 1 : 0;
+          active_end[victim] = cur_end;
+          size_t* real_cur = vector_peek_at(fa->vreg_real, cur_vindex);
+          *real_cur = r;
+          fa->used_registers |= (1 << r);
+          assigned_current = true;
+          active_entry_recorded = true;
         }
       }
-      size_t* slot = vector_peek_at(fa->vreg_stack_slot, cur.vindex);
-      *slot = alloc_spill(cur.end);
-      continue;
+
+      if (!assigned_current)
+      {
+        size_t* slot = vector_peek_at(fa->vreg_stack_slot, cur_vindex);
+        *slot = regalloc_allocate_spill_slot(
+            func_ir, fa, live_spill_end, live_spill_slot, &live_n,
+            free_slots, &free_n, cur_end);
+      }
     }
-    reg_taken[r] = true; size_t* real = vector_peek_at(fa->vreg_real, cur.vindex); *real = r; fa->used_registers |= (1u << r);
-    active[active_n++] = (Active){.i=i, .real=r, .must=cur.must_in_reg, .end=cur.end};
+    else
+    {
+      assigned_current = true;
+    }
+
+    if (assigned_current && r != a64_reg_reserved && !active_entry_recorded)
+    {
+      reg_taken[r] = true;
+      size_t* real = vector_peek_at(fa->vreg_real, cur_vindex);
+      *real = r;
+      fa->used_registers |= (1 << r);
+      active_vindex[active_n] = cur_vindex;
+      active_real[active_n] = r;
+      active_must[active_n] = cur_must_in_reg ? 1 : 0;
+      active_end[active_n] = cur_end;
+      active_n++;
+    }
   }
 
   // Cleanup
-  free(active); free(list); free(table); free(live); free(free_slots); free(coalesce_with); free(coalesce_at);
-  for (size_t i = 1; i <= vector_size(call_points); i++) { size_t* p = vector_peek_at(call_points, i); if (p) free(p); }
+  free(active_vindex);
+  free(active_real);
+  free(active_must);
+  free(active_end);
+  free(interval_done);
+  free(table);
+  free(live_spill_end);
+  free(live_spill_slot);
+  free(free_slots);
+  free(reg_taken);
 }

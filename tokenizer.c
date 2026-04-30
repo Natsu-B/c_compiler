@@ -159,8 +159,8 @@ Token *consume_string()
     }
   }
   // replace \e to \x1b
-  if (return_token)
-    for (size_t i = 0; i < return_token->len - 1; i++)
+  if (return_token && return_token->len >= 2)
+    for (size_t i = 0; i + 1 < return_token->len; i++)
     {
       if (*(return_token->str + i) == '\\' &&
           *(return_token->str + i + 1) == 'e')
@@ -413,8 +413,16 @@ Token *tokenizer(char *input, char *end, Token *next_token)
   head.next = NULL;
   Token *cur = &head;
   Vector *nest_list = vector_new();
-  while (end ? input != end : *input)
+  for (;;)
   {
+    if (end)
+    {
+      if (input == end)
+        break;
+    }
+    else if (!*input)
+      break;
+
     char *end = NULL;
     cur->next = tokenize_once(input, &end);
     input = end;
@@ -456,7 +464,7 @@ Token *tokenizer(char *input, char *end, Token *next_token)
 
   pr_debug("Tokenization complete.");
   vector_free(nest_list);
-#ifdef DEBUG
+#if DEBUG
   print_tokenize_result(head.next);
 #endif
 

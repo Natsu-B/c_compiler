@@ -70,6 +70,7 @@ Vector *label_list;
 // Current function name and name being parsed
 char *program_name;
 int program_name_len;
+static size_t label_name_counter;
 
 void new_nest_label()
 {
@@ -85,7 +86,6 @@ void exit_nest_label()
 
 GTLabel *generate_label_name(NodeKind kind)
 {
-  static size_t label_name_counter;
   size_t namesize = program_name_len + 6;
   GTLabel *next = calloc(1, sizeof(GTLabel));
   next->kind = kind;
@@ -272,7 +272,7 @@ FuncBlock *parser()
     new->node = external_declaration();
     pointer = new;
   }
-#ifdef DEBUG
+#if DEBUG
   print_parse_result(head.next);
 #endif
   pr_debug("Parsing complete.");
@@ -313,8 +313,8 @@ Node *declaration(Type *type, bool is_external_declaration,
   {
     program_name = node->token->str;
     program_name_len = node->token->len;
-    if (!add_function_name(node->type->param_list, node->token,
-                           storage_class_specifier, true))
+    if (!define_function_name(node->type->param_list, node->token,
+                              storage_class_specifier))
       error_at(node->token->str, node->token->len,
                "invalid function definition");
     new_nest();
@@ -363,6 +363,11 @@ Node *init_declarator(Type *type, uint8_t storage_class_specifier)
                  "invalid initializer");
       if (!node->lhs->type->size)
         node->lhs->type->size = vector_size(node->rhs->initialize.init_list);
+    }
+    else if (node->rhs->kind == ND_STRING && node->lhs->type->type == TYPE_ARRAY &&
+             !node->lhs->type->size)
+    {
+      node->lhs->type->size = node->rhs->token->len + 1;
     }
   }
   return node;
@@ -850,7 +855,7 @@ Node *conditional_expression()
     Token *old = get_old_token();
     Node *chs = expression();
     expect(":", TK_RESERVED);
-    node = new_node(ND_TERNARY, node, expression(), old);
+    node = new_node(ND_TERNARY, node, conditional_expression(), old);
     node->control.label = generate_label_name(ND_TERNARY);
     node->control.ternary_child = chs;
   }

@@ -84,6 +84,7 @@ void remove_parent(IRFunc* func, IR_Blocks* blocks, IR_Blocks* removed)
   }
   unreachable();
 exit:
+  ;
 }
 
 void analyze_cfg(IRProgram* program)
@@ -120,7 +121,7 @@ bool analyze_live_variable_add_out(IR_Blocks* blocks, IR_Blocks* child)
         goto same;
     vector_push(blocks->reg_out, reg);
     is_changed = true;
-  same:
+  same:;
   }
   return is_changed;
 }
@@ -271,7 +272,7 @@ void analyze_live_variable(IRProgram* program)
                 goto same;
             vector_push(blocks->reg_in, reg);
             is_changed = true;
-          same:
+          same:;
           }
           if (blocks->lhs && analyze_live_variable_add_out(blocks, blocks->lhs))
             is_changed = true;
@@ -383,57 +384,58 @@ static void ir_insert_before_terminator(IR_Blocks* blk, IR* insn)
 
 static void lower_phi_in_func(IRFunc* func)
 {
-  // Walk blocks, and for each PHI insert MOV copies on each predecessor edge.
-  for (size_t bi = 1; bi <= vector_size(func->IR_Blocks); bi++)
+  size_t block_count = vector_size(func->IR_Blocks);
+  for (size_t block_index = 1; block_index <= block_count; block_index++)
   {
-    IR_Blocks* blk = vector_peek_at(func->IR_Blocks, bi);
-    bool has_phi = false;
-    for (size_t ii = 1; ii <= vector_size(blk->IRs); ii++)
+    IR_Blocks* block = vector_peek_at(func->IR_Blocks, block_index);
+    size_t original_ir_count = vector_size(block->IRs);
+    Vector* phis = vector_new();
+    for (size_t ir_index = 1; ir_index <= original_ir_count; ir_index++)
     {
-      IR* ir = vector_peek_at(blk->IRs, ii);
-      if (ir->kind != IR_PHI) continue;
-      has_phi = true;
-
-      // Determine source per predecessor using simple heuristic as in x64 lowering
-      for (size_t pi = 1; pi <= vector_size(blk->parent); pi++)
-      {
-        IR_Blocks* pred = vector_peek_at(blk->parent, pi);
-        IR_REG* src = NULL;
-        if (ir_block_defines_reg(pred, ir->phi.lhs_reg->reg_num))
-          src = ir->phi.lhs_reg;
-        else if (ir_block_defines_reg(pred, ir->phi.rhs_reg->reg_num))
-          src = ir->phi.rhs_reg;
-        else
-        {
-          // Fallback: prefer matching width; else rhs
-          if (ir->phi.lhs_reg->reg_size == ir->phi.dst_reg->reg_size)
-            src = ir->phi.lhs_reg;
-          else
-            src = ir->phi.rhs_reg;
-        }
-
-        // Emit: mov dst, src at the end of predecessor
-        IR* mov = calloc(1, sizeof(IR));
-        mov->kind = IR_MOV;
-        mov->mov.is_imm = false;
-        mov->mov.src_reg = src;
-        mov->mov.dst_reg = ir->phi.dst_reg;
-        vector_push(src->used_list, mov);
-        vector_push(ir->phi.dst_reg->used_list, mov);
-        ir_insert_before_terminator(pred, mov);
-      }
+      IR* ir = vector_peek_at(block->IRs, ir_index);
+      if (ir->kind == IR_PHI)
+        vector_push(phis, ir);
     }
-    if (has_phi)
+    if (vector_size(phis) != 0)
     {
-      // Remove PHI nodes from this block by compacting the IR list
-      Vector* new_list = vector_new();
-      for (size_t ii = 1; ii <= vector_size(blk->IRs); ii++)
+      size_t phi_count = vector_size(phis);
+      size_t parent_count = vector_size(block->parent);
+      for (size_t phi_index = 1; phi_index <= phi_count; phi_index++)
       {
-        IR* ir = vector_peek_at(blk->IRs, ii);
-        if (ir->kind == IR_PHI) continue;
-        vector_push(new_list, ir);
+        IR* phi = vector_peek_at(phis, phi_index);
+        for (size_t parent_index = 1; parent_index <= parent_count; parent_index++)
+        {
+          IR_Blocks* pred = vector_peek_at(block->parent, parent_index);
+          IR_REG* src = NULL;
+          if (ir_block_defines_reg(pred, phi->phi.lhs_reg->reg_num))
+            src = phi->phi.lhs_reg;
+          else if (ir_block_defines_reg(pred, phi->phi.rhs_reg->reg_num))
+            src = phi->phi.rhs_reg;
+          else if (phi->phi.lhs_reg->reg_size == phi->phi.dst_reg->reg_size)
+            src = phi->phi.lhs_reg;
+          else
+            src = phi->phi.rhs_reg;
+
+          IR* mov = calloc(1, sizeof(IR));
+          mov->kind = IR_MOV;
+          mov->mov.is_imm = false;
+          mov->mov.src_reg = src;
+          mov->mov.dst_reg = phi->phi.dst_reg;
+          vector_push(src->used_list, mov);
+          vector_push(phi->phi.dst_reg->used_list, mov);
+          ir_insert_before_terminator(pred, mov);
+        }
       }
-      blk->IRs = new_list;
+
+      Vector* new_list = vector_new();
+      size_t current_ir_count = vector_size(block->IRs);
+      for (size_t ir_index = 1; ir_index <= current_ir_count; ir_index++)
+      {
+        IR* ir = vector_peek_at(block->IRs, ir_index);
+        if (ir->kind != IR_PHI)
+          vector_push(new_list, ir);
+      }
+      block->IRs = new_list;
     }
   }
 }

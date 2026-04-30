@@ -11,13 +11,24 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#endif
 #include <assert.h>
+#endif
 
 #include "include/debug.h"
 #include "include/error.h"
 #include "include/parser.h"
 #include "include/vector.h"
+
+#ifdef SELF_HOST
+#ifndef assert
+#define assert(cond)                                                           \
+  do                                                                           \
+  {                                                                            \
+    if (!(cond))                                                               \
+      unreachable();                                                           \
+  } while (0)
+#endif
+#endif
 
 #if DEBUG
 // Debug output macro
@@ -79,11 +90,83 @@ OperandSize num2OpSize(size_t num)
   }
 }
 
+static size_t legal_store_size(size_t remaining)
+{
+  if (remaining >= 8) return 8;
+  if (remaining >= 4) return 4;
+  if (remaining >= 2) return 2;
+  return 1;
+}
+
+static bool is_aggregate_type(Type *type)
+{
+  return type && type->type == TYPE_STRUCT;
+}
+
 // Forward declarations
 static IR_REG *gen_addr(Vector *blocks, Vector *labels, IR_Blocks **irs,
                         Node *node);
 static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
                         Node *node);
+
+static IR_REG *emit_imm(IR_Blocks **irs, long long value)
+{
+  IR *ir = calloc(1, sizeof(IR));
+  ir->kind = IR_MOV;
+  ir->mov.is_imm = true;
+  ir->mov.imm_val = value;
+  IR_REG *dst_reg_ptr = gen_reg();
+  dst_reg_ptr->reg_size = SIZE_DWORD;  // int
+  ir->mov.dst_reg = dst_reg_ptr;
+  vector_push(dst_reg_ptr->used_list, ir);
+  vector_push((*irs)->IRs, ir);
+  return dst_reg_ptr;
+}
+
+static IR_REG *gen_incdec(Vector *blocks, Vector *labels, IR_Blocks **irs,
+                          Node *node)
+{
+  IR_REG *pre_reg = gen_stmt(blocks, labels, irs, node->lhs);
+  IR_REG *post_reg = gen_reg();
+  post_reg->reg_size = num2OpSize(size_of_real(node->type->type));
+  bool is_inc =
+      node->kind == ND_PREINCREMENT || node->kind == ND_POSTINCREMENT;
+  IR *ir = calloc(1, sizeof(IR));
+  if (node->type->type == TYPE_BOOL)
+  {
+    ir->kind = IR_MOV;
+    ir->mov.is_imm = true;
+    ir->mov.imm_val = is_inc ? 1 : 0;
+    ir->mov.dst_reg = post_reg;
+    vector_push(post_reg->used_list, ir);
+  }
+  else
+  {
+    IR_REG *rhs_reg = emit_imm(irs, node->num_val);
+    ir->kind = is_inc ? IR_ADD : IR_SUB;
+    ir->bin_op.lhs_reg = pre_reg;
+    vector_push(pre_reg->used_list, ir);
+    ir->bin_op.rhs_reg = rhs_reg;
+    vector_push(rhs_reg->used_list, ir);
+    ir->bin_op.dst_reg = post_reg;
+    vector_push(post_reg->used_list, ir);
+  }
+  vector_push((*irs)->IRs, ir);
+
+  IR_REG *lhs_addr_ptr = gen_addr(blocks, labels, irs, node->lhs);
+  IR *assign = calloc(1, sizeof(IR));
+  assign->kind = IR_STORE;
+  assign->mem.reg = post_reg;
+  vector_push(post_reg->used_list, assign);
+  assign->mem.mem_reg = lhs_addr_ptr;
+  assign->mem.offset = 0;
+  assign->mem.size = num2OpSize(size_of_real(node->type->type));
+  vector_push((*irs)->IRs, assign);
+
+  if (node->kind == ND_PREINCREMENT || node->kind == ND_PREDECREMENT)
+    return post_reg;
+  return pre_reg;
+}
 
 IRFunc *call_builtin_func(Node *node)
 {
@@ -101,6 +184,32 @@ IRFunc *call_builtin_func(Node *node)
 void gen_gvar_assign(IR_Blocks *irs, Type *assigned, Node *node,
                      size_t assign_size)
 {
+  if (node->kind == ND_ASSIGN)
+  {
+    gen_gvar_assign(irs, node->lhs->type, node->rhs, size_of(node->type));
+    return;
+  }
+
+  if (node->kind == ND_INITIALIZER)
+  {
+    for (size_t i = 0; i < vector_size(node->initialize.init_list); i++)
+    {
+      Node *child = vector_peek_at(node->initialize.init_list, i + 1);
+      gen_gvar_assign(irs, assigned->ptr_to, child, size_of(child->type));
+    }
+    size_t zero_padding =
+        size_of(node->type) -
+        vector_size(node->initialize.init_list) * size_of(node->type->ptr_to);
+    if (zero_padding)
+    {
+      GVarInitializer *zero = calloc(1, sizeof(GVarInitializer));
+      zero->how2_init = init_zero;
+      zero->zero_len = zero_padding;
+      vector_push(irs->IRs, zero);
+    }
+    return;
+  }
+
   GVarInitializer *init = calloc(1, sizeof(GVarInitializer));
   switch (node->kind)
   {
@@ -122,15 +231,143 @@ void gen_gvar_assign(IR_Blocks *irs, Type *assigned, Node *node,
       init->how2_init = init_string;
       init->literal_name = node->literal_name;
       break;
-    case ND_INITIALIZER:
-      for (size_t i = 0; i < vector_size(node->initialize.init_list); i++)
-      {
-        Node *child = vector_peek_at(node->initialize.init_list, i + 1);
-        gen_gvar_assign(irs, assigned->ptr_to, child, size_of(child->type));
-      }
-      size_t zero_padding =
-          size_of(node->type) -
-          vector_size(node->initialize.init_list) * size_of(node->type->ptr_to);
+    default:
+      unreachable();
+      break;
+  }
+  vector_push(irs->IRs, init);
+}
+
+static void append_global_var(IRProgram *program, Node *node)
+{
+  if (node->variable.var->storage_class_specifier & 1 << 1)
+    return;
+
+  GlobalVar *gvar = calloc(1, sizeof(GlobalVar));
+  gvar->var_name = node->variable.var->name;
+  gvar->var_name_len = node->variable.var->len;
+  gvar->var_size = size_of(node->variable.var->type);
+  gvar->is_static = node->variable.var->storage_class_specifier & 1 << 2;
+  GVarInitializer *init = calloc(1, sizeof(GVarInitializer));
+  init->how2_init = init_zero;
+  init->zero_len = size_of(node->variable.var->type);
+  IR_Blocks *irs = new_ir_blocks();
+  vector_push(irs->IRs, init);
+  gvar->initializer = irs;
+  vector_push(program->global_vars, gvar);
+}
+
+static bool can_emit_flat_global_initializer(Type *type, Node *node)
+{
+  if (node->kind == ND_ASSIGN)
+    node = node->rhs;
+  if (type->type == TYPE_ARRAY)
+  {
+    if (node->kind != ND_INITIALIZER)
+      return false;
+    for (size_t i = 0; i < vector_size(node->initialize.init_list); i++)
+    {
+      Node *child = vector_peek_at(node->initialize.init_list, i + 1);
+      if (!can_emit_flat_global_initializer(type->ptr_to, child))
+        return false;
+    }
+    return true;
+  }
+
+  return node->kind == ND_NUM || node->kind == ND_ADDR ||
+         node->kind == ND_STRING;
+}
+
+static void emit_flat_global_initializer(IR_Blocks *irs, Type *type, Node *node)
+{
+  if (node->kind == ND_ASSIGN)
+    node = node->rhs;
+
+  if (type->type == TYPE_ARRAY)
+  {
+    size_t init_len = vector_size(node->initialize.init_list);
+    for (size_t i = 0; i < init_len; i++)
+    {
+      Node *child = vector_peek_at(node->initialize.init_list, i + 1);
+      emit_flat_global_initializer(irs, type->ptr_to, child);
+    }
+
+    size_t zero_padding = size_of(type) - init_len * size_of(type->ptr_to);
+    if (zero_padding)
+    {
+      GVarInitializer *zero = calloc(1, sizeof(GVarInitializer));
+      zero->how2_init = init_zero;
+      zero->zero_len = zero_padding;
+      vector_push(irs->IRs, zero);
+    }
+    return;
+  }
+
+  GVarInitializer *init = calloc(1, sizeof(GVarInitializer));
+  if (node->kind == ND_NUM)
+  {
+    init->how2_init = init_val;
+    init->value.init_val = node->num_val;
+    init->value.value_size = size_of(type);
+  }
+  else if (node->kind == ND_ADDR)
+  {
+    if (size_of(type) != 8)
+      unreachable();
+    init->how2_init = init_pointer;
+    init->assigned_var.var_name = node->lhs->variable.var->name;
+    init->assigned_var.var_name_len = node->lhs->variable.var->len;
+  }
+  else
+  {
+    if (size_of(type) != 8)
+      unreachable();
+    init->how2_init = init_string;
+    init->literal_name = node->literal_name;
+  }
+  vector_push(irs->IRs, init);
+}
+
+static void append_global_assign(IRProgram *program, Node *node)
+{
+  Node *lhs = node->lhs;
+  Node *rhs = node->rhs;
+  GlobalVar *gvar = calloc(1, sizeof(GlobalVar));
+  gvar->var_name = lhs->variable.var->name;
+  gvar->var_name_len = lhs->variable.var->len;
+  gvar->var_size = size_of(lhs->variable.var->type);
+  gvar->is_static = lhs->variable.var->storage_class_specifier & 1 << 2;
+  IR_Blocks *irs = new_ir_blocks();
+  gvar->initializer = irs;
+
+  if (rhs->kind == ND_NUM)
+  {
+    GVarInitializer *init = calloc(1, sizeof(GVarInitializer));
+    init->how2_init = init_val;
+    init->value.init_val = rhs->num_val;
+    init->value.value_size = size_of(node->type);
+    vector_push(irs->IRs, init);
+  }
+  else if (rhs->kind == ND_ADDR)
+  {
+    if (size_of(node->type) != 8)
+      unreachable();
+    GVarInitializer *init = calloc(1, sizeof(GVarInitializer));
+    init->how2_init = init_pointer;
+    init->assigned_var.var_name = rhs->lhs->variable.var->name;
+    init->assigned_var.var_name_len = rhs->lhs->variable.var->len;
+    vector_push(irs->IRs, init);
+  }
+  else if (rhs->kind == ND_STRING)
+  {
+    if (lhs->type->type == TYPE_ARRAY)
+    {
+      GVarInitializer *init = calloc(1, sizeof(GVarInitializer));
+      init->how2_init = init_string_data;
+      init->literal_name = rhs->literal_name;
+      vector_push(irs->IRs, init);
+
+      size_t zero_padding = size_of(lhs->type) - (rhs->token->len + 1);
       if (zero_padding)
       {
         GVarInitializer *zero = calloc(1, sizeof(GVarInitializer));
@@ -138,10 +375,26 @@ void gen_gvar_assign(IR_Blocks *irs, Type *assigned, Node *node,
         zero->zero_len = zero_padding;
         vector_push(irs->IRs, zero);
       }
-      return;
-    default: unreachable(); break;
+    }
+    else
+    {
+      if (size_of(node->type) != 8)
+        unreachable();
+      GVarInitializer *init = calloc(1, sizeof(GVarInitializer));
+      init->how2_init = init_string;
+      init->literal_name = rhs->literal_name;
+      vector_push(irs->IRs, init);
+    }
   }
-  vector_push(irs->IRs, init);
+  else if (can_emit_flat_global_initializer(lhs->type, rhs))
+  {
+    emit_flat_global_initializer(irs, lhs->type, rhs);
+  }
+  else
+  {
+    gen_gvar_assign(irs, lhs->type, node, size_of(node->type));
+  }
+  vector_push(program->global_vars, gvar);
 }
 
 IRProgram *gen_ir(FuncBlock *parsed)
@@ -153,79 +406,57 @@ IRProgram *gen_ir(FuncBlock *parsed)
   // Loop through all functions/global variables
   for (FuncBlock *fb = parsed; fb; fb = fb->next)
   {
-    if (!fb->node)
-      continue;
-    switch (fb->node->kind)
+    Node *node = fb->node;
+    if (node)
     {
-      case ND_NOP: break;
-      case ND_FUNCDEF:
+      switch (node->kind)
       {
-        // Case: Function definition
-        IRFunc *func = calloc(1, sizeof(IRFunc));
-        func->user_defined.function_name = fb->node->token->str;
-        func->user_defined.function_name_size = fb->node->token->len;
-        func->user_defined.is_static =
-            fb->node->func.storage_class_specifier & 1 << 2;
-        func->IR_Blocks = vector_new();
-        func->labels = vector_new();
-        IR_Blocks *irs = new_ir_blocks();
-        vector_push(func->IR_Blocks, irs);
+        case ND_NOP: break;
+        case ND_FUNCDEF:
+        {
+          // Case: Function definition
+          IRFunc *func = calloc(1, sizeof(IRFunc));
+          func->user_defined.function_name = node->token->str;
+          func->user_defined.function_name_size = node->token->len;
+          func->user_defined.is_static =
+              node->func.storage_class_specifier & 1 << 2;
+          func->IR_Blocks = vector_new();
+          func->labels = vector_new();
+          IR_Blocks *irs = new_ir_blocks();
+          vector_push(func->IR_Blocks, irs);
 
-        reg_id = 0;  // Reset register ID for each function
-        virtual_regs = func->user_defined.num_virtual_regs = vector_new();
-        gen_stmt(func->IR_Blocks, func->labels, &irs,
-                 fb->node);  // Generate IR for statements
+          reg_id = 0;  // Reset register ID for each function
+          virtual_regs = func->user_defined.num_virtual_regs = vector_new();
+          gen_stmt(func->IR_Blocks, func->labels, &irs,
+                   node);  // Generate IR for statements
 
-        func->user_defined.stack_size = fb->stacksize;
-        vector_push(program->functions, func);
-        break;
+          func->user_defined.stack_size = fb->stacksize;
+          vector_push(program->functions, func);
+          break;
+        }
+        case ND_BUILTINFUNC:
+        {
+          vector_push(program->functions, call_builtin_func(node));
+          break;
+        }
+        case ND_VAR:
+        {
+          append_global_var(program, node);
+          break;
+        }
+        case ND_ASSIGN:
+        {
+          append_global_assign(program, node);
+          break;
+        }
+        default: unreachable(); break;
       }
-      case ND_BUILTINFUNC:
-      {
-        vector_push(program->functions, call_builtin_func(fb->node));
-        break;
-      }
-      case ND_VAR:
-      {
-        if (fb->node->variable.var->storage_class_specifier & 1 << 1)
-          continue;  // extern storage specifier
-        GlobalVar *gvar = calloc(1, sizeof(GlobalVar));
-        gvar->var_name = fb->node->variable.var->name;
-        gvar->var_name_len = fb->node->variable.var->len;
-        gvar->var_size = size_of(fb->node->variable.var->type);
-        gvar->is_static =
-            fb->node->variable.var->storage_class_specifier & 1 << 2;
-        GVarInitializer *init = calloc(1, sizeof(GVarInitializer));
-        init->how2_init = init_zero;  // Default to zero-initialization
-        init->zero_len = size_of(fb->node->variable.var->type);
-        IR_Blocks *irs = new_ir_blocks();
-        vector_push(irs->IRs, init);
-        gvar->initializer = irs;
-        vector_push(program->global_vars, gvar);
-        break;
-      }
-      case ND_ASSIGN:
-      {
-        GlobalVar *gvar = calloc(1, sizeof(GlobalVar));
-        gvar->var_name = fb->node->lhs->variable.var->name;
-        gvar->var_name_len = fb->node->lhs->variable.var->len;
-        gvar->var_size = size_of_real(fb->node->lhs->variable.var->type->type);
-        gvar->is_static =
-            fb->node->lhs->variable.var->storage_class_specifier & 1 << 2;
-        IR_Blocks *irs = new_ir_blocks();
-        gvar->initializer = irs;
-        gen_gvar_assign(irs, fb->node->lhs->type, fb->node->rhs,
-                        size_of(fb->node->type));
-        vector_push(program->global_vars, gvar);
-        break;
-      }
-      default: unreachable(); break;
     }
   }
 
   program->strings = get_string_list();
 
-#ifdef DEBUG
+#if DEBUG
   // If it's a debug build, dump the generated IR to stdout.
   dump_ir_fp(program, stdout);
 #endif
@@ -233,39 +464,87 @@ IRProgram *gen_ir(FuncBlock *parsed)
   return program;
 }
 
-static IR_REG *gen_assign(Vector *blocks, Vector *labels, IR_Blocks **irs,
-                          Node *assigned, Node *node, size_t padding,
-                          size_t assign_size)
+typedef struct
+{
+  Vector *blocks;
+  Vector *labels;
+  IR_Blocks **irs;
+  Node *assigned;
+  size_t padding;
+} AssignContext;
+
+static IR_REG *gen_assign(AssignContext *ctx, Node *node, size_t assign_size)
 {
   if (node->kind == ND_INITIALIZER)
   {
     for (size_t i = 0; i < vector_size(node->initialize.init_list); i++)
     {
       Node *child = vector_peek_at(node->initialize.init_list, i + 1);
-      gen_assign(blocks, labels, irs, assigned, child,
-                 padding + i * size_of(node->type->ptr_to),
-                 size_of(child->type));
+      AssignContext child_ctx;
+      child_ctx.blocks = ctx->blocks;
+      child_ctx.labels = ctx->labels;
+      child_ctx.irs = ctx->irs;
+      child_ctx.assigned = ctx->assigned;
+      child_ctx.padding = ctx->padding + i * size_of(node->type->ptr_to);
+      gen_assign(&child_ctx, child, size_of(child->type));
     }
     // Uninitialized array elements are padded with zeros
     size_t done_init =
         vector_size(node->initialize.init_list) * size_of(node->type->ptr_to);
     while (size_of(node->type) - done_init)
     {
-      size_t size = size_of(node->type) - done_init > 8
-                        ? 8
-                        : size_of(node->type) - done_init;
-      IR_REG *zero_reg = gen_stmt(blocks, labels, irs, new_node_num(0));
-      IR_REG *lhs_addr_ptr = gen_addr(blocks, labels, irs, assigned);
+      size_t size = legal_store_size(size_of(node->type) - done_init);
+      IR_REG *zero_reg = emit_imm(ctx->irs, 0);
+      IR_REG *lhs_addr_ptr =
+          gen_addr(ctx->blocks, ctx->labels, ctx->irs, ctx->assigned);
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_STORE;
       ir->mem.reg = zero_reg;
       vector_push(zero_reg->used_list, ir);
       ir->mem.mem_reg = lhs_addr_ptr;
       vector_push(lhs_addr_ptr->used_list, ir);
-      ir->mem.offset = padding + done_init;
+      ir->mem.offset = ctx->padding + done_init;
       ir->mem.size = num2OpSize(size);
-      vector_push((*irs)->IRs, ir);
+      vector_push((*ctx->irs)->IRs, ir);
       done_init += size;
+    }
+    return NULL;
+  }
+  else if (is_aggregate_type(node->type))
+  {
+    IR_REG *rhs_addr_ptr = gen_addr(ctx->blocks, ctx->labels, ctx->irs, node);
+    IR_REG *lhs_addr_ptr =
+        gen_addr(ctx->blocks, ctx->labels, ctx->irs, ctx->assigned);
+    size_t copy_size = size_of(node->type);
+    for (size_t done = 0; done < copy_size;)
+    {
+      size_t chunk = legal_store_size(copy_size - done);
+      OperandSize op_size = num2OpSize(chunk);
+
+      IR_REG *tmp_reg = gen_reg();
+      tmp_reg->reg_size = op_size;
+
+      IR *load = calloc(1, sizeof(IR));
+      load->kind = IR_LOAD;
+      load->mem.reg = tmp_reg;
+      vector_push(tmp_reg->used_list, load);
+      load->mem.mem_reg = rhs_addr_ptr;
+      vector_push(rhs_addr_ptr->used_list, load);
+      load->mem.offset = ctx->padding + done;
+      load->mem.size = op_size;
+      vector_push((*ctx->irs)->IRs, load);
+
+      IR *store = calloc(1, sizeof(IR));
+      store->kind = IR_STORE;
+      store->mem.reg = tmp_reg;
+      vector_push(tmp_reg->used_list, store);
+      store->mem.mem_reg = lhs_addr_ptr;
+      vector_push(lhs_addr_ptr->used_list, store);
+      store->mem.offset = ctx->padding + done;
+      store->mem.size = op_size;
+      vector_push((*ctx->irs)->IRs, store);
+
+      done += chunk;
     }
     return NULL;
   }
@@ -273,17 +552,18 @@ static IR_REG *gen_assign(Vector *blocks, Vector *labels, IR_Blocks **irs,
   {
     // For an assignment, evaluate the RHS, then STORE it at the address of
     // the LHS.
-    IR_REG *rhs_ptr = gen_stmt(blocks, labels, irs, node);
-    IR_REG *lhs_addr_ptr = gen_addr(blocks, labels, irs, assigned);
+    IR_REG *rhs_ptr = gen_stmt(ctx->blocks, ctx->labels, ctx->irs, node);
+    IR_REG *lhs_addr_ptr =
+        gen_addr(ctx->blocks, ctx->labels, ctx->irs, ctx->assigned);
     IR *ir = calloc(1, sizeof(IR));
     ir->kind = IR_STORE;
     ir->mem.reg = rhs_ptr;
     vector_push(rhs_ptr->used_list, ir);
     ir->mem.mem_reg = lhs_addr_ptr;
     vector_push(lhs_addr_ptr->used_list, ir);
-    ir->mem.offset = padding;
+    ir->mem.offset = ctx->padding;
     ir->mem.size = num2OpSize(assign_size);
-    vector_push((*irs)->IRs, ir);
+    vector_push((*ctx->irs)->IRs, ir);
     return rhs_ptr;  // The result of an assignment expression is the RHS
                      // value.
   }
@@ -331,8 +611,7 @@ static IR_REG *gen_addr(Vector *blocks, Vector *labels, IR_Blocks **irs,
       IR_REG *lhs_addr = node->kind == ND_DOT
                              ? gen_addr(blocks, labels, irs, node->lhs)
                              : gen_stmt(blocks, labels, irs, node->lhs);
-      IR_REG *offset_val =
-          gen_stmt(blocks, labels, irs, new_node_num(node->child_offset));
+      IR_REG *offset_val = emit_imm(irs, node->child_offset);
 
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_ADD;
@@ -361,17 +640,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
   {
     case ND_NUM:
     {
-      // For a numeric literal, generate a MOV instruction.
-      IR *ir = calloc(1, sizeof(IR));
-      ir->kind = IR_MOV;
-      ir->mov.is_imm = true;
-      ir->mov.imm_val = node->num_val;
-      IR_REG *dst_reg_ptr = gen_reg();
-      dst_reg_ptr->reg_size = SIZE_DWORD;  // int
-      ir->mov.dst_reg = dst_reg_ptr;
-      vector_push(dst_reg_ptr->used_list, ir);
-      vector_push((*irs)->IRs, ir);
-      return dst_reg_ptr;
+      return emit_imm(irs, node->num_val);
     }
     case ND_DOT:
     case ND_ARROW:
@@ -401,8 +670,11 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     {
       // For a string literal, add it to the global string list and then
       // generate a LEA instruction to get its address.
+      char* literal_name = node->literal_name;
+      if (!literal_name)
+        literal_name = "(null)";
       pr_debug("IR: handling ND_STRING literal %s",
-               node->literal_name ? node->literal_name : "(null)");
+               literal_name);
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_LEA;
       ir->lea.is_local = false;
@@ -421,11 +693,22 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     }
     case ND_ASSIGN:
     {
-      return gen_assign(blocks, labels, irs, node->lhs, node->rhs, 0,
-                        size_of_real(node->type->type));
+      Type *assign_type = node->type;
+      AssignContext ctx;
+      ctx.blocks = blocks;
+      ctx.labels = labels;
+      ctx.irs = irs;
+      ctx.assigned = node->lhs;
+      ctx.padding = 0;
+      pr_debug("IR: ND_ASSIGN");
+      size_t assign_size = is_aggregate_type(assign_type)
+                               ? size_of(assign_type)
+                               : size_of_real(assign_type->type);
+      return gen_assign(&ctx, node->rhs, assign_size);
     }
     case ND_RETURN:
     {
+      pr_debug("IR: ND_RETURN enter");
       // For a return statement, evaluate the return value and generate a RET
       // instruction.
       IR_REG *src_ptr = NULL;
@@ -442,6 +725,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       else
         ir->ret.return_void = true;
       vector_push((*irs)->IRs, ir);
+      pr_debug("IR: ND_RETURN queued");
       *irs = new_ir_blocks();
       vector_push(blocks, *irs);
       return NULL;  // A return statement does not produce a value.
@@ -791,9 +1075,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
           cmp->kind = IR_EQ;
           cmp->bin_op.lhs_reg = cond_ptr;
           vector_push(cond_ptr->used_list, cmp);
-          IR_REG *rhs_reg =
-              gen_stmt(blocks, labels, irs,
-                       new_node_num(case_child->jump.constant_expression));
+        IR_REG *rhs_reg = emit_imm(irs, case_child->jump.constant_expression);
           cmp->bin_op.rhs_reg = rhs_reg;
           vector_push(rhs_reg->used_list, cmp);
           IR_REG *cmp_result = gen_reg();
@@ -871,7 +1153,9 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       // Node's type is the function result type after analysis.
       // If the function returns void, there is no destination register.
       // Fall back to int if missing (undeclared function defaults to int).
-      Type *ret_ty = node->type ? node->type : alloc_type(TYPE_INT);
+      Type *ret_ty = node->type;
+      if (!ret_ty)
+        ret_ty = alloc_type(TYPE_INT);
       pr_debug("IR: CALL return type kind=%d", (int)ret_ty->type);
       IR_REG *dst_reg_ptr = NULL;
       if (ret_ty->type != TYPE_VOID)
@@ -881,9 +1165,11 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
         ir->call.dst_reg = dst_reg_ptr;
         vector_push(dst_reg_ptr->used_list, ir);
       }
+      char* call_state = "void";
       vector_push((*irs)->IRs, ir);
-      pr_debug("IR: CALL complete, dst vreg=%s",
-               dst_reg_ptr ? "assigned" : "void");
+      if (dst_reg_ptr)
+        call_state = "assigned";
+      pr_debug("IR: CALL complete, dst vreg=%s", call_state);
       return dst_reg_ptr;
     }
     case ND_DISCARD_EXPR:
@@ -894,13 +1180,16 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     }
     case ND_BLOCK:
     {
+      pr_debug("IR: ND_BLOCK enter");
       // Generate code for each statement in the block sequentially.
       for (NDBlock *b = node->func.stmt; b; b = b->next)
         gen_stmt(blocks, labels, irs, b->node);
+      pr_debug("IR: ND_BLOCK done");
       return NULL;
     }
     case ND_FUNCDEF:
     {
+      pr_debug("IR: ND_FUNCDEF enter");
       // Generate the function prologue.
       IR *prologue_ir = calloc(1, sizeof(IR));
       if (vector_size((*irs)->IRs))
@@ -912,6 +1201,8 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       for (size_t i = 0; i < vector_size(node->func.expr); i++)
       {
         Node *arg_node = vector_peek_at(node->func.expr, i + 1);
+        if (arg_node->kind == ND_VARIABLE_ARGS)
+          continue;
         IR_REG *addr_reg = gen_addr(blocks, labels, irs, arg_node);
         IR *ir = calloc(1, sizeof(IR));
         ir->kind = IR_STORE_ARG;
@@ -925,12 +1216,17 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
 
       // Generate code for the function body.
       for (NDBlock *b = node->func.stmt; b; b = b->next)
+      {
+        pr_debug("IR: ND_FUNCDEF body stmt kind=%d",
+                 b->node ? (int)b->node->kind : -1);
         gen_stmt(blocks, labels, irs, b->node);
+      }
 
       // Generate the function epilogue.
       IR *epilogue_ir = calloc(1, sizeof(IR));
       epilogue_ir->kind = IR_FUNC_EPILOGUE;
       vector_push((*irs)->IRs, epilogue_ir);
+      pr_debug("IR: ND_FUNCDEF done");
       return NULL;
     }
     case ND_DEREF:
@@ -961,9 +1257,20 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     case ND_NOT:
     case ND_UNARY_MINUS:
     {
-      IR_REG *src_reg_ptr = gen_stmt(blocks, labels, irs, node->lhs);
+      NodeKind kind = node->kind;
+      Node *lhs = node->lhs;
+      Type *result_type = node->type;
+
+      pr_debug("IR: unary kind=%d", (int)kind);
+      IR_REG *src_reg_ptr = gen_stmt(blocks, labels, irs, lhs);
+      if (!src_reg_ptr)
+      {
+        if (node->token)
+          error_at(node->token->str, node->token->len, "invalid unary operator");
+        error_exit("invalid unary operator");
+      }
       IR *ir = calloc(1, sizeof(IR));
-      switch (node->kind)
+      switch (kind)
       {
         case ND_LOGICAL_NOT: ir->kind = IR_NOT; break;
         case ND_NOT: ir->kind = IR_BIT_NOT; break;
@@ -973,10 +1280,11 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       ir->un_op.src_reg = src_reg_ptr;
       vector_push(src_reg_ptr->used_list, ir);
       IR_REG *dst_reg_ptr = gen_reg();
-      dst_reg_ptr->reg_size = num2OpSize(size_of_real(node->type->type));
+      dst_reg_ptr->reg_size = num2OpSize(size_of_real(result_type->type));
       ir->un_op.dst_reg = dst_reg_ptr;
       vector_push(dst_reg_ptr->used_list, ir);
       vector_push((*irs)->IRs, ir);
+      pr_debug("IR: unary queued");
       return dst_reg_ptr;
     }
     case ND_UNARY_PLUS:
@@ -988,7 +1296,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     {
       // Convert int to bool
       IR_REG *lhs_reg = gen_stmt(blocks, labels, irs, node->lhs);
-      IR_REG *rhs_reg = gen_stmt(blocks, labels, irs, new_node_num(0));
+      IR_REG *rhs_reg = emit_imm(irs, 0);
       IR *ir = calloc(1, sizeof(IR));
       ir->kind = IR_NEQ;
       ir->bin_op.lhs_reg = lhs_reg;
@@ -1029,57 +1337,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     case ND_PREDECREMENT:
     case ND_POSTDECREMENT:
     case ND_PREINCREMENT:
-    case ND_POSTINCREMENT:
-    {
-      IR_REG *pre_reg = gen_stmt(blocks, labels, irs, node->lhs);
-      IR_REG *post_reg = gen_reg();
-      post_reg->reg_size = num2OpSize(size_of_real(node->type->type));
-      bool is_inc =
-          node->kind == ND_PREINCREMENT || node->kind == ND_POSTINCREMENT;
-      IR *ir = calloc(1, sizeof(IR));
-      if (node->type->type == TYPE_BOOL)
-      {
-        ir->kind = IR_MOV;
-        ir->mov.is_imm = true;
-        if (is_inc)
-          ir->mov.imm_val = 1;
-        else
-          ir->mov.imm_val = 0;
-        ir->mov.dst_reg = post_reg;
-        vector_push(post_reg->used_list, ir);
-      }
-      else
-      {
-        if (is_inc)
-          ir->kind = IR_ADD;
-        else
-          ir->kind = IR_SUB;
-        ir->bin_op.lhs_reg = pre_reg;
-        vector_push(pre_reg->used_list, ir);
-        IR_REG *rhs_reg =
-            gen_stmt(blocks, labels, irs, new_node_num(node->num_val));
-        ir->bin_op.rhs_reg = rhs_reg;
-        vector_push(rhs_reg->used_list, ir);
-        ir->bin_op.dst_reg = post_reg;
-        vector_push(post_reg->used_list, ir);
-      }
-      vector_push((*irs)->IRs, ir);
-      IR_REG *lhs_addr_ptr = gen_addr(blocks, labels, irs, node->lhs);
-      IR *assign = calloc(1, sizeof(IR));
-      assign->kind = IR_STORE;
-      assign->mem.reg = post_reg;
-      vector_push(post_reg->used_list, assign);
-      assign->mem.mem_reg = lhs_addr_ptr;
-      vector_push(lhs_addr_ptr->used_list, assign);
-      assign->mem.offset = 0;
-      assign->mem.size = num2OpSize(size_of_real(node->type->type));
-      vector_push((*irs)->IRs, assign);
-
-      if (node->kind == ND_PREINCREMENT || node->kind == ND_PREDECREMENT)
-        return post_reg;
-      else
-        return pre_reg;
-    }
+    case ND_POSTINCREMENT: return gen_incdec(blocks, labels, irs, node);
     case ND_ADD:
     case ND_SUB:
     case ND_MUL:
@@ -1095,17 +1353,24 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     case ND_LEFT_SHIFT:
     case ND_RIGHT_SHIFT:
     {
+      NodeKind kind = node->kind;
+      Node *lhs = node->lhs;
+      Node *rhs = node->rhs;
+      Type *result_type = node->type;
+      Type *lhs_type = lhs ? lhs->type : NULL;
+
+      pr_debug("IR: binary kind=%d", (int)kind);
       // Binary operations.
-      IR_REG *lhs_ptr = gen_stmt(blocks, labels, irs, node->lhs);
-      IR_REG *rhs_ptr = gen_stmt(blocks, labels, irs, node->rhs);
+      IR_REG *lhs_ptr = gen_stmt(blocks, labels, irs, lhs);
+      IR_REG *rhs_ptr = gen_stmt(blocks, labels, irs, rhs);
       IR *ir = calloc(1, sizeof(IR));
-      switch (node->kind)
+      switch (kind)
       {
         case ND_ADD: ir->kind = IR_ADD; break;
         case ND_SUB: ir->kind = IR_SUB; break;
-        case ND_MUL: ir->kind = node->type->is_signed ? IR_MUL : IR_MULU; break;
-        case ND_DIV: ir->kind = node->type->is_signed ? IR_DIV : IR_DIVU; break;
-        case ND_REM: ir->kind = node->type->is_signed ? IR_REM : IR_REMU; break;
+        case ND_MUL: ir->kind = result_type->is_signed ? IR_MUL : IR_MULU; break;
+        case ND_DIV: ir->kind = result_type->is_signed ? IR_DIV : IR_DIVU; break;
+        case ND_REM: ir->kind = result_type->is_signed ? IR_REM : IR_REMU; break;
         case ND_EQ: ir->kind = IR_EQ; break;
         case ND_NEQ: ir->kind = IR_NEQ; break;
         // For relational operators, signedness is determined by operands,
@@ -1113,12 +1378,12 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
         // us to always select the unsigned variants when the result was
         // TYPE_BOOL, which is incorrect for signed integers.
         case ND_LT: {
-          bool signed_cmp = (node->lhs && node->lhs->type && node->lhs->type->is_signed);
+          bool signed_cmp = lhs_type && lhs_type->is_signed;
           ir->kind = signed_cmp ? IR_LT : IR_LTU;
           break;
         }
         case ND_LTE: {
-          bool signed_cmp = (node->lhs && node->lhs->type && node->lhs->type->is_signed);
+          bool signed_cmp = lhs_type && lhs_type->is_signed;
           ir->kind = signed_cmp ? IR_LTE : IR_LTEU;
           break;
         }
@@ -1126,24 +1391,29 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
         case ND_EXCLUSIVE_OR: ir->kind = IR_XOR; break;
         case ND_AND: ir->kind = IR_AND; break;
         case ND_LEFT_SHIFT:
-          ir->kind = node->type->is_signed ? IR_SAL : IR_SHL;
+          ir->kind = result_type->is_signed ? IR_SAL : IR_SHL;
           break;
         case ND_RIGHT_SHIFT:
-          ir->kind = node->type->is_signed ? IR_SAR : IR_SHR;
+          ir->kind = result_type->is_signed ? IR_SAR : IR_SHR;
           break;
         default: unreachable();
       }
       if (!lhs_ptr || !rhs_ptr)
-        error_at(node->token->str, node->token->len, "invalid operator");
+      {
+        if (node->token)
+          error_at(node->token->str, node->token->len, "invalid operator");
+        error_exit("invalid operator");
+      }
       ir->bin_op.lhs_reg = lhs_ptr;
       vector_push(lhs_ptr->used_list, ir);
       ir->bin_op.rhs_reg = rhs_ptr;
       vector_push(rhs_ptr->used_list, ir);
       IR_REG *dst_reg_ptr = gen_reg();
-      dst_reg_ptr->reg_size = num2OpSize(size_of_real(node->type->type));
+      dst_reg_ptr->reg_size = num2OpSize(size_of_real(result_type->type));
       ir->bin_op.dst_reg = dst_reg_ptr;
       vector_push(dst_reg_ptr->used_list, ir);
       vector_push((*irs)->IRs, ir);
+      pr_debug("IR: binary queued");
       return dst_reg_ptr;
     }
     case ND_LOGICAL_OR:
@@ -1174,7 +1444,7 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       rhs_cmp->kind = IR_NEQ;  // convert RHS to bool
       rhs_cmp->bin_op.lhs_reg = rhs_ptr;
       vector_push(rhs_ptr->used_list, rhs_cmp);
-      IR_REG *zero = gen_stmt(blocks, labels, irs, new_node_num(0));
+      IR_REG *zero = emit_imm(irs, 0);
       rhs_cmp->bin_op.rhs_reg = zero;
       vector_push(zero->used_list, rhs_cmp);
       IR_REG *rhs_bool = gen_reg();
@@ -1274,10 +1544,17 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
     {
       if (node->kind == ND_TRUNCATE)
       {
-        // For now, treat truncation as a no-op and rely on destination size
-        // at the use site. This avoids creating an unused vreg and fixes
-        // cases like returning sizeof(...) where the source is already 32-bit.
-        return gen_stmt(blocks, labels, irs, node->lhs);
+        IR *ir = calloc(1, sizeof(IR));
+        ir->kind = IR_MOV;
+        IR_REG *src_reg = gen_stmt(blocks, labels, irs, node->lhs);
+        ir->mov.src_reg = src_reg;
+        vector_push(src_reg->used_list, ir);
+        IR_REG *dst_reg = gen_reg();
+        dst_reg->reg_size = num2OpSize(size_of_real(node->type->type));
+        ir->mov.dst_reg = dst_reg;
+        vector_push(dst_reg->used_list, ir);
+        vector_push((*irs)->IRs, ir);
+        return dst_reg;
       }
       IR *ir = calloc(1, sizeof(IR));
       switch (node->kind)

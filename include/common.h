@@ -283,6 +283,7 @@ typedef struct
     init_val,      // Initial value as a number
     init_pointer,  // Initialize with a pointer
     init_string,   // Initialize with a string
+    init_string_data,  // Initialize array storage with a string literal
   } how2_init;
 } GVarInitializer;
 

@@ -25,6 +25,14 @@ bool output_mermaid;
 uint8_t optimize_level = 1;
 target_arch g_target_arch = TGT_X86_64; // default
 
+static char *copy_arg_string(char *arg)
+{
+  size_t len = strlen(arg);
+  char *copy = calloc(1, len + 1);
+  memcpy(copy, arg, len + 1);
+  return copy;
+}
+
 // Argument processing
 // -E: Execute preprocessor and output
 // -g: Import gcc predefined macros in preprocessor
@@ -54,6 +62,9 @@ int main(int argc, char **argv)
   char *input_file_name = NULL;
   char *output_file_name = NULL;
   char *input = NULL;
+  int has_input_file = 0;
+  int has_output_file = 0;
+  int has_inline_input = 0;
   // Process arguments (simplified to avoid miscompilation of complex ||/&&)
   for (int i = 1; i < argc; i++)
   {
@@ -67,15 +78,35 @@ int main(int argc, char **argv)
       gcc_compatible = true;
     else if (a[1] == 'o' && a[2] == '\0')
     {
-      if (++i < argc) output_file_name = argv[i]; else error_exit("Invalid arguments.");
+      if (++i < argc)
+      {
+        output_file_name = copy_arg_string(argv[i]);
+        has_output_file = 1;
+      }
+      else
+        error_exit("Invalid arguments.");
     }
     else if (a[1] == 'i' && a[2] == '\0')
     {
-      if (++i < argc) input_file_name = argv[i]; else error_exit("Invalid arguments.");
+      if (++i < argc)
+      {
+        input_file_name = copy_arg_string(argv[i]);
+        input = openfile(input_file_name);
+        has_input_file = 1;
+      }
+      else
+        error_exit("Invalid arguments.");
     }
     else if (a[1] == 'I' && a[2] == '\0')
     {
-      if (++i < argc) { input = argv[i]; break; } else error_exit("Invalid arguments.");
+      if (++i < argc)
+      {
+        input = argv[i];
+        has_inline_input = 1;
+        break;
+      }
+      else
+        error_exit("Invalid arguments.");
     }
     // Multi-letter options
     else if (!strcmp(a, "-emit-ir"))
@@ -104,8 +135,6 @@ int main(int argc, char **argv)
       error_exit("Invalid arguments.");
   }
 
-  if (input_file_name)
-    input = openfile(input_file_name);
   // Debug: print parsed arg state before validation (helps self-host debug)
   fprintf(stderr, "[argcheck] input=%p, output=%p, gcc=%d, pp=%d, tgt=%d\n",
           (void *)input, (void *)output_file_name, (int)gcc_compatible,
@@ -113,9 +142,13 @@ int main(int argc, char **argv)
   // Validate required arguments separately to avoid depending on
   // complex short-circuit expressions that our early self-hosted
   // backend may miscompile.
-  if (!input)
+  if (has_input_file == 0 && has_inline_input == 0)
     error_exit("Invalid arguments.");
-  if (!output_file_name)
+  if (input == NULL)
+    error_exit("Invalid arguments.");
+  if (has_output_file == 0)
+    error_exit("Invalid arguments.");
+  if (output_file_name == NULL)
     error_exit("Invalid arguments.");
   if (gcc_compatible && !output_preprocess)
     error_exit("Invalid arguments.");

@@ -25,6 +25,17 @@
 
 FILE *fout;
 
+static Var *find_string_literal(IRProgram *program, char *literal_name)
+{
+  for (size_t i = 1; i <= vector_size(program->strings); i++)
+  {
+    Var *string = vector_peek_at(program->strings, i);
+    if (!strcmp(string->name, literal_name))
+      return string;
+  }
+  return NULL;
+}
+
 void generator(IRProgram *program, char *output_filename)
 {
   pr_debug("start generator");
@@ -79,6 +90,15 @@ void generator(IRProgram *program, char *output_filename)
           break;
         case init_string:
           output_file("    .quad %s", init->literal_name);
+          break;
+        case init_string_data:
+        {
+          Var *string = find_string_literal(program, init->literal_name);
+          if (!string)
+            unreachable();
+          output_file("    .string \"%.*s\"", (int)string->token->len,
+                      string->token->str);
+        }
           break;
         default: unreachable(); break;
       }

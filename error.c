@@ -32,6 +32,12 @@ void _error_at(char *error_location, size_t error_len, char *file, int line,
 // Called by pr_debug when DEBUG is defined
 void _debug(char *file, int line, const char *func, char *fmt, ...)
 {
+#ifdef SELF_HOST
+  fprintf(stdout, "\e[35m");
+  fprintf(stdout, "%s:%d:%s(): %s", file, line, func, fmt);
+  fprintf(stdout, "\n");
+  fprintf(stdout, "\e[37m");
+#else
   va_list ap;
   va_start(ap, fmt);
   fprintf(stdout, "\e[35m");
@@ -39,17 +45,24 @@ void _debug(char *file, int line, const char *func, char *fmt, ...)
   vfprintf(stdout, fmt, ap);
   fprintf(stdout, "\n");
   fprintf(stdout, "\e[37m");
+#endif
 }
 
 // Called by pr_debug2 when DEBUG is defined
 void _debug2(char *file, int line, const char *func, char *fmt, ...)
 {
+#ifdef SELF_HOST
+  fprintf(stdout, "\e[90m  ");  // Gray color and indent
+  fprintf(stdout, "%s:%d:%s(): %s", file, line, func, fmt);
+  fprintf(stdout, "\e[0m\n");  // Reset color
+#else
   va_list ap;
   va_start(ap, fmt);
   fprintf(stdout, "\e[90m  ");  // Gray color and indent
   fprintf(stdout, "%s:%d:%s(): ", file, line, func);
   vfprintf(stdout, fmt, ap);
   fprintf(stdout, "\e[0m\n");  // Reset color
+#endif
 }
 
 char *file_name;
@@ -64,20 +77,32 @@ void error_init(char *name, char *input)
 // Function to output logs and exit on error, called from error
 void _error(char *file, int line, const char *func, char *fmt, ...)
 {
+  char *input_name = file_name;
+#ifdef SELF_HOST
+  fprintf(stderr, "\e[31m[ERROR] \e[37m%.*s:%d:%s(): %s", (int)strlen(file),
+          file, line, func, fmt);
+#else
   va_list ap;
   va_start(ap, fmt);
   // Print error header and actual formatted message to stderr
   fprintf(stderr, "\e[31m[ERROR] \e[37m%.*s:%d:%s(): ", (int)strlen(file), file,
           line, func);
   vfprintf(stderr, fmt, ap);
-  fprintf(stderr, "\nError while compiling %s\n",
-          file_name ? file_name : "(no input)");
   va_end(ap);
+#endif
+  if (!input_name)
+    input_name = "(no input)";
+  fprintf(stderr, "\nError while compiling %s\n", input_name);
   exit(1);
 }
 
+#ifdef SELF_HOST
+void _info_at_(size_t log_level, char *location, size_t len, char *file,
+               int line, const char *func, char *fmt)
+#else
 void _info_at_(size_t log_level, char *location, size_t len, char *file,
                int line, const char *func, char *fmt, va_list ap)
+#endif
 {
   char *color_ansi = "";
   char *default_ansi = "\e[37m";
@@ -99,8 +124,14 @@ void _info_at_(size_t log_level, char *location, size_t len, char *file,
   {  // Identify the line of error_location
     // Line start
     char *start_line = location;
-    while (user_input < start_line && start_line[-1] != '\n')
-      start_line--;
+    while (user_input < start_line)
+    {
+      char *prev = start_line;
+      prev--;
+      if (*prev == '\n')
+        break;
+      start_line = prev;
+    }
     // Line end
     char *end_line = location;
     while (*end_line != '\n')
@@ -119,7 +150,11 @@ void _info_at_(size_t log_level, char *location, size_t len, char *file,
             "^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
             "~~~~~~~~~~~~~~~~~~~~",
             default_ansi);
+#ifdef SELF_HOST
+    fprintf(stderr, "%s", fmt);
+#else
     vfprintf(stderr, fmt, ap);
+#endif
     fprintf(stderr, "\n%s at %s:%d:%s\n", info, file, line, func);
   }
   else
@@ -132,14 +167,18 @@ void _info_at_(size_t log_level, char *location, size_t len, char *file,
 void _error_at(char *error_location, size_t error_len, char *file, int line,
                const char *func, char *fmt, ...)
 {
+#ifdef SELF_HOST
+  _info_at_(0, error_location, error_len, file, line, func, fmt);
+#else
   va_list args;
   va_start(args, fmt);
   _info_at_(0, error_location, error_len, file, line, func, fmt, args);
-
-#ifndef INTERPRETER
-  printf("\n\n--- BackTrace ---\n\n\n");
-  print_parse_result(get_funcblock_head());
 #endif
+
+// #ifndef INTERPRETER
+//   printf("\n\n--- BackTrace ---\n\n\n");
+//   print_parse_result(get_funcblock_head());
+// #endif
   exit(1);
 }
 
@@ -149,9 +188,13 @@ void _error_at(char *error_location, size_t error_len, char *file, int line,
 void _info_at(size_t log_level, char *location, size_t len, char *file,
               int line, const char *func, char *fmt, ...)
 {
+#ifdef SELF_HOST
+  _info_at_(log_level, location, len, file, line, func, fmt);
+#else
   va_list args;
   va_start(args, fmt);
   _info_at_(log_level, location, len, file, line, func, fmt, args);
+#endif
 }
 
 #ifndef SELF_HOST

@@ -176,7 +176,12 @@ void _print_parse_result(Node *node, int nest)
     case ND_GOTO:
     case ND_LABEL: printf("| label: %s\n", node->jump.label_name); break;
     case ND_CASE:
-      printf("| %s", node->jump.is_case ? "case" : "default\n");
+    {
+      char* kind = "default\n";
+      if (node->jump.is_case)
+        kind = "case";
+      printf("| %s", kind);
+    }
       break;
     case ND_FIELD: printf("| offset: %lu\n", node->child_offset); break;
     default: break;
@@ -565,8 +570,10 @@ static void fprint_ir(FILE *fp, IR *ir, bool mermaid_escape)
       for (size_t k = 0; k < vector_size(ir->call.args); k++)
       {
         IR_REG *reg = vector_peek_at(ir->call.args, k + 1);
-        fprintf(fp, "r%zu%s", reg->reg_num,
-                (k == vector_size(ir->call.args) - 1) ? "" : ", ");
+        char* sep = ", ";
+        if (k == vector_size(ir->call.args) - 1)
+          sep = "";
+        fprintf(fp, "r%zu%s", reg->reg_num, sep);
       }
       fprintf(fp, ")");
       break;
@@ -847,11 +854,14 @@ void dump_ir_fp(IRProgram *program, FILE *fp)
     if (func->builtin_func == FUNC_USER_DEFINED)
     {
       // Print function information
+      char* static_label = "";
+      if (func->user_defined.is_static)
+        static_label = "static";
       fprintf(fp, "FUNC %.*s %zu %zu %s\n",
               (int)func->user_defined.function_name_size,
               func->user_defined.function_name, func->user_defined.stack_size,
               vector_size(func->user_defined.num_virtual_regs),
-              func->user_defined.is_static ? "static" : "");
+              static_label);
     }
     // Loop through the IR blocks of the function
     for (size_t j = 0; j < vector_size(func->IR_Blocks); j++)

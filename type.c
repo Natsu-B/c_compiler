@@ -298,16 +298,25 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
             tag_data_list* new_data = malloc(sizeof(tag_data_list));
             new_data->name = node ? node->token : NULL;
             new_data->type = child_type;
-            new_data->offset = is_struct ? struct_size : 0;
-            vector_push(new->data_list, new_data);
             size_t alignment = align_of(child_type);
             if (is_struct)
-              struct_size = (struct_size % alignment
-                                 ? (struct_size / alignment + 1) * alignment
-                                 : struct_size) +
-                            size_of(child_type);
+            {
+              struct_size = struct_size % alignment
+                                ? (struct_size / alignment + 1) * alignment
+                                : struct_size;
+              new_data->offset = struct_size;
+              struct_size += size_of(child_type);
+            }
             else if (struct_size < size_of(child_type))
+            {
+              new_data->offset = 0;
               struct_size = size_of(child_type);
+            }
+            else
+            {
+              new_data->offset = 0;
+            }
+            vector_push(new->data_list, new_data);
             if (struct_alignment < alignment)
               struct_alignment = alignment;
             expect(";", TK_RESERVED);
@@ -396,8 +405,10 @@ Type* declaration_specifiers(uint8_t* storage_class_specifier)
   if (long_count > 2 ||
       (long_count && (bool_count || char_count || short_count || void_count)) ||
       signed_count + unsigned_count > 1 ||
-      int_count + bool_count + char_count + short_count + void_count > 1 ||
-      (signed_count | unsigned_count) & (void_count | bool_count))
+      bool_count + char_count + short_count + void_count > 1 ||
+      int_count > 1 ||
+      (int_count && (bool_count || char_count || void_count)) ||
+      ((signed_count || unsigned_count) && (void_count || bool_count)))
     error_at(old->str, get_token()->str - old->str + get_token()->len,
              "Invalid type specifier.");
 
@@ -525,16 +536,6 @@ char* add_string_literal(Token* token)
     unreachable();
   pr_debug2("literal_name: %s", literal_name);
   literal_top->literal_name = literal_name;
-  // Check if it does not exist as a global variable
-  for (size_t i = 1; i <= vector_size(vector_peek_at(OrdinaryNamespaceList, 1));
-       i++)
-  {
-    ordinary_data_list* tmp =
-        vector_peek_at(vector_peek_at(OrdinaryNamespaceList, 1), i);
-    if (tmp->ordinary_kind == variables_name && tmp->variables->len &&
-        !strncmp(tmp->variables->name, token->str, token->len))
-      unreachable();
-  }
   Var* new_var = calloc(1, sizeof(Var));
   new_var->token = token;
   new_var->name = literal_name;
@@ -557,22 +558,26 @@ bool add_function_name(Vector* function_list, Token* name,
 {
   if (storage_class_specifier & ~((1 << 1) + (1 << 2)))
     error_at(name->str, name->len, "Invalid storage class specifier.");
+  size_t function_count = vector_size(function_list);
   // Check if there is anything different with the same name in the namespace
-  for (size_t i = 1; i <= vector_size(OrdinaryNamespaceList); i++)
+  size_t namespace_count = vector_size(OrdinaryNamespaceList);
+  for (size_t i = 1; i <= namespace_count; i++)
   {
     Vector* typedef_nest = vector_peek_at(OrdinaryNamespaceList, i);
-    for (size_t j = 1; j <= vector_size(typedef_nest); j++)
+    size_t symbol_count = vector_size(typedef_nest);
+    for (size_t j = 1; j <= symbol_count; j++)
     {
       ordinary_data_list* tmp = vector_peek_at(typedef_nest, j);
       if (tmp->name->len == name->len &&
           !strncmp(tmp->name->str, name->str, name->len))
       {
         bool is_same = false;
-        if (tmp->ordinary_kind == function_name &&
-            vector_size(function_list) == vector_size(tmp->type->param_list))
+        if (tmp->ordinary_kind == function_name && tmp->type &&
+            tmp->type->param_list &&
+            function_count == vector_size(tmp->type->param_list))
         {
           is_same = true;
-          for (size_t k = 1; k <= vector_size(tmp->type->param_list); k++)
+          for (size_t k = 1; k <= function_count; k++)
           {
             if (!is_equal_type(vector_peek_at(function_list, k),
                                vector_peek_at(tmp->type->param_list, k)))
@@ -598,6 +603,51 @@ bool add_function_name(Vector* function_list, Token* name,
   new->type->param_list = function_list;
   vector_push(vector_peek(OrdinaryNamespaceList), new);
   return true;
+}
+
+bool define_function_name(Vector* function_list, Token* name,
+                          uint8_t storage_class_specifier)
+{
+  if (storage_class_specifier & ~((1 << 1) + (1 << 2)))
+    error_at(name->str, name->len, "Invalid storage class specifier.");
+  size_t function_count = vector_size(function_list);
+
+  size_t namespace_count = vector_size(OrdinaryNamespaceList);
+  for (size_t i = 1; i <= namespace_count; i++)
+  {
+    Vector* typedef_nest = vector_peek_at(OrdinaryNamespaceList, i);
+    size_t symbol_count = vector_size(typedef_nest);
+    for (size_t j = 1; j <= symbol_count; j++)
+    {
+      ordinary_data_list* tmp = vector_peek_at(typedef_nest, j);
+      if (tmp->ordinary_kind == function_name && tmp->type &&
+          tmp->name->len == name->len &&
+          !strncmp(tmp->name->str, name->str, name->len) &&
+          tmp->type->param_list &&
+          function_count == vector_size(tmp->type->param_list))
+      {
+        bool is_same = true;
+        for (size_t k = 1; k <= function_count; k++)
+        {
+          if (!is_equal_type(vector_peek_at(function_list, k),
+                             vector_peek_at(tmp->type->param_list, k)))
+          {
+            is_same = false;
+            break;
+          }
+        }
+        if (is_same)
+        {
+          if (tmp->is_defined)
+            return false;
+          tmp->is_defined = true;
+          return true;
+        }
+      }
+    }
+  }
+
+  return add_function_name(function_list, name, storage_class_specifier, true);
 }
 
 enum member_name is_enum_or_function_or_typedef_or_variables_name(

@@ -167,6 +167,73 @@ static void emit_mov_load_spill(const char* dst_reg, OperandSize sz, size_t spil
   }
 }
 
+static void emit_two_operand_line(const char* mnem, const char* dst,
+                                  const char* src)
+{
+  fprintf(fout, "    ");
+  fprintf(fout, "%s", mnem);
+  fprintf(fout, " ");
+  fprintf(fout, "%s", dst);
+  fprintf(fout, ", ");
+  fprintf(fout, "%s", src);
+  fprintf(fout, "\n");
+}
+
+static void emit_one_operand_line(const char* mnem, const char* operand)
+{
+  fprintf(fout, "    ");
+  fprintf(fout, "%s", mnem);
+  fprintf(fout, " ");
+  fprintf(fout, "%s", operand);
+  fprintf(fout, "\n");
+}
+
+static void emit_div_operand_line(bool is_unsigned, const char* operand)
+{
+  if (is_unsigned)
+    fprintf(fout, "    div ");
+  else
+    fprintf(fout, "    idiv ");
+  fprintf(fout, "%s", operand);
+  fprintf(fout, "\n");
+}
+
+static void sync_split_vregs_before_insn(X64_FUNC* fx, size_t insn_id)
+{
+  if (!insn_id || !fx->vreg_real_end) return;
+
+  size_t nregs = vector_size(fx->virtual_regs);
+  for (size_t vi = 1; vi <= nregs; vi++)
+  {
+    size_t* realp = vector_peek_at(fx->vreg_real, vi);
+    size_t* rendp = vector_peek_at(fx->vreg_real_end, vi);
+    size_t* slotp = vector_peek_at(fx->vreg_stack_slot, vi);
+    bool should_sync = false;
+    size_t real = register_reserved;
+    size_t rend = 0;
+    size_t slot = 0;
+
+    if (realp && rendp && slotp)
+    {
+      real = *realp;
+      rend = *rendp;
+      slot = *slotp;
+      if (real != register_reserved && slot != 0 && rend != 0 &&
+          rend + 1 == insn_id)
+        should_sync = true;
+    }
+
+    if (should_sync)
+    {
+      X64_REG* vinfo = vector_peek_at(fx->virtual_regs, vi);
+      OperandSize size = SIZE_QWORD;
+      if (vinfo && vinfo->size) size = vinfo->size;
+      emit_mov_store_spill(reg_name((enum register_name)real, size), size,
+                           slot);
+    }
+  }
+}
+
 static void format_mem(char* buf, size_t bufsz, X64_Operand* op, X64_FUNC* fx, size_t cur_id)
 {
   // RIP-relative addressing for global symbols
@@ -240,6 +307,7 @@ static void emit_two_op(const char* mnem, X64_ASM* as, X64_FUNC* fx)
   bool dst_mem = operand_maps_to_mem_at(dst, fx, as->insn_id);
   bool src_mem = operand_maps_to_mem_at(src, fx, as->insn_id);
   bool src_is_spill_mem = false;
+  bool src_in_scratch_r10 = false;
   char src_spill_buf[64];
   if (src->kind == OP_REG && src->reg && src->reg->reg_type == virtual_regs &&
       !vreg_has_real_at(fx, get_vreg_index(src->reg), as->insn_id))
@@ -357,9 +425,10 @@ static void emit_two_op(const char* mnem, X64_ASM* as, X64_FUNC* fx)
     if (is_imm && *is_imm && imm_valp)
     {
       snprintf(src_buf, sizeof(src_buf), "%lld", *imm_valp);
-      output_file("    mov %s, %s",
-                  reg_name(dst->reg->real_reg, dst->reg->size ? dst->reg->size : SIZE_DWORD),
-                  src_buf);
+      emit_two_operand_line(
+          "mov", reg_name(dst->reg->real_reg,
+                          dst->reg->size ? dst->reg->size : SIZE_DWORD),
+          src_buf);
       return;
     }
     // Use spill slot as memory source
@@ -376,16 +445,20 @@ static void emit_two_op(const char* mnem, X64_ASM* as, X64_FUNC* fx)
         case SIZE_BYTE: snprintf(m, sizeof(m), "BYTE PTR [rbp-%zu]", spill); break;
         default: snprintf(m, sizeof(m), "QWORD PTR [rbp-%zu]", spill); break;
       }
-      output_file("    mov %s, %s",
-                  reg_name(dst->reg->real_reg, dst->reg->size ? dst->reg->size : SIZE_DWORD), m);
+      emit_two_operand_line(
+          "mov", reg_name(dst->reg->real_reg,
+                          dst->reg->size ? dst->reg->size : SIZE_DWORD),
+          m);
       return;
     }
     // Fallback to scratch load
     size_t spill2 = vreg_spill_offset(fx, sidx);
     emit_mov_load_spill(scratch_r10(src->reg->size), src->reg->size, spill2);
-    output_file("    mov %s, %s",
-                reg_name(dst->reg->real_reg, dst->reg->size ? dst->reg->size : SIZE_DWORD),
-                scratch_r10(src->reg->size));
+    emit_two_operand_line(
+        "mov",
+        reg_name(dst->reg->real_reg,
+                 dst->reg->size ? dst->reg->size : SIZE_DWORD),
+        scratch_r10(src->reg->size));
     return;
   }
   if (src->kind == OP_IMM)
@@ -411,6 +484,7 @@ static void emit_two_op(const char* mnem, X64_ASM* as, X64_FUNC* fx)
         size_t spill = vreg_spill_offset(fx, get_vreg_index(src->reg));
         emit_mov_load_spill(scratch_r10(src->reg->size), src->reg->size, spill);
         src_text = scratch_r10(src->reg->size);
+        src_in_scratch_r10 = true;
       }
       else if (src->kind == OP_MEM)
       {
@@ -439,6 +513,7 @@ static void emit_two_op(const char* mnem, X64_ASM* as, X64_FUNC* fx)
           output_file("    mov %s, %s", scratch_r10(sz), m);
         }
         src_text = scratch_r10(sz);
+        src_in_scratch_r10 = true;
       }
     }
   }
@@ -498,6 +573,7 @@ static void emit_two_op(const char* mnem, X64_ASM* as, X64_FUNC* fx)
           {
             output_file("    lea %s, %s", scratch_r10(SIZE_QWORD), addr2);
             src_text = scratch_r10(src->reg->size ? src->reg->size : SIZE_QWORD);
+            src_in_scratch_r10 = true;
           }
           else
           {
@@ -528,6 +604,7 @@ static void emit_two_op(const char* mnem, X64_ASM* as, X64_FUNC* fx)
           {
             emit_mov_load_spill(scratch_r10(src->reg->size), src->reg->size, spill);
             src_text = scratch_r10(src->reg->size);
+            src_in_scratch_r10 = true;
           }
           }
         }
@@ -705,7 +782,33 @@ static void emit_two_op(const char* mnem, X64_ASM* as, X64_FUNC* fx)
         // Reformat src_text using the same hardware register in dst size
         src_text = reg_name(vreg_real_at(fx, idx, as->insn_id), dst_sz);
       }
-      else
+      else if (!src_in_scratch_r10 && dst_sz == SIZE_QWORD &&
+               src->reg->size != SIZE_QWORD)
+      {
+        size_t spill = vreg_spill_offset(fx, idx);
+        switch (src->reg->size)
+        {
+          case SIZE_DWORD:
+            output_file("    movsxd %s, DWORD PTR [rbp-%zu]",
+                        scratch_r10(SIZE_QWORD), spill);
+            break;
+          case SIZE_WORD:
+            output_file("    movsx %s, WORD PTR [rbp-%zu]",
+                        scratch_r10(SIZE_QWORD), spill);
+            break;
+          case SIZE_BYTE:
+            output_file("    movsx %s, BYTE PTR [rbp-%zu]",
+                        scratch_r10(SIZE_QWORD), spill);
+            break;
+          default:
+            emit_mov_load_spill(scratch_r10(src->reg->size), src->reg->size,
+                                spill);
+            break;
+        }
+        src_text = scratch_r10(SIZE_QWORD);
+        src_in_scratch_r10 = true;
+      }
+      else if (src_in_scratch_r10)
       {
         // For spilled vregs we loaded into r10 with their natural size; use
         // the dst size view of r10 to satisfy instruction operand size rules.
@@ -750,6 +853,48 @@ static void emit_two_op(const char* mnem, X64_ASM* as, X64_FUNC* fx)
     size_t spill = vreg_spill_offset(fx, get_vreg_index(dst->reg));
     emit_mov_load_spill(dst_text, dst_sz, spill);
   }
+
+  if (as->kind == X64_MOVZX && dst_sz == SIZE_QWORD && src->kind == OP_REG &&
+      src->reg && src->reg->size == SIZE_DWORD)
+  {
+    const char* zext_dst = NULL;
+    const char* zext_src = NULL;
+    if (dst->constraint.has_fixed_register)
+      zext_dst = reg_name(dst->constraint.fixed_register, SIZE_DWORD);
+    else if (dst->reg && dst->reg->reg_type == virtual_regs)
+    {
+      size_t idx = get_vreg_index(dst->reg);
+      if (vreg_has_real_at(fx, idx, as->insn_id))
+        zext_dst = reg_name(vreg_real_at(fx, idx, as->insn_id), SIZE_DWORD);
+      else
+        zext_dst = scratch_r11(SIZE_DWORD);
+    }
+    else if (dst->reg)
+      zext_dst = reg_name(dst->reg->real_reg, SIZE_DWORD);
+
+    if (src->reg->reg_type == virtual_regs)
+    {
+      size_t idx = get_vreg_index(src->reg);
+      if (vreg_has_real_at(fx, idx, as->insn_id))
+        zext_src = reg_name(vreg_real_at(fx, idx, as->insn_id), SIZE_DWORD);
+      else if (src_is_spill_mem)
+        zext_src = src_spill_buf;
+    }
+    else
+      zext_src = reg_name(src->reg->real_reg, SIZE_DWORD);
+
+    if (zext_dst && zext_src)
+    {
+      output_file("    mov %s, %s", zext_dst, zext_src);
+      if (store_back)
+      {
+        size_t spill = vreg_spill_offset(fx, get_vreg_index(dst->reg));
+        emit_mov_store_spill(scratch_r11(SIZE_QWORD), SIZE_QWORD, spill);
+      }
+      return;
+    }
+  }
+
   // Final fallback: ensure src_text is resolved
   if (!src_text)
   {
@@ -765,6 +910,7 @@ static void emit_two_op(const char* mnem, X64_ASM* as, X64_FUNC* fx)
           size_t spill = vreg_spill_offset(fx, idx);
           emit_mov_load_spill(scratch_r10(src->reg->size), src->reg->size, spill);
           src_text = scratch_r10(src->reg->size);
+          src_in_scratch_r10 = true;
         }
       }
       else
@@ -817,7 +963,7 @@ static void emit_two_op(const char* mnem, X64_ASM* as, X64_FUNC* fx)
     }
     src_text = "cl";
   }
-  output_file("    %s %s, %s", mnem, dst_text, src_text);
+  emit_two_operand_line(mnem, dst_text, src_text);
 
   if (store_back)
   {
@@ -894,7 +1040,7 @@ static void emit_unary(const char* mnem, X64_ASM* as, X64_FUNC* fx)
     // Final fallback: operate on scratch to avoid NULL output
     dst_text = scratch_r11(op_sz);
   }
-  output_file("    %s %s", mnem, dst_text);
+  emit_one_operand_line(mnem, dst_text);
 
   // For SETcc into a spilled virtual, zero-extend the byte to full width
   if (is_setcc)
@@ -958,11 +1104,11 @@ static void emit_function_header(IRFunc* func_ir)
 static size_t count_callee_saved(unsigned int used_mask)
 {
   size_t cnt = 0;
-  if (used_mask & (1u << rbx)) cnt++;
-  if (used_mask & (1u << r12)) cnt++;
-  if (used_mask & (1u << r13)) cnt++;
-  if (used_mask & (1u << r14)) cnt++;
-  if (used_mask & (1u << r15)) cnt++;
+  if (used_mask & (1 << rbx)) cnt++;
+  if (used_mask & (1 << r12)) cnt++;
+  if (used_mask & (1 << r13)) cnt++;
+  if (used_mask & (1 << r14)) cnt++;
+  if (used_mask & (1 << r15)) cnt++;
   return cnt;
 }
 
@@ -970,37 +1116,41 @@ static void emit_prologue(IRFunc* func_ir, X64_FUNC* func_x64, size_t* out_alloc
 {
   output_file("    push rbp");
   output_file("    mov rbp, rsp");
-  // Save callee-saved registers used
-  if (func_x64->used_registers & (1u << rbx)) output_file("    push rbx");
-  if (func_x64->used_registers & (1u << r12)) output_file("    push r12");
-  if (func_x64->used_registers & (1u << r13)) output_file("    push r13");
-  if (func_x64->used_registers & (1u << r14)) output_file("    push r14");
-  if (func_x64->used_registers & (1u << r15)) output_file("    push r15");
 
   size_t locals = func_ir->user_defined.stack_size;
   size_t spills = func_x64->spill_stack_size;
   size_t base = locals + spills;
+  // Reserve local/spill space directly below RBP so [rbp-offsetof] never
+  // overlaps saved callee-saved registers. Then push the callee-saved
+  // registers beneath that area.
+  //
   // Align so that RSP is 16B-aligned before calls.
-  // Entry: RSP%16==8; after push rbp -> 0; after k pushes -> (k%2?8:0)
+  // Entry: RSP%16==8; after push rbp -> 0; after sub alloc -> (-alloc)%16;
+  // after k pushes -> (-alloc - 8*k)%16.
   size_t k = count_callee_saved(func_x64->used_registers);
-  size_t mod = (k % 2) ? 8 : 0;
-  size_t padding = (16 + mod - (base % 16)) % 16;
+  size_t required_mod = (k % 2) ? 8 : 0;
+  size_t padding = (16 + required_mod - (base % 16)) % 16;
   size_t alloc = base + padding;
   if (alloc)
     output_file("    sub rsp, %zu", alloc);
+  // Save callee-saved registers used
+  if (func_x64->used_registers & (1 << rbx)) output_file("    push rbx");
+  if (func_x64->used_registers & (1 << r12)) output_file("    push r12");
+  if (func_x64->used_registers & (1 << r13)) output_file("    push r13");
+  if (func_x64->used_registers & (1 << r14)) output_file("    push r14");
+  if (func_x64->used_registers & (1 << r15)) output_file("    push r15");
   if (out_alloc) *out_alloc = alloc;
 }
 
-static void emit_epilogue(X64_FUNC* func_x64, size_t alloc)
+static void emit_epilogue(X64_FUNC* func_x64)
 {
-  if (alloc)
-    output_file("    add rsp, %zu", alloc);
   // Restore callee-saved registers in reverse order
-  if (func_x64->used_registers & (1u << r15)) output_file("    pop r15");
-  if (func_x64->used_registers & (1u << r14)) output_file("    pop r14");
-  if (func_x64->used_registers & (1u << r13)) output_file("    pop r13");
-  if (func_x64->used_registers & (1u << r12)) output_file("    pop r12");
-  if (func_x64->used_registers & (1u << rbx)) output_file("    pop rbx");
+  if (func_x64->used_registers & (1 << r15)) output_file("    pop r15");
+  if (func_x64->used_registers & (1 << r14)) output_file("    pop r14");
+  if (func_x64->used_registers & (1 << r13)) output_file("    pop r13");
+  if (func_x64->used_registers & (1 << r12)) output_file("    pop r12");
+  if (func_x64->used_registers & (1 << rbx)) output_file("    pop rbx");
+  output_file("    mov rsp, rbp");
   output_file("    pop rbp");
   output_file("    ret");
 }
@@ -1030,6 +1180,7 @@ void x64_emit_function(IRFunc* func_ir, X64_FUNC* func_x64)
     for (size_t ji = 1; ji <= vector_size(blk->asm_list); ji++)
     {
       X64_ASM* as = vector_peek_at(blk->asm_list, ji);
+      sync_split_vregs_before_insn(func_x64, as->insn_id);
       // Debug: print MIR instruction kind before emission to help diagnose crashes
       output_file("# x64 kind=%d", (int)as->kind);
       switch (as->kind)
@@ -1072,38 +1223,41 @@ void x64_emit_function(IRFunc* func_ir, X64_FUNC* func_x64)
         case X64_CDQ: output_file("    cdq"); break;
         case X64_IDIV:
         case X64_DIV:
+        {
           // operand 0 is divisor; rax/rdx already prepared by MIR sequence
           if (as->operands[0].kind == OP_REG &&
               as->operands[0].reg->reg_type == virtual_regs)
           {
             size_t idx = get_vreg_index(as->operands[0].reg);
             if (vreg_has_real_at(func_x64, idx, as->insn_id))
-              output_file("    %s %s", as->kind == X64_DIV ? "div" : "idiv",
-                          reg_name(vreg_real_at(func_x64, idx, as->insn_id),
-                                   as->operands[0].reg->size));
+              emit_div_operand_line(
+                  as->kind == X64_DIV,
+                  reg_name(vreg_real_at(func_x64, idx, as->insn_id),
+                           as->operands[0].reg->size));
             else
             {
               size_t spill = vreg_spill_offset(func_x64, idx);
               emit_mov_load_spill(scratch_r10(as->operands[0].reg->size),
                                   as->operands[0].reg->size, spill);
-              output_file("    %s %s", as->kind == X64_DIV ? "div" : "idiv",
-                          scratch_r10(as->operands[0].reg->size));
+              emit_div_operand_line(as->kind == X64_DIV,
+                                    scratch_r10(as->operands[0].reg->size));
             }
           }
           else if (as->operands[0].kind == OP_MEM)
           {
             char m[64];
             format_mem(m, sizeof(m), &as->operands[0], func_x64, as->insn_id);
-            output_file("    %s %s", as->kind == X64_DIV ? "div" : "idiv", m);
+            emit_div_operand_line(as->kind == X64_DIV, m);
           }
           else if (as->operands[0].kind == OP_REG &&
                    as->operands[0].reg->reg_type == real_regs)
           {
-            output_file("    %s %s", as->kind == X64_DIV ? "div" : "idiv",
-                        reg_name(as->operands[0].reg->real_reg,
-                                 as->operands[0].reg->size));
+            emit_div_operand_line(as->kind == X64_DIV,
+                                  reg_name(as->operands[0].reg->real_reg,
+                                           as->operands[0].reg->size));
           }
           break;
+        }
         case X64_CALL:
         {
           // Before the call, flush any vregs whose allocations were split at
@@ -1156,5 +1310,5 @@ void x64_emit_function(IRFunc* func_ir, X64_FUNC* func_x64)
   }
   // Function epilogue label target for early returns
   output_file("%s:", ret_label);
-  emit_epilogue(func_x64, alloc);
+  emit_epilogue(func_x64);
 }

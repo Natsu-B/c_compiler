@@ -12,6 +12,7 @@
 #endif
 
 #include "include/debug.h"
+#include "include/eval_constant.h"
 #include "include/error.h"
 #include "include/generator.h"
 #include "include/offset.h"
@@ -34,6 +35,8 @@ bool is_equal_type(Type *lhs, Type *rhs)
 {
   if (!lhs || !rhs)
     unreachable();
+  if (lhs == rhs)
+    return true;
   if (is_pointer_type(lhs) && is_pointer_type(rhs))
     return is_equal_type(lhs->ptr_to, rhs->ptr_to);
   if (lhs->type != rhs->type)
@@ -100,6 +103,35 @@ Type *implicit_type_conversion(Type *lhs, Type *rhs)
   return t;
 }
 
+static Type *decay_conditional_operand_type(Type *type)
+{
+  if (!type)
+    unreachable();
+
+  if (type->type == TYPE_STR)
+  {
+    Type *ptr = alloc_type(TYPE_PTR);
+    ptr->ptr_to = alloc_type(TYPE_CHAR);
+    ptr->ptr_to->is_signed = true;
+    return ptr;
+  }
+
+  if (type->type == TYPE_ARRAY)
+  {
+    Type *ptr = alloc_type(TYPE_PTR);
+    ptr->ptr_to = type->ptr_to;
+    return ptr;
+  }
+
+  return type;
+}
+
+static bool is_null_pointer_constant(Node *node)
+{
+  return node->type->type == TYPE_INT && node->kind == ND_NUM &&
+         node->num_val == 0;
+}
+
 Type *promote_integer(Type *type, Token *token)
 {
   if (!is_integer_type(type))
@@ -151,6 +183,129 @@ void switch_end()
 
 Node *analyze_type(Node *node, bool is_root, size_t recursion_limit);
 static void add_type_internal(Node *const node);
+
+static bool try_eval_global_integer_constant(Node *node, long long *value)
+{
+  long long lhs = 0;
+  long long rhs = 0;
+
+  if (!node)
+    return false;
+
+  switch (node->kind)
+  {
+    case ND_NUM:
+      *value = node->num_val;
+      return true;
+    case ND_SIZEOF:
+      *value = size_of(node->lhs->type);
+      return true;
+    case ND_UNARY_PLUS: return try_eval_global_integer_constant(node->lhs, value);
+    case ND_UNARY_MINUS:
+      if (!try_eval_global_integer_constant(node->lhs, &lhs))
+        return false;
+      *value = -lhs;
+      return true;
+    case ND_LOGICAL_NOT:
+      if (!try_eval_global_integer_constant(node->lhs, &lhs))
+        return false;
+      *value = !lhs;
+      return true;
+    case ND_NOT:
+      if (!try_eval_global_integer_constant(node->lhs, &lhs))
+        return false;
+      *value = ~lhs;
+      return true;
+    case ND_ADD:
+    case ND_SUB:
+    case ND_MUL:
+    case ND_DIV:
+    case ND_REM:
+    case ND_EQ:
+    case ND_NEQ:
+    case ND_LT:
+    case ND_LTE:
+    case ND_LOGICAL_OR:
+    case ND_LOGICAL_AND:
+    case ND_INCLUSIVE_OR:
+    case ND_EXCLUSIVE_OR:
+    case ND_AND:
+    case ND_LEFT_SHIFT:
+    case ND_RIGHT_SHIFT:
+      if (!try_eval_global_integer_constant(node->lhs, &lhs) ||
+          !try_eval_global_integer_constant(node->rhs, &rhs))
+        return false;
+      switch (node->kind)
+      {
+        case ND_ADD: *value = lhs + rhs; return true;
+        case ND_SUB: *value = lhs - rhs; return true;
+        case ND_MUL: *value = lhs * rhs; return true;
+        case ND_DIV: *value = lhs / rhs; return true;
+        case ND_REM: *value = lhs % rhs; return true;
+        case ND_EQ: *value = lhs == rhs; return true;
+        case ND_NEQ: *value = lhs != rhs; return true;
+        case ND_LT: *value = lhs < rhs; return true;
+        case ND_LTE: *value = lhs <= rhs; return true;
+        case ND_LOGICAL_OR: *value = lhs || rhs; return true;
+        case ND_LOGICAL_AND: *value = lhs && rhs; return true;
+        case ND_INCLUSIVE_OR: *value = lhs | rhs; return true;
+        case ND_EXCLUSIVE_OR: *value = lhs ^ rhs; return true;
+        case ND_AND: *value = lhs & rhs; return true;
+        case ND_LEFT_SHIFT: *value = lhs << rhs; return true;
+        case ND_RIGHT_SHIFT: *value = lhs >> rhs; return true;
+        default: unreachable();
+      }
+      break;
+    case ND_COMMA: return try_eval_global_integer_constant(node->rhs, value);
+    case ND_EVAL:
+      if (!try_eval_global_integer_constant(node->lhs, &lhs))
+        return false;
+      *value = lhs ? 1 : 0;
+      return true;
+    default: return false;
+  }
+  return false;
+}
+
+static bool fold_global_initializer_constants(Node **node_ref)
+{
+  Node *node = *node_ref;
+
+  if (!node)
+    return false;
+  if (node->kind == ND_STRING || node->kind == ND_ADDR || node->kind == ND_NUM)
+    return true;
+  if (node->kind == ND_VAR && !node->variable.var->is_local &&
+      (node->type->type == TYPE_ARRAY || node->type->type == TYPE_FUNC))
+  {
+    Node *addr = new_node(ND_ADDR, node, NULL, node->token);
+    Type *ptr = alloc_type(TYPE_PTR);
+    ptr->ptr_to = node->type;
+    addr->type = ptr;
+    *node_ref = addr;
+    return true;
+  }
+  if (node->kind == ND_INITIALIZER)
+  {
+    for (size_t i = 1; i <= vector_size(node->initialize.init_list); i++)
+    {
+      Node *child = vector_peek_at(node->initialize.init_list, i);
+      if (!fold_global_initializer_constants(&child))
+        return false;
+      vector_replace_at(node->initialize.init_list, i, child);
+    }
+    return true;
+  }
+
+  long long value = 0;
+  if (!try_eval_global_integer_constant(node, &value))
+    return false;
+
+  Node *folded = new_node_num(value);
+  folded->token = node->token;
+  *node_ref = folded;
+  return true;
+}
 
 static void add_type_for_assignment(Node *node)
 {
@@ -363,7 +518,32 @@ static void add_type_internal(Node *const node)
     case ND_EQ:
     case ND_NEQ:
     case ND_LT:
-    case ND_LTE: node->type = alloc_type(TYPE_INT); return;
+    case ND_LTE:
+    {
+      Type *lhs = node->lhs->type;
+      Type *rhs = node->rhs->type;
+
+      if (is_integer_type(lhs) && is_integer_type(rhs))
+      {
+        Type *conv_type = implicit_type_conversion(lhs, rhs);
+        node->lhs = create_implicit_cast_node(node->lhs, conv_type);
+        node->rhs = create_implicit_cast_node(node->rhs, conv_type);
+      }
+      else if ((is_pointer_type(lhs) && is_pointer_type(rhs)) ||
+               (is_pointer_type(lhs) && is_null_pointer_constant(node->rhs)) ||
+               (is_pointer_type(rhs) && is_null_pointer_constant(node->lhs)))
+      {
+        // Pointer comparisons are handled as-is.
+      }
+      else
+      {
+        error_at(node->token->str, node->token->len,
+                 "Operands for comparison must be compatible scalar types.");
+      }
+
+      node->type = alloc_type(TYPE_INT);
+      return;
+    }
     case ND_ASSIGN: add_type_for_assignment(node); return;
     case ND_ADDR:
     {
@@ -494,12 +674,29 @@ static void add_type_internal(Node *const node)
     case ND_DO: node->type = alloc_type(TYPE_VOID); return;
     case ND_TERNARY:
     {
-      Type *lhs_type = node->control.ternary_child->type;
-      Type *rhs_type = node->rhs->type;
+      Type *lhs_type =
+          decay_conditional_operand_type(node->control.ternary_child->type);
+      Type *rhs_type = decay_conditional_operand_type(node->rhs->type);
 
       if (is_equal_type(lhs_type, rhs_type))
       {
+        node->control.ternary_child =
+            create_implicit_cast_node(node->control.ternary_child, lhs_type);
+        node->rhs = create_implicit_cast_node(node->rhs, rhs_type);
         node->type = lhs_type;
+        return;
+      }
+
+      if (is_pointer_type(lhs_type) && is_null_pointer_constant(node->rhs))
+      {
+        node->type = lhs_type;
+        return;
+      }
+
+      if (is_pointer_type(rhs_type) &&
+          is_null_pointer_constant(node->control.ternary_child))
+      {
+        node->type = rhs_type;
         return;
       }
 
@@ -651,7 +848,7 @@ static void add_type_internal(Node *const node)
     case ND_TRUNCATE: return;
     case ND_EVAL: node->type = alloc_type(TYPE_INT); return;
     case ND_DECLARATOR_LIST: node->type = alloc_type(TYPE_VOID); return;
-    case ND_VARIABLE_ARGS:
+    case ND_VARIABLE_ARGS: node->type = alloc_type(TYPE_VARIABLES); return;
     case ND_END: unreachable(); break;
   }
 }
@@ -774,71 +971,75 @@ FuncBlock *analyzer(FuncBlock *funcblock)
   for (FuncBlock *pointer = funcblock; pointer; pointer = pointer->next)
   {
     Node *node = pointer->node;
-    if (!node || node->kind == ND_NOP)
-      continue;
-    if (node->kind == ND_FUNCDEF)
+    if (node && node->kind != ND_NOP)
     {
-      init_nest();
-      if (node->token->len == 4 && !strncmp(node->token->str, "main", 4) &&
-          node->type->type == TYPE_INT)
-        error_at(node->token->str, node->token->len,
-                 "main function should return int type");
-      ret_type = vector_peek_at(node->type->param_list, 1);
-      for (size_t i = 1; i <= vector_size(node->func.expr); i++)
+      if (node->kind == ND_FUNCDEF)
       {
-        Node *result =
-            analyze_type(vector_peek_at(node->func.expr, i), false, 0);
-        vector_replace_at(node->func.expr, i, result);
+        init_nest();
+        if (node->token->len == 4 && !strncmp(node->token->str, "main", 4) &&
+            node->type->type == TYPE_INT)
+          error_at(node->token->str, node->token->len,
+                   "main function should return int type");
+        ret_type = vector_peek_at(node->type->param_list, 1);
+        for (size_t i = 1; i <= vector_size(node->func.expr); i++)
+        {
+          Node *result =
+              analyze_type(vector_peek_at(node->func.expr, i), false, 0);
+          vector_replace_at(node->func.expr, i, result);
+        }
+        for (NDBlock *tmp = node->func.stmt; tmp; tmp = tmp->next)
+          tmp->node = analyze_type(tmp->node, true, 0);
+        // Align stacksize to 8-byte units
+        size_t max_stacksize = get_max_offset();
+        pointer->stacksize = (max_stacksize + 7) / 8 * 8;
       }
-      for (NDBlock *tmp = node->func.stmt; tmp; tmp = tmp->next)
-        tmp->node = analyze_type(tmp->node, true, 0);
-      // Align stacksize to 8-byte units
-      size_t max_stacksize = get_max_offset();
-      pointer->stacksize = (max_stacksize + 7) / 8 * 8;
-    }
-    else if (node->kind != ND_BUILTINFUNC)
-    {
-      pointer->node = analyze_type(node, false, 0);
-      node = pointer->node;
-      // global variables initializer only allows constant value
-      if (node->kind != ND_ASSIGN && node->kind != ND_VAR)
-        error_at(node->token->str, node->token->len,
-                 "invalid global variable initializer");
-      if (node->kind == ND_ASSIGN)
+      else if (node->kind != ND_BUILTINFUNC)
       {
-        if (node->lhs->kind != ND_VAR ||
-            node->lhs->variable.var->storage_class_specifier & !1 << 2)
+        pointer->node = analyze_type(node, false, 0);
+        node = pointer->node;
+        // global variables initializer only allows constant value
+        if (node->kind != ND_ASSIGN && node->kind != ND_VAR)
           error_at(node->token->str, node->token->len,
                    "invalid global variable initializer");
-        switch (node->rhs->kind)
+        if (node->kind == ND_ASSIGN)
         {
-          case ND_NUM:
-          case ND_STRING: break;
-          case ND_ADDR:
-            if (node->rhs->lhs->kind != ND_VAR)
-              error_at(node->rhs->lhs->token->str, node->rhs->lhs->token->len,
-                       "invalid global variable initializer");
-            break;
-          case ND_EVAL:
-            if (node->rhs->lhs->kind != ND_NUM)
-              error_at(node->rhs->lhs->token->str, node->rhs->lhs->token->len,
-                       "invalid global variable initializer");
-            node->rhs = node->rhs->lhs;
-            node->rhs->num_val = node->rhs->num_val ? 1 : 0;
-            break;
-          case ND_INITIALIZER: break;
-          default:
+          if (node->lhs->kind != ND_VAR ||
+              node->lhs->variable.var->storage_class_specifier & !1 << 2)
+            error_at(node->token->str, node->token->len,
+                     "invalid global variable initializer");
+          if (!fold_global_initializer_constants(&node->rhs))
             error_at(node->rhs->token->str, node->rhs->token->len,
                      "invalid global variable initializer");
+          switch (node->rhs->kind)
+          {
+            case ND_NUM:
+            case ND_STRING: break;
+            case ND_ADDR:
+              if (node->rhs->lhs->kind != ND_VAR)
+                error_at(node->rhs->lhs->token->str, node->rhs->lhs->token->len,
+                         "invalid global variable initializer");
+              break;
+            case ND_EVAL:
+              if (node->rhs->lhs->kind != ND_NUM)
+                error_at(node->rhs->lhs->token->str, node->rhs->lhs->token->len,
+                         "invalid global variable initializer");
+              node->rhs = node->rhs->lhs;
+              node->rhs->num_val = node->rhs->num_val ? 1 : 0;
+              break;
+            case ND_INITIALIZER: break;
+            default:
+              error_at(node->rhs->token->str, node->rhs->token->len,
+                       "invalid global variable initializer");
+          }
         }
+        else if (node->variable.var->storage_class_specifier &
+                 !((1 << 1) + (1 << 2)))
+          error_at(node->token->str, node->token->len,
+                   "invalid global variable initializer");
       }
-      else if (node->variable.var->storage_class_specifier &
-               !((1 << 1) + (1 << 2)))
-        error_at(node->token->str, node->token->len,
-                 "invalid global variable initializer");
     }
   }
-#ifdef DEBUG
+#if DEBUG
   print_parse_result(funcblock);
 #endif
   return funcblock;

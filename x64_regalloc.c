@@ -2,9 +2,6 @@
 
 #ifdef SELF_HOST
 #include "test/compiler_header.h"
-// Provide qsort prototype for self-host header
-void qsort(void* base, size_t nmemb, size_t size,
-           int (*compar)(const void*, const void*));
 #else
 #include <stdio.h>
 #include <stdlib.h>
@@ -98,8 +95,7 @@ static void account_def(X64_Operand* op, Interval* table, size_t nregs,
 }
 
 static void build_intervals(IRFunc* func_ir, X64_FUNC* func_x64,
-                            Interval* table, size_t nregs,
-                            size_t* coalesce_with, size_t* coalesce_at)
+                            Interval* table, size_t nregs)
 {
   (void)func_ir;
   // Initialize
@@ -110,13 +106,6 @@ static void build_intervals(IRFunc* func_ir, X64_FUNC* func_x64,
     table[i].end = 0;
     table[i].must_in_reg = false;
     table[i].exists = false;
-  }
-
-  // Initialize coalescing hints
-  for (size_t i = 1; i <= nregs; i++)
-  {
-    coalesce_with[i] = 0;
-    coalesce_at[i] = 0;
   }
 
   // Track block start/end instruction IDs
@@ -145,23 +134,10 @@ static void build_intervals(IRFunc* func_ir, X64_FUNC* func_x64,
           case X64_MOVSXD:
           case X64_MOVZX:
           case X64_LEA:
+          if (as->operands[0].kind == OP_MEM)
+            account_use(&as->operands[0], table, nregs, as->insn_id);
           account_use(&as->operands[1], table, nregs, as->insn_id);
           account_def(&as->operands[0], table, nregs, as->insn_id);
-          // Capture simple mov vreg<-vreg as a coalescing opportunity
-          if (as->kind == X64_MOV && as->operands[0].kind == OP_REG &&
-              as->operands[1].kind == OP_REG && as->operands[0].reg &&
-              as->operands[1].reg &&
-              as->operands[0].reg->reg_type == virtual_regs &&
-              as->operands[1].reg->reg_type == virtual_regs)
-          {
-            size_t d = as->operands[0].reg->reg_id + 1;
-            size_t s = as->operands[1].reg->reg_id + 1;
-            if (d >= 1 && d <= nregs && s >= 1 && s <= nregs && coalesce_with[d] == 0)
-            {
-              coalesce_with[d] = s;
-              coalesce_at[d] = as->insn_id;
-            }
-          }
           break;
         case X64_ADD:
         case X64_SUB:
@@ -207,18 +183,20 @@ static void build_intervals(IRFunc* func_ir, X64_FUNC* func_x64,
   for (size_t bi = 1; bi <= vector_size(func_x64->asm_blocks); bi++)
   {
     X64_Blocks* blk = vector_peek_at(func_x64->asm_blocks, bi);
-    if (!blk_start[bi]) continue;  // empty block
-    for (size_t i = 1; i <= vector_size(blk->in); i++)
+    if (blk_start[bi])  // empty block
     {
-      X64_REG* r = vector_peek_at(blk->in, i);
-      if (r && r->reg_type == virtual_regs)
-        interval_add_use(&table[r->reg_id + 1], blk_start[bi]);
-    }
-    for (size_t i = 1; i <= vector_size(blk->out); i++)
-    {
-      X64_REG* r = vector_peek_at(blk->out, i);
-      if (r && r->reg_type == virtual_regs)
-        interval_add_use(&table[r->reg_id + 1], blk_end[bi]);
+      for (size_t i = 1; i <= vector_size(blk->in); i++)
+      {
+        X64_REG* r = vector_peek_at(blk->in, i);
+        if (r && r->reg_type == virtual_regs)
+          interval_add_use(&table[r->reg_id + 1], blk_start[bi]);
+      }
+      for (size_t i = 1; i <= vector_size(blk->out); i++)
+      {
+        X64_REG* r = vector_peek_at(blk->out, i);
+        if (r && r->reg_type == virtual_regs)
+          interval_add_use(&table[r->reg_id + 1], blk_end[bi]);
+      }
     }
   }
 
@@ -226,50 +204,90 @@ static void build_intervals(IRFunc* func_ir, X64_FUNC* func_x64,
   free(blk_end);
 }
 
-static int cmp_start(const void* a, const void* b)
+static int interval_starts_before(Interval* left, Interval* right)
 {
-  const Interval* ia = (const Interval*)a;
-  const Interval* ib = (const Interval*)b;
-  if (ia->start < ib->start) return -1;
-  if (ia->start > ib->start) return 1;
+  if (left->start < right->start) return -1;
+  if (left->start > right->start) return 1;
   // Prefer must_in_reg earlier when starts equal
-  if (ia->must_in_reg && !ib->must_in_reg) return -1;
-  if (!ia->must_in_reg && ib->must_in_reg) return 1;
+  if (left->must_in_reg && !right->must_in_reg) return -1;
+  if (!left->must_in_reg && right->must_in_reg) return 1;
   return 0;
 }
 
-// Active entry used during linear scan
-typedef struct { size_t i; enum register_name real; bool must; size_t end; } Active;
-
-static void regalloc_expire_old(Active* active, size_t* active_n,
-                                bool reg_taken[], size_t cur_start)
+static void regalloc_expire_old(size_t* active_vindex, size_t* active_real,
+                                size_t* active_must, size_t* active_end,
+                                size_t* active_n, size_t* reg_taken,
+                                size_t cur_start)
 {
   size_t k = 0;
   for (size_t j = 0; j < *active_n; j++)
   {
-    if (active[j].end < cur_start)
+    if (active_end[j] < cur_start)
     {
-      if (active[j].real != register_reserved)
-        reg_taken[active[j].real] = false;
+      if (active_real[j] != register_reserved)
+        reg_taken[active_real[j]] = false;
     }
     else
     {
-      active[k++] = active[j];
+      active_vindex[k] = active_vindex[j];
+      active_real[k] = active_real[j];
+      active_must[k] = active_must[j];
+      active_end[k] = active_end[j];
+      k++;
     }
   }
   *active_n = k;
 }
 
-static enum register_name regalloc_get_free_reg(const enum register_name* pool,
-                                                size_t pool_sz,
-                                                bool reg_taken[])
+static void regalloc_expire_spills(size_t* live_spill_end,
+                                   size_t* live_spill_slot,
+                                   size_t* live_spills_n,
+                                   size_t* free_slots, size_t* free_slots_n,
+                                   size_t cur_start)
 {
-  for (size_t p = 0; p < pool_sz; p++)
+  size_t k = 0;
+  for (size_t j = 0; j < *live_spills_n; j++)
   {
-    enum register_name r = pool[p];
-    if (!reg_taken[r]) return r;
+    if (live_spill_end[j] < cur_start)
+    {
+      free_slots[(*free_slots_n)++] = live_spill_slot[j];
+      pr_debug("x64-regalloc: free spill slot rbp-%zu at %zu",
+               live_spill_slot[j], cur_start);
+    }
+    else
+    {
+      live_spill_end[k] = live_spill_end[j];
+      live_spill_slot[k] = live_spill_slot[j];
+      k++;
+    }
   }
-  return register_reserved;
+  *live_spills_n = k;
+}
+
+static size_t regalloc_allocate_spill_slot(IRFunc* func_ir, X64_FUNC* func_x64,
+                                           size_t* live_spill_end,
+                                           size_t* live_spill_slot,
+                                           size_t* live_spills_n,
+                                           size_t* free_slots,
+                                           size_t* free_slots_n,
+                                           size_t end_point)
+{
+  size_t slot;
+  if (*free_slots_n > 0)
+  {
+    slot = free_slots[--(*free_slots_n)];
+  }
+  else
+  {
+    func_x64->spill_stack_size += 8;
+    slot = func_ir->user_defined.stack_size + func_x64->spill_stack_size;
+  }
+  live_spill_end[*live_spills_n] = end_point;
+  live_spill_slot[*live_spills_n] = slot;
+  (*live_spills_n)++;
+  func_x64->stack_used = true;
+  pr_debug("x64-regalloc: allocate spill slot rbp-%zu until %zu", slot, end_point);
+  return slot;
 }
 
 void x64_regalloc(IRFunc* func_ir, X64_FUNC* func_x64)
@@ -296,32 +314,29 @@ void x64_regalloc(IRFunc* func_ir, X64_FUNC* func_x64)
 
   // Build intervals
   Interval* table = calloc(nregs + 1, sizeof(Interval));
-  size_t* coalesce_with = calloc(nregs + 1, sizeof(size_t));
-  size_t* coalesce_at = calloc(nregs + 1, sizeof(size_t));
-  build_intervals(func_ir, func_x64, table, nregs, coalesce_with, coalesce_at);
+  build_intervals(func_ir, func_x64, table, nregs);
 
   // Collect active set and free-reg tracking
-  bool reg_taken[16] = {0};
+  size_t* reg_taken = calloc(16, sizeof(size_t));
   // Spill slot free-list and live-spill tracking for reuse
   size_t* free_slots = calloc(nregs ? nregs : 1, sizeof(size_t));
   size_t free_slots_n = 0;
-  typedef struct { size_t end; size_t slot; } LiveSpill;
-  LiveSpill* live_spills = calloc(nregs ? nregs : 1, sizeof(LiveSpill));
+  size_t* live_spill_end = calloc(nregs ? nregs : 1, sizeof(size_t));
+  size_t* live_spill_slot = calloc(nregs ? nregs : 1, sizeof(size_t));
   size_t live_spills_n = 0;
 
-  // Build a compact list of intervals that exist
+  // Count intervals that exist
   size_t m = 0;
   for (size_t i = 1; i <= nregs; i++)
     if (table[i].exists) m++;
-  Interval* list = calloc(m ? m : 1, sizeof(Interval));
-  size_t li = 0;
-  for (size_t i = 1; i <= nregs; i++)
-    if (table[i].exists) list[li++] = table[i];
-  qsort(list, m, sizeof(Interval), cmp_start);
 
-  // Active intervals: store indices into list and assigned real register
-  Active* active = calloc(m ? m : 1, sizeof(Active));
+  // Active intervals, stored as parallel arrays to keep self-hosted codegen simple.
+  size_t* active_vindex = calloc(m ? m : 1, sizeof(size_t));
+  size_t* active_real = calloc(m ? m : 1, sizeof(size_t));
+  size_t* active_must = calloc(m ? m : 1, sizeof(size_t));
+  size_t* active_end = calloc(m ? m : 1, sizeof(size_t));
   size_t active_n = 0;
+  size_t* interval_done = calloc(nregs + 1, sizeof(size_t));
 
   // Allocate result arrays with defaults
   for (size_t i = 1; i <= nregs; i++)
@@ -410,223 +425,123 @@ void x64_regalloc(IRFunc* func_ir, X64_FUNC* func_x64)
     }
   }
 
-  // Helper to expire live spills and return their slots to free list
-  auto void expire_spills(size_t cur_start)
-  {
-    size_t k = 0;
-    for (size_t j = 0; j < live_spills_n; j++)
-    {
-      if (live_spills[j].end < cur_start)
-      {
-        // free this slot
-        free_slots[free_slots_n++] = live_spills[j].slot;
-        pr_debug("x64-regalloc: free spill slot rbp-%zu at %zu", live_spills[j].slot, cur_start);
-      }
-      else
-      {
-        live_spills[k++] = live_spills[j];
-      }
-    }
-    live_spills_n = k;
-  };
-
-  auto size_t allocate_spill_slot(size_t end_point)
-  {
-    size_t slot;
-    if (free_slots_n > 0)
-    {
-      slot = free_slots[--free_slots_n];
-    }
-    else
-    {
-      func_x64->spill_stack_size += 8;
-      slot = func_ir->user_defined.stack_size + func_x64->spill_stack_size;
-    }
-    // Track as live until its interval end
-    live_spills[live_spills_n++] = (LiveSpill){.end = end_point, .slot = slot};
-    func_x64->stack_used = true;
-    pr_debug("x64-regalloc: allocate spill slot rbp-%zu until %zu", slot, end_point);
-    return slot;
-  };
-
-  // Gather call program points for caller-boundary splits
-  Vector* call_points = vector_new();
-  for (size_t bi = 1; bi <= vector_size(func_x64->asm_blocks); bi++)
-  {
-    X64_Blocks* blk = vector_peek_at(func_x64->asm_blocks, bi);
-    for (size_t ji = 1; ji <= vector_size(blk->asm_list); ji++)
-    {
-      X64_ASM* as = vector_peek_at(blk->asm_list, ji);
-      if (as->kind == X64_CALL)
-      {
-        size_t* idp = malloc(sizeof(size_t));
-        *idp = as->insn_id;
-        vector_push(call_points, idp);
-      }
-    }
-  }
-  // Sort call points just in case (they should already be monotonic)
-  // Simple insertion sort for tiny lists
-  for (size_t i = 2; i <= vector_size(call_points); i++)
-  {
-    size_t* key = vector_peek_at(call_points, i);
-    size_t j = i;
-    while (j > 1)
-    {
-      size_t* prev = vector_peek_at(call_points, j - 1);
-      if (*prev <= *key) break;
-      vector_replace_at(call_points, j, prev);
-      j--;
-    }
-    vector_replace_at(call_points, j, key);
-  }
-  size_t call_idx = 1;
-
-  auto void split_active_at(size_t at_point)
-  {
-    size_t j = 0;
-    while (j < active_n)
-    {
-      // Only split non-must intervals that live across this point
-      if (!active[j].must && active[j].end > at_point)
-      {
-        size_t vindex = list[active[j].i].vindex;
-        // Mark the real mapping valid only up to at_point
-        size_t* rend = vector_peek_at(func_x64->vreg_real_end, vindex);
-        if (rend) *rend = at_point;
-        // Allocate spill for the remainder of its live range
-        size_t* slot = vector_peek_at(func_x64->vreg_stack_slot, vindex);
-        if (slot && *slot == 0)
-          *slot = allocate_spill_slot(active[j].end);
-        // Free the register and remove from active
-        if (active[j].real != register_reserved)
-          reg_taken[active[j].real] = false;
-        for (size_t k = j + 1; k < active_n; k++) active[k - 1] = active[k];
-        active_n--;
-        continue;  // stay at same j to re-check shifted element
-      }
-      j++;
-    }
-  };
+  // We allocate virtual registers only from callee-saved registers, so their
+  // values remain live across calls.
 
   // Linear scan over intervals
-  for (size_t i = 0; i < m; i++)
+  for (size_t handled = 0; handled < m; handled++)
   {
-    Interval cur = list[i];
-    regalloc_expire_old(active, &active_n, reg_taken, cur.start);
-    expire_spills(cur.start);
-
-    // Apply caller-boundary splits for any CALL before this point
-    while (call_idx <= vector_size(call_points))
+    size_t cur_vindex = 0;
+    for (size_t vindex = 1; vindex <= nregs; vindex++)
     {
-      size_t* cp = vector_peek_at(call_points, call_idx);
-      if (!cp || *cp >= cur.start) break;
-      pr_debug("x64-regalloc: split at call point #%zu", *cp);
-      split_active_at(*cp);
-      call_idx++;
-    }
-
-    // Prefer coalescing with source of an initial move into this vreg
-    enum register_name r = register_reserved;
-    size_t src_idx = coalesce_with[cur.vindex];
-    if (src_idx)
-    {
-      size_t* src_real = vector_peek_at(func_x64->vreg_real, src_idx);
-      if (src_real && *src_real != register_reserved)
+      bool pending = table[vindex].exists && !interval_done[vindex];
+      if (pending &&
+          (!cur_vindex ||
+           interval_starts_before(&table[vindex], &table[cur_vindex]) < 0))
       {
-        enum register_name try_r = (enum register_name)*src_real;
-        bool free_r = !reg_taken[try_r];
-        bool non_overlap = table[src_idx].end <= cur.start;
-        if (free_r && non_overlap)
+        cur_vindex = vindex;
+      }
+    }
+    if (!cur_vindex) break;
+    interval_done[cur_vindex] = 1;
+
+    size_t cur_start = table[cur_vindex].start;
+    size_t cur_end = table[cur_vindex].end;
+    bool cur_must_in_reg = table[cur_vindex].must_in_reg;
+
+    regalloc_expire_old(active_vindex, active_real, active_must, active_end,
+                        &active_n, reg_taken, cur_start);
+    regalloc_expire_spills(live_spill_end, live_spill_slot, &live_spills_n,
+                           free_slots, &free_slots_n, cur_start);
+
+    enum register_name r = register_reserved;
+    if (r == register_reserved)
+    {
+      for (size_t p = 0; p < pool_size; p++)
+      {
+        enum register_name candidate = alloc_pool[p];
+        if (!reg_taken[candidate])
         {
-          r = try_r;
-        }
-        else if (!free_r)
-        {
-          // If the desired register is currently occupied, attempt
-          // coalescing by evicting a non-must active interval using it.
-          for (size_t j = 0; j < active_n; j++)
-          {
-            if (active[j].real == try_r)
-            {
-              // Do not evict the source interval itself
-              size_t victim_vindex = list[active[j].i].vindex;
-              if (victim_vindex == src_idx) break;
-              if (!active[j].must)
-              {
-                // Split victim interval at current start: keep earlier mapping
-                size_t* rend = vector_peek_at(func_x64->vreg_real_end, victim_vindex);
-                if (rend) *rend = (cur.start > 0 ? cur.start - 1 : 0);
-                size_t* slot_v = vector_peek_at(func_x64->vreg_stack_slot, victim_vindex);
-                if (slot_v && *slot_v == 0) *slot_v = allocate_spill_slot(active[j].end);
-                // Remove victim from active and free the register
-                for (size_t k = j + 1; k < active_n; k++) active[k - 1] = active[k];
-                active_n--;
-                reg_taken[try_r] = false;
-                r = try_r;
-              }
-              break;
-            }
-          }
+          r = candidate;
+          break;
         }
       }
     }
-    if (r == register_reserved)
-      r = regalloc_get_free_reg(alloc_pool, pool_size, reg_taken);
+    bool assigned_current = false;
+    bool active_entry_recorded = false;
     if (r == register_reserved)
     {
       // No free reg: if current requires register, try spilling a non-required active
-      if (cur.must_in_reg)
+      if (cur_must_in_reg)
       {
         // Find a victim with latest end that is not must_in_reg
         size_t victim = (size_t)-1; size_t victim_end = 0;
         for (size_t j = 0; j < active_n; j++)
         {
-          if (!active[j].must && active[j].end >= victim_end)
+          if (!active_must[j] && active_end[j] >= victim_end)
           {
-            victim = j; victim_end = active[j].end;
+            victim = j; victim_end = active_end[j];
           }
         }
         if (victim != (size_t)-1)
         {
           // Split victim at current start
-          enum register_name freed = active[victim].real;
-          size_t vindex = list[active[victim].i].vindex;
+          enum register_name freed = (enum register_name)active_real[victim];
+          size_t vindex = active_vindex[victim];
           size_t* slot = vector_peek_at(func_x64->vreg_stack_slot, vindex);
           size_t* rend = vector_peek_at(func_x64->vreg_real_end, vindex);
-          if (rend) *rend = (cur.start > 0 ? cur.start - 1 : 0);
-          if (slot && *slot == 0) *slot = allocate_spill_slot(active[victim].end);
+          if (rend) *rend = (cur_start > 0 ? cur_start - 1 : 0);
+          if (slot && *slot == 0)
+            *slot = regalloc_allocate_spill_slot(
+                func_ir, func_x64, live_spill_end, live_spill_slot,
+                &live_spills_n, free_slots, &free_slots_n, active_end[victim]);
 
           // Assign freed register to current
           r = freed;
           reg_taken[r] = true;
           // Replace victim with current in active
-          active[victim].i = i;
-          active[victim].real = r;
-          active[victim].must = cur.must_in_reg;
-          active[victim].end = cur.end;
+          active_vindex[victim] = cur_vindex;
+          active_real[victim] = r;
+          active_must[victim] = cur_must_in_reg ? 1 : 0;
+          active_end[victim] = cur_end;
           // Record mapping
-          size_t* real_cur = vector_peek_at(func_x64->vreg_real, cur.vindex);
+          size_t* real_cur = vector_peek_at(func_x64->vreg_real, cur_vindex);
           *real_cur = r;
-          func_x64->used_registers |= (1u << r);
-          continue;
+          func_x64->used_registers |= (1 << r);
+          assigned_current = true;
+          active_entry_recorded = true;
         }
       }
 
-      // Spill current
-      size_t* slot = vector_peek_at(func_x64->vreg_stack_slot, cur.vindex);
-      *slot = allocate_spill_slot(cur.end);
-      // Keep it out of active since no register assigned
-      continue;
+      if (!assigned_current)
+      {
+        // Spill current
+        size_t* slot = vector_peek_at(func_x64->vreg_stack_slot, cur_vindex);
+        *slot = regalloc_allocate_spill_slot(
+            func_ir, func_x64, live_spill_end, live_spill_slot,
+            &live_spills_n, free_slots, &free_slots_n, cur_end);
+        // Keep it out of active since no register assigned
+      }
+    }
+    else
+    {
+      assigned_current = true;
     }
 
-    // Assign register to current
-    reg_taken[r] = true;
-    size_t* real = vector_peek_at(func_x64->vreg_real, cur.vindex);
-    *real = r;
-    func_x64->used_registers |= (1u << r);
-    // Add to active
-    active[active_n++] = (Active){.i = i, .real = r, .must = cur.must_in_reg, .end = cur.end};
+    if (assigned_current && r != register_reserved && !active_entry_recorded)
+    {
+      // Assign register to current
+      reg_taken[r] = true;
+      size_t* real = vector_peek_at(func_x64->vreg_real, cur_vindex);
+      *real = r;
+      func_x64->used_registers |= (1 << r);
+      // Add to active
+      active_vindex[active_n] = cur_vindex;
+      active_real[active_n] = r;
+      active_must[active_n] = cur_must_in_reg ? 1 : 0;
+      active_end[active_n] = cur_end;
+      active_n++;
+    }
   }
 
   // Debug dump of allocation results
@@ -634,29 +549,27 @@ void x64_regalloc(IRFunc* func_ir, X64_FUNC* func_x64)
            func_ir->user_defined.function_name);
   for (size_t i = 1; i <= nregs; i++)
   {
-    if (!table[i].exists) continue;
-    size_t* real = vector_peek_at(func_x64->vreg_real, i);
-    size_t* slot = vector_peek_at(func_x64->vreg_stack_slot, i);
-    if (real && *real != register_reserved)
-      pr_debug("  v%zu [%zu,%zu] -> reg %zu", i - 1, table[i].start, table[i].end, *real);
-    else if (slot && *slot)
-      pr_debug("  v%zu [%zu,%zu] -> spill rbp-%zu", i - 1, table[i].start, table[i].end, *slot);
-    else
-      pr_debug("  v%zu [%zu,%zu] -> unassigned", i - 1, table[i].start, table[i].end);
+    if (table[i].exists)
+    {
+      size_t* real = vector_peek_at(func_x64->vreg_real, i);
+      size_t* slot = vector_peek_at(func_x64->vreg_stack_slot, i);
+      if (real && *real != register_reserved)
+        pr_debug("  v%zu [%zu,%zu] -> reg %zu", i - 1, table[i].start, table[i].end, *real);
+      else if (slot && *slot)
+        pr_debug("  v%zu [%zu,%zu] -> spill rbp-%zu", i - 1, table[i].start, table[i].end, *slot);
+      else
+        pr_debug("  v%zu [%zu,%zu] -> unassigned", i - 1, table[i].start, table[i].end);
+    }
   }
 
-  free(active);
-  free(list);
+  free(active_vindex);
+  free(active_real);
+  free(active_must);
+  free(active_end);
+  free(interval_done);
   free(table);
-  free(live_spills);
+  free(live_spill_end);
+  free(live_spill_slot);
   free(free_slots);
-  free(coalesce_with);
-  free(coalesce_at);
-  // free call_points vector entries
-  for (size_t i = 1; i <= vector_size(call_points); i++)
-  {
-    size_t* p = vector_peek_at(call_points, i);
-    if (p) free(p);
-  }
-  // Note: call_points vector itself is on the stack; fine to leak or ignore free
+  free(reg_taken);
 }

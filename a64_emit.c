@@ -4,14 +4,13 @@
 #include "test/compiler_header.h"
 #else
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 #endif
 
 #include "include/generator.h"
 #include "include/generator_aarch64.h"
 #include "include/vector.h"
-#include <stdint.h>
-
 // AArch64 uses GAS default syntax; no Intel-syntax preamble is necessary.
 void a64_emit_file_preamble(void)
 {
@@ -33,13 +32,15 @@ static void emit_function_header(IRFunc* func_ir)
 
 static size_t align16(size_t n) { return (n + 15) & ~((size_t)15); }
 
+static char a64_reg_name_buf[8][8];
+static int a64_reg_name_buf_index = 0;
+static char a64_cmp_imm_buf[32];
+
 static const char* a64_reg_name(a64_register_name r, OperandSize sz)
 {
   // Use a small ring buffer to avoid overwriting when formatting multiple
   // registers within a single printf-style call.
-  static char buf[8][8];
-  static int bi = 0;
-  bi = (bi + 1) & 7;
+  a64_reg_name_buf_index = (a64_reg_name_buf_index + 1) & 7;
   // Map SP specially
   if (r == a64_sp)
     return "sp";
@@ -48,8 +49,10 @@ static const char* a64_reg_name(a64_register_name r, OperandSize sz)
     n = 0;
   if (n > 30)
     n = 30;
-  snprintf(buf[bi], sizeof(buf[bi]), "%c%d", (sz == SIZE_QWORD ? 'x' : 'w'), n);
-  return buf[bi];
+  snprintf(a64_reg_name_buf[a64_reg_name_buf_index],
+           sizeof(a64_reg_name_buf[a64_reg_name_buf_index]), "%c%d",
+           (sz == SIZE_QWORD ? 'x' : 'w'), n);
+  return a64_reg_name_buf[a64_reg_name_buf_index];
 }
 
 static size_t get_vreg_index(A64_REG* r) { return r->reg_id + 1; }
@@ -86,19 +89,19 @@ static bool a64_is_addsub_imm_encodable(long long imm)
 {
   if (imm < 0) return false;
   unsigned long long u = (unsigned long long)imm;
-  if (u <= 0xfffULL) return true; // 12-bit
-  if ((u & 0xfffULL) == 0ULL)
+  if (u <= 4095) return true; // 12-bit
+  if ((u & 4095) == 0)
   {
     u >>= 12;
-    if (u <= 0xfffULL) return true; // 12-bit with lsl #12
+    if (u <= 4095) return true; // 12-bit with lsl #12
   }
   return false;
 }
 
 static inline uint64_t a64_mask_bits(int nbits)
 {
-  if (nbits >= 64) return ~0ULL;
-  return (1ULL << nbits) - 1ULL;
+  if (nbits >= 64) return ~((uint64_t)0);
+  return (((uint64_t)1) << nbits) - ((uint64_t)1);
 }
 
 static inline uint64_t a64_rotr(uint64_t v, int r, int width)
@@ -121,7 +124,7 @@ static inline bool a64_is_single_run_ones_any_rotate(uint64_t pat, int width)
   {
     uint64_t pr = a64_rotr(pat, r, width);
     // check pr == (1<<m)-1 form: pr != 0 and pr & (pr+1) == 0
-    if (pr != 0 && ((pr & (pr + 1ULL)) == 0ULL) && pr != mask)
+    if (pr != 0 && ((pr & (pr + ((uint64_t)1))) == 0) && pr != mask)
       return true;
   }
   return false;
@@ -147,9 +150,13 @@ static bool a64_is_logical_imm(uint64_t imm, int nbits)
   // Try element sizes
   const int sizes64[] = {2,4,8,16,32,64};
   const int sizes32[] = {2,4,8,16,32};
-  const int* sizes = (nbits == 64) ? sizes64 : sizes32;
-  int count = (nbits == 64) ? (int)(sizeof(sizes64)/sizeof(sizes64[0]))
-                            : (int)(sizeof(sizes32)/sizeof(sizes32[0]));
+  const int* sizes = sizes32;
+  int count = (int)(sizeof(sizes32) / sizeof(sizes32[0]));
+  if (nbits == 64)
+  {
+    sizes = sizes64;
+    count = (int)(sizeof(sizes64) / sizeof(sizes64[0]));
+  }
   for (int i = 0; i < count; i++)
   {
     int chunk = sizes[i];
@@ -222,7 +229,7 @@ static void emit_prologue_full(IRFunc* func_ir, A64_FUNC* fa, size_t* out_alloc)
   // Save callee-saved used
   for (int r = (int)a64_x19; r <= (int)a64_x28; r++)
   {
-    if (fa->used_registers & (1u << r))
+    if (fa->used_registers & (1 << r))
       output_file("    str x%d, [sp, #-16]!", r);
   }
 
@@ -240,7 +247,7 @@ static void emit_epilogue_full(A64_FUNC* fa, size_t alloc)
   // Restore callee-saved in reverse
   for (int r = (int)a64_x28; r >= (int)a64_x19; r--)
   {
-    if (fa->used_registers & (1u << r))
+    if (fa->used_registers & (1 << r))
       output_file("    ldr x%d, [sp], #16", r);
   }
   output_file("    ldp x29, x30, [sp], #16");
@@ -606,7 +613,8 @@ static void a64_emit_cmp(A64_ASM* as, A64_FUNC* fa)
   {
     if (a64_is_addsub_imm_encodable(rhs->imm))
     {
-      static char buf[32]; snprintf(buf, sizeof(buf), "#%lld", rhs->imm); r = buf;
+      snprintf(a64_cmp_imm_buf, sizeof(a64_cmp_imm_buf), "#%lld", rhs->imm);
+      r = a64_cmp_imm_buf;
       output_file("    cmp %s, %s", l ? l : scratch_x9(sz), r);
       return;
     }

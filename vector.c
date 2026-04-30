@@ -28,7 +28,9 @@ Vector *vector_new()
 
 bool vector_has_data(Vector *vec)
 {
-  return vec->len;
+  if (!vec)
+    return false;
+  return vec->len != 0;
 }
 
 size_t vector_size(Vector *vec)

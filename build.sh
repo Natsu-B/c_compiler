@@ -5,8 +5,6 @@ BEGIN {
     print "#ifndef INCLUDE_PATHS_H"
     print "#define INCLUDE_PATHS_H"
     print ""
-    print "#include <stddef.h>"
-    print ""
     i = 1
     max_len = 0
     longest_path_var = ""
@@ -29,13 +27,13 @@ END {
     }
     print "};"
     print ""
-    print "static size_t lib_path_size[] = {"
+    print "static unsigned long lib_path_size[] = {"
     for (j = 1; j < i; j++) {
         print "    sizeof(include_path_" j "),"
     }
     print "};"
     print ""
-    print "#define MAX_LIB_PATH_SIZE sizeof(" longest_path_var ")"
+    print "#define MAX_LIB_PATH_SIZE ((unsigned long)sizeof(" longest_path_var "))"
     print ""
     print "#endif // INCLUDE_PATHS_H"
 }

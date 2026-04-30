@@ -16,6 +16,9 @@
 #include "include/a64_opt.h"
 #include "include/a64_validate.h"
 
+static const a64_register_name a64_abi_arg_regs[] = {
+    a64_x0, a64_x1, a64_x2, a64_x3, a64_x4, a64_x5, a64_x6, a64_x7};
+
 static A64_Blocks* a64_new_block()
 {
   A64_Blocks* b = calloc(1, sizeof(A64_Blocks));
@@ -88,8 +91,6 @@ static void a64_gen_no_phi(A64_FUNC* f, A64_Blocks* blk, IR* ir)
     case IR_CALL:
     {
       size_t nargs = vector_size(ir->call.args);
-      static const a64_register_name abi_regs[] = {
-          a64_x0,a64_x1,a64_x2,a64_x3,a64_x4,a64_x5,a64_x6,a64_x7};
       // Move argument regs
       for (size_t i = 0; i < nargs && i < 8; i++)
       {
@@ -99,7 +100,7 @@ static void a64_gen_no_phi(A64_FUNC* f, A64_Blocks* blk, IR* ir)
         // dst real arg reg
         a64_set_reg(&mov->operands[0],
                     a64_set_reserved_real(calloc(1, sizeof(A64_REG)),
-                                          abi_regs[i], arg->reg_size));
+                                          a64_abi_arg_regs[i], arg->reg_size));
         // src vreg
         a64_assign_vreg(f, &mov->operands[1], arg);
         vector_push(blk->asm_list, mov);
@@ -156,7 +157,7 @@ static void a64_gen_no_phi(A64_FUNC* f, A64_Blocks* blk, IR* ir)
       call->jump_target_label = fn;
       // Mark caller-saved clobbers (x0-x17)
       unsigned int cl = 0;
-      for (int r = (int)a64_x0; r <= (int)a64_x17; r++) cl |= 1u << r;
+      for (int r = (int)a64_x0; r <= (int)a64_x17; r++) cl |= 1 << r;
       call->implicit_used_registers = cl;
       vector_push(blk->asm_list, call);
 
@@ -390,13 +391,11 @@ static void a64_gen_no_phi(A64_FUNC* f, A64_Blocks* blk, IR* ir)
       OperandSize asz = ir->store_arg.size ? ir->store_arg.size : SIZE_DWORD;
       str->operands[1].mem.mov_size = asz;
       // src from ABI
-      static const a64_register_name abi_regs[] = {
-          a64_x0,a64_x1,a64_x2,a64_x3,a64_x4,a64_x5,a64_x6,a64_x7};
       if (ir->store_arg.arg_index < 8)
       {
         a64_set_reg(&str->operands[0],
                     a64_set_reserved_real(calloc(1, sizeof(A64_REG)),
-                                          abi_regs[ir->store_arg.arg_index], asz));
+                                          a64_abi_arg_regs[ir->store_arg.arg_index], asz));
       }
       else
       {

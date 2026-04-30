@@ -174,7 +174,8 @@ typedef struct
       char* asm_str;
     } builtin_asm;
   };
-} X64_ASM;
+} iX64_ASM;
+typedef iX64_ASM X64_ASM;
 
 typedef struct X64_Blocks
 {

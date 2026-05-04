@@ -27,7 +27,7 @@ static const char* regs_8[] = {"dil",  "sil",  "dl",   "cl",  "r8b", "r9b",
 void x64_emit_file_preamble(void)
 {
   // x86_64 uses Intel syntax in this compiler
-  output_file("    .intel_syntax noprefix\n");
+  output_file0("    .intel_syntax noprefix\n");
 }
 
 static const char* reg_name(enum register_name r, OperandSize sz)
@@ -1090,7 +1090,7 @@ static void emit_unary(const char* mnem, X64_ASM* as, X64_FUNC* fx)
 
 static void emit_function_header(IRFunc* func_ir)
 {
-  output_file("    .text");
+  output_file0("    .text");
   if (!func_ir->user_defined.is_static)
     output_file("    .globl %.*s", (int)func_ir->user_defined.function_name_size,
                 func_ir->user_defined.function_name);
@@ -1127,8 +1127,8 @@ static size_t max_vreg_stack_slot(X64_FUNC* func_x64)
 
 static void emit_prologue(IRFunc* func_ir, X64_FUNC* func_x64, size_t* out_alloc)
 {
-  output_file("    push rbp");
-  output_file("    mov rbp, rsp");
+  output_file0("    push rbp");
+  output_file0("    mov rbp, rsp");
 
   size_t locals = func_ir->user_defined.stack_size;
   size_t spills = func_x64->spill_stack_size;
@@ -1151,25 +1151,25 @@ static void emit_prologue(IRFunc* func_ir, X64_FUNC* func_x64, size_t* out_alloc
   if (alloc)
     output_file("    sub rsp, %zu", alloc);
   // Save callee-saved registers used
-  if (func_x64->used_registers & (1 << rbx)) output_file("    push rbx");
-  if (func_x64->used_registers & (1 << r12)) output_file("    push r12");
-  if (func_x64->used_registers & (1 << r13)) output_file("    push r13");
-  if (func_x64->used_registers & (1 << r14)) output_file("    push r14");
-  if (func_x64->used_registers & (1 << r15)) output_file("    push r15");
+  if (func_x64->used_registers & (1 << rbx)) output_file0("    push rbx");
+  if (func_x64->used_registers & (1 << r12)) output_file0("    push r12");
+  if (func_x64->used_registers & (1 << r13)) output_file0("    push r13");
+  if (func_x64->used_registers & (1 << r14)) output_file0("    push r14");
+  if (func_x64->used_registers & (1 << r15)) output_file0("    push r15");
   if (out_alloc) *out_alloc = alloc;
 }
 
 static void emit_epilogue(X64_FUNC* func_x64)
 {
   // Restore callee-saved registers in reverse order
-  if (func_x64->used_registers & (1 << r15)) output_file("    pop r15");
-  if (func_x64->used_registers & (1 << r14)) output_file("    pop r14");
-  if (func_x64->used_registers & (1 << r13)) output_file("    pop r13");
-  if (func_x64->used_registers & (1 << r12)) output_file("    pop r12");
-  if (func_x64->used_registers & (1 << rbx)) output_file("    pop rbx");
-  output_file("    mov rsp, rbp");
-  output_file("    pop rbp");
-  output_file("    ret");
+  if (func_x64->used_registers & (1 << r15)) output_file0("    pop r15");
+  if (func_x64->used_registers & (1 << r14)) output_file0("    pop r14");
+  if (func_x64->used_registers & (1 << r13)) output_file0("    pop r13");
+  if (func_x64->used_registers & (1 << r12)) output_file0("    pop r12");
+  if (func_x64->used_registers & (1 << rbx)) output_file0("    pop rbx");
+  output_file0("    mov rsp, rbp");
+  output_file0("    pop rbp");
+  output_file0("    ret");
 }
 
 void x64_emit_function(IRFunc* func_ir, X64_FUNC* func_x64)
@@ -1181,7 +1181,7 @@ void x64_emit_function(IRFunc* func_ir, X64_FUNC* func_x64)
   if (func_ir->user_defined.function_name_size == 4 &&
       strncmp(func_ir->user_defined.function_name, "main", 4) == 0)
   {
-    output_file("    mov eax, 0");
+    output_file0("    mov eax, 0");
   }
   // Create a unique return label per function to support early returns
   char ret_label[128];
@@ -1236,8 +1236,8 @@ void x64_emit_function(IRFunc* func_ir, X64_FUNC* func_x64)
         case X64_JZ: output_file("    jz %s", as->jump_target_label); break;
         case X64_JNG: output_file("    jng %s", as->jump_target_label); break;
         case X64_JNGE: output_file("    jnge %s", as->jump_target_label); break;
-        case X64_CQO: output_file("    cqo"); break;
-        case X64_CDQ: output_file("    cdq"); break;
+        case X64_CQO: output_file0("    cqo"); break;
+        case X64_CDQ: output_file0("    cdq"); break;
         case X64_IDIV:
         case X64_DIV:
         {
@@ -1325,7 +1325,7 @@ void x64_emit_function(IRFunc* func_ir, X64_FUNC* func_x64)
       func_ir->user_defined.function_name_size == 4 &&
       strncmp(func_ir->user_defined.function_name, "main", 4) == 0)
   {
-    output_file("    mov eax, 0");
+    output_file0("    mov eax, 0");
   }
   // Function epilogue label target for early returns
   output_file("%s:", ret_label);

@@ -16,10 +16,8 @@
 // If DEBUG is 1, both pr_debug and pr_debug2 are output.
 // pr_debug2 outputs longer messages.
 #if DEBUG
-#define pr_debug(fmt, ...) \
-  _debug(__FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
-#define pr_debug2(fmt, ...) \
-  _debug2(__FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
+#define pr_debug(...) _debug(__FILE__, __LINE__, __func__, __VA_ARGS__)
+#define pr_debug2(...) _debug2(__FILE__, __LINE__, __func__, __VA_ARGS__)
 #else
 #define pr_debug(fmt, ...) ((void)0)
 #define pr_debug2(fmt, ...) ((void)0)
@@ -28,16 +26,15 @@
 #define unreachable() error_exit("unreachable")
 #define unimplemented() error_exit("unimplemented")
 
-#define error_exit(fmt, ...) \
-  _error(__FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
+#define error_exit(...) _error(__FILE__, __LINE__, __func__, __VA_ARGS__)
 
-#define error_at(error_location, error_len, fmt, ...)                     \
-  _error_at(error_location, error_len, __FILE__, __LINE__, __func__, fmt, \
-            ##__VA_ARGS__)
+#define error_at(error_location, error_len, ...)                          \
+  _error_at(error_location, error_len, __FILE__, __LINE__, __func__,      \
+            __VA_ARGS__)
 
-#define warn_at(warning_location, warning_len, fmt, ...)                   \
+#define warn_at(warning_location, warning_len, ...)                        \
   _info_at(1, warning_location, warning_len, __FILE__, __LINE__, __func__, \
-           fmt, ##__VA_ARGS__)
+           __VA_ARGS__)
 
 void _debug(char *file, int line, const char *func, char *fmt, ...);
 void _debug2(char *file, int line, const char *func, char *fmt, ...);

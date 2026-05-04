@@ -155,7 +155,10 @@ int main(int argc, char **argv)
   // Preprocessor (includes tokenizer)
   Token *token = preprocess(input, NULL, input_file_name, NULL);
   if (output_preprocess)
+  {
     preprocessed_file_writer(token, output_file_name);
+    return 0;
+  }
   fix_token_head();  // Adjust the token head to not be IGNORABLE or LINEBREAK
   // Parser
   FuncBlock *parse_result = parser();

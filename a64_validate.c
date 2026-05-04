@@ -51,11 +51,11 @@ static void validate_stack_alignment(IRFunc* func_ir, A64_FUNC* fa)
             target = as->jump_target_label;
             if (!target)
               target = "<unknown>";
-            error_exit("AArch64 stack alignment error before CALL to %s in %.*s: sp%%16=%d (expected 0)",
-                       target,
-                       (int)func_ir->user_defined.function_name_size,
-                       func_ir->user_defined.function_name,
-                       sp_mod);
+            _error(__FILE__, __LINE__, __func__,
+                   "AArch64 stack alignment error before CALL to %s in %.*s: "
+                   "sp%%16=%d (expected 0)",
+                   target, (int)func_ir->user_defined.function_name_size,
+                   func_ir->user_defined.function_name, sp_mod);
           }
           break;
         default: break;

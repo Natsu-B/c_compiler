@@ -58,9 +58,9 @@ void generator(IRProgram *program, char *output_filename)
     if (vector_size(gvar->initializer->IRs) == 1 &&
         ((GVarInitializer *)vector_peek(gvar->initializer->IRs))->how2_init ==
             init_zero)
-      output_file("    .section .bss");
+      output_file0("    .section .bss");
     else
-      output_file("    .section .data");
+      output_file0("    .section .data");
     if (!gvar->is_static)
       output_file("    .globl %.*s", (int)gvar->var_name_len, gvar->var_name);
     output_file("    .type %.*s, @object", (int)gvar->var_name_len,
@@ -108,7 +108,7 @@ void generator(IRProgram *program, char *output_filename)
   // strings
   if (vector_size(program->strings))
   {
-    output_file("    .section .rodata");
+    output_file0("    .section .rodata");
     for (size_t i = 1; i <= vector_size(program->strings); i++)
     {
       Var *string = vector_peek_at(program->strings, i);

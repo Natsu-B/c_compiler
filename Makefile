@@ -3,7 +3,6 @@ CFLAGS=-std=c11 -g -Wall -Wextra -Werror -Wno-builtin-declaration-mismatch -Wno-
 LDFLAGS=-no-pie
 ASFLAGS=-g
 SELF_ASFLAGS ?=
-CPPFLAGS=-E -P -D__MYCC__ -DSELF_HOST
 AARCH64_CC ?= aarch64-linux-gnu-gcc
 
 SRCS=$(wildcard *.c)
@@ -15,6 +14,7 @@ SELF2_OBJS=$(addprefix $(SELF2_OUT)/,$(OBJS))
 SELF3_OUT ?= .selfhost3-out
 SELF3_OBJS=$(addprefix $(SELF3_OUT)/,$(OBJS))
 GENERATED_HEADERS=include/include_paths.h include/gcc_predef.h
+HEADERS=$(wildcard include/*.h) test/compiler_header.h
 
 TARGET=main
 # Use a very safe subset for initial self-hosting.
@@ -56,7 +56,7 @@ test-aarch64: all
 	@echo -e "${CYAN}--- Building test objects for AArch64 and running tests ---${NC}"
 	./test.sh ./main "-target aarch64" $(AARCH64_CC) $(AARCH64_CC)
 
-%.o: %.c $(GENERATED_HEADERS)
+%.o: %.c $(GENERATED_HEADERS) $(HEADERS)
 	@echo -e "${CYAN}Compiling $<...${NC}"
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -64,9 +64,9 @@ self1: build
 	@echo -e "${CYAN}--- Starting self-host ---${NC}"
 	rm -f .success_list .failure_list
 	mkdir -p $(SELF_OUT)
-	@echo -e "${CYAN}[1/4] Preprocessing source files...${NC}"
+	@echo -e "${CYAN}[1/4] Preprocessing source files with ./$(TARGET)...${NC}"
 	for src in $(SRCS); do \
-		$(CC) $(CPPFLAGS) $$src -o $(SELF_OUT)/$$src; \
+		./$(TARGET) -E -i $$src -o $(SELF_OUT)/$$src; \
 	done
 	@echo -e "${CYAN}[2/4] Compiling with ./$(TARGET) (fallback to gcc on failure)...${NC}"
 	for src in $(SRCS); do \
@@ -117,9 +117,9 @@ self2: self1
 	@echo -e "${CYAN}--- Starting second-generation self-host ---${NC}"
 	rm -f .success_list2 .failure_list2
 	mkdir -p $(SELF2_OUT)
-	@echo -e "${CYAN}[1/4] Preprocessing source files...${NC}"
+	@echo -e "${CYAN}[1/4] Preprocessing source files with ./$(TARGET)2...${NC}"
 	for src in $(SRCS); do \
-		$(CC) $(CPPFLAGS) $$src -o $(SELF2_OUT)/$$src; \
+		./$(TARGET)2 -E -i $$src -o $(SELF2_OUT)/$$src; \
 	done
 	@echo -e "${CYAN}[2/4] Compiling with ./$(TARGET)2 (no fallback)...${NC}"
 	for src in $(SRCS); do \
@@ -162,9 +162,9 @@ self3: self2
 	@echo -e "${CYAN}--- Starting third-generation self-host ---${NC}"
 	rm -f .success_list3 .failure_list3
 	mkdir -p $(SELF3_OUT)
-	@echo -e "${CYAN}[1/4] Preprocessing source files...${NC}"
+	@echo -e "${CYAN}[1/4] Preprocessing source files with ./$(TARGET)3...${NC}"
 	for src in $(SRCS); do \
-		$(CC) $(CPPFLAGS) $$src -o $(SELF3_OUT)/$$src; \
+		./$(TARGET)3 -E -i $$src -o $(SELF3_OUT)/$$src; \
 	done
 	@echo -e "${CYAN}[2/4] Compiling with ./$(TARGET)3 (no fallback)...${NC}"
 	for src in $(SRCS); do \
@@ -221,9 +221,9 @@ self1-min: build
 	@echo -e "${CYAN}--- Starting minimal self-host (subset: $(SAFE_SRCS)) ---${NC}"
 	rm -f .success_list .failure_list
 	mkdir -p $(SELF_OUT)
-	@echo -e "${CYAN}[1/4] Preprocessing source files...${NC}"
+	@echo -e "${CYAN}[1/4] Preprocessing source files with ./$(TARGET)...${NC}"
 	for src in $(SRCS); do \
-		$(CC) $(CPPFLAGS) $$src -o $(SELF_OUT)/$$src; \
+		./$(TARGET) -E -i $$src -o $(SELF_OUT)/$$src; \
 	done
 	@echo -e "${CYAN}[2/4] Compiling subset with ./$(TARGET); others with gcc...${NC}"
 	for src in $(SRCS); do \

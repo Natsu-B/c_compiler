@@ -899,7 +899,40 @@ static void analyze_children(Node *node, size_t recursion_limit)
   }
   else
   {
-    visit_children(node, analyze_type, false, next_recursion_limit);
+    if (node->kind == ND_TERNARY)
+      node->control.ternary_child =
+          analyze_type(node->control.ternary_child, false,
+                       next_recursion_limit);
+    if (node->kind == ND_IF || node->kind == ND_ELIF ||
+        node->kind == ND_WHILE || node->kind == ND_DO ||
+        node->kind == ND_SWITCH)
+    {
+      node->control.condition =
+          analyze_type(node->control.condition, false, next_recursion_limit);
+      node->control.true_code =
+          analyze_type(node->control.true_code, false, next_recursion_limit);
+      node->control.false_code =
+          analyze_type(node->control.false_code, false, next_recursion_limit);
+      node->control.init =
+          analyze_type(node->control.init, false, next_recursion_limit);
+      node->control.update =
+          analyze_type(node->control.update, false, next_recursion_limit);
+    }
+    if (node->kind == ND_LABEL || node->kind == ND_CASE)
+      node->jump.statement_child =
+          analyze_type(node->jump.statement_child, false,
+                       next_recursion_limit);
+    if (node->kind == ND_FUNCCALL || node->kind == ND_FUNCDEF)
+      for (size_t i = 1; i <= vector_size(node->func.expr); i++)
+      {
+        Node *result = analyze_type(vector_peek_at(node->func.expr, i), false,
+                                    next_recursion_limit);
+        vector_replace_at(node->func.expr, i, result);
+      }
+    if (node->kind == ND_INITIALIZER)
+      for (size_t i = 1; i <= vector_size(node->initialize.init_list); i++)
+        analyze_type(vector_peek_at(node->initialize.init_list, i), false,
+                     next_recursion_limit);
   }
 
   if (node->kind == ND_SWITCH)

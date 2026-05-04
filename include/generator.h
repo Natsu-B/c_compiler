@@ -18,9 +18,6 @@ void generator(IRProgram *program, char *output_filename);
   output_file("# %s:%d:%s()" fmt, __FILE__, __LINE__, __func__, ##__VA_ARGS__);
 #define output_debug2(fmt, ...) \
   output_file("# %s:%d:%s()" fmt, __FILE__, __LINE__, __func__, ##__VA_ARGS__);
-#elif defined(DEBUG)
-#define output_debug(fmt, ...) output_file("# " fmt, ##__VA_ARGS__);
-#define output_debug2(fmt, ...) output_file("# " fmt, ##__VA_ARGS__);
 #else
 #define output_debug(fmt, ...)
 #define output_debug2(fmt, ...)
@@ -29,7 +26,12 @@ void generator(IRProgram *program, char *output_filename);
 #define output_file(fmt, ...)               \
   do                                        \
   {                                         \
-    fprintf(fout, fmt "\n", ##__VA_ARGS__); \
+    fprintf(fout, fmt "\n", __VA_ARGS__);   \
+  } while (0)
+#define output_file0(fmt)                   \
+  do                                        \
+  {                                         \
+    fprintf(fout, fmt "\n");                \
   } while (0)
 
 extern FILE *fout;

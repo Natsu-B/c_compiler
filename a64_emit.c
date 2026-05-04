@@ -19,7 +19,7 @@ void a64_emit_file_preamble(void)
 
 static void emit_function_header(IRFunc* func_ir)
 {
-  output_file("    .text");
+  output_file0("    .text");
   if (!func_ir->user_defined.is_static)
     output_file("    .globl %.*s", (int)func_ir->user_defined.function_name_size,
                 func_ir->user_defined.function_name);
@@ -223,8 +223,8 @@ static void format_mem(char* buf, size_t bufsz, A64_Operand* op, A64_FUNC* fa, s
 static void emit_prologue_full(IRFunc* func_ir, A64_FUNC* fa, size_t* out_alloc)
 {
   // Prologue: create frame and save FP/LR
-  output_file("    stp x29, x30, [sp, #-16]!");
-  output_file("    mov x29, sp");
+  output_file0("    stp x29, x30, [sp, #-16]!");
+  output_file0("    mov x29, sp");
 
   // Save callee-saved used
   for (int r = (int)a64_x19; r <= (int)a64_x28; r++)
@@ -250,8 +250,8 @@ static void emit_epilogue_full(A64_FUNC* fa, size_t alloc)
     if (fa->used_registers & (1 << r))
       output_file("    ldr x%d, [sp], #16", r);
   }
-  output_file("    ldp x29, x30, [sp], #16");
-  output_file("    ret");
+  output_file0("    ldp x29, x30, [sp], #16");
+  output_file0("    ret");
 }
 
 static void a64_emit_two_or_three(const char* mnem, A64_ASM* as, A64_FUNC* fa)
@@ -675,7 +675,7 @@ void a64_emit_function(IRFunc* func_ir, A64_FUNC* fa)
   if (func_ir->user_defined.function_name_size == 4 &&
       strncmp(func_ir->user_defined.function_name, "main", 4) == 0)
   {
-    output_file("    mov w0, 0");
+    output_file0("    mov w0, 0");
   }
 
   // Create a unified return label to support early returns
@@ -916,7 +916,7 @@ void a64_emit_function(IRFunc* func_ir, A64_FUNC* fa)
   if (!saw_return && func_ir->user_defined.function_name_size == 4 &&
       strncmp(func_ir->user_defined.function_name, "main", 4) == 0)
   {
-    output_file("    mov w0, 0");
+    output_file0("    mov w0, 0");
   }
   output_file("%s:", ret_label);
   emit_epilogue_full(fa, alloc);

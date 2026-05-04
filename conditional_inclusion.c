@@ -398,7 +398,7 @@ static bool reverse_polish_notation_stack_machine()
 bool condition_interpreter(Token *head)
 {
   pr_debug2("start #if token %.*s", head->len, head->str);
-#ifdef DEBUG
+#if DEBUG
   pr_debug("Condition interpreter");
   Token *ptr = head;
   while (ptr->kind != TK_LINEBREAK)
@@ -409,7 +409,7 @@ bool condition_interpreter(Token *head)
   printf("\n");
 #endif
   shunting_yard_algorithm(head);
-#ifdef DEBUG
+#if DEBUG
   print_polish_notation();
 #endif
   return reverse_polish_notation_stack_machine();

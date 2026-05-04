@@ -49,14 +49,32 @@ static void write_string_token(FILE *fout, Token *token)
   {
     switch (token->str[i])
     {
-      case 92: fprintf(fout, "%c%c", 92, 92); break;
-      case 34: fprintf(fout, "%c%c", 92, 34); break;
       case 10: fprintf(fout, "%c%c", 92, 110); break;
       case 9: fprintf(fout, "%c%c", 92, 116); break;
       default: fprintf(fout, "%c", token->str[i]); break;
     }
   }
   fprintf(fout, "%c", 34);
+}
+
+static void write_char_token(FILE *fout, Token *token)
+{
+  fprintf(fout, "'");
+  for (size_t i = 0; i < token->len; i++)
+    fprintf(fout, "%c", token->str[i]);
+  fprintf(fout, "'");
+}
+
+static bool is_comment_token(Token *token)
+{
+  for (size_t i = 0; i + 1 < token->len; i++)
+  {
+    if ((token->str[i] == '/' && token->str[i + 1] == '/') ||
+        (token->str[i] == '/' && token->str[i + 1] == '*') ||
+        (token->str[i] == '*' && token->str[i + 1] == '/'))
+      return true;
+  }
+  return false;
 }
 
 void token_void(Token *token)
@@ -348,9 +366,9 @@ Token *directive(Token *old)
         }
         else if (token->kind == TK_STRING)
         {  // #include " ident "
-          file_len = token->len - 2;
+          file_len = token->len;
           file_name = malloc(file_len + 1 /* '\0' */ + MAX_LIB_PATH_SIZE);
-          memcpy(file_name, token->str + 1, token->len - 2);
+          memcpy(file_name, token->str, token->len);
         }
         else
           error_at(token->str, token->len, "Invalid #include directive.");
@@ -494,6 +512,10 @@ void preprocessed_file_writer(Token *token, char *output_filename)
       break;
     if (token->kind == TK_STRING)
       write_string_token(fout, token);
+    else if (token->kind == TK_CHAR)
+      write_char_token(fout, token);
+    else if (token->kind == TK_IGNORABLE && is_comment_token(token))
+      fprintf(fout, " ");
     else
       fprintf(fout, "%.*s", (int)token->len, token->str);
     token = token->next;

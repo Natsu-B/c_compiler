@@ -21,13 +21,21 @@
 #endif
 
 #ifndef __GNUC__
+#ifndef __attribute__
 #define __attribute__(x) /*NOTHING*/
 #endif
+#endif
+#ifdef SELF_HOST
+void _debug2(char *file, int line, const char *func, char *fmt, ...);
+void _error_at(char *error_location, size_t error_len, char *file, int line,
+               const char *func, char *fmt, ...);
+#else
 void _debug2(char *file, int line, const char *func, char *fmt, ...)
     __attribute__((format(printf, 4, 5)));
 void _error_at(char *error_location, size_t error_len, char *file, int line,
                const char *func, char *fmt, ...)
     __attribute__((format(printf, 6, 7)));
+#endif
 
 // Called by pr_debug when DEBUG is defined
 void _debug(char *file, int line, const char *func, char *fmt, ...)

@@ -22,7 +22,28 @@ static Node* constant_folding(Node* node)
   if (node->kind == ND_BLOCK)
     for (NDBlock* tmp = node->func.stmt; tmp; tmp = tmp->next)
       tmp->node = constant_folding(tmp->node);
-  visit_children(node, constant_folding);
+  if (node->kind == ND_TERNARY)
+    node->control.ternary_child = constant_folding(node->control.ternary_child);
+  if (node->kind == ND_IF || node->kind == ND_ELIF || node->kind == ND_FOR ||
+      node->kind == ND_WHILE || node->kind == ND_DO || node->kind == ND_SWITCH)
+  {
+    node->control.condition = constant_folding(node->control.condition);
+    node->control.true_code = constant_folding(node->control.true_code);
+    node->control.false_code = constant_folding(node->control.false_code);
+    node->control.init = constant_folding(node->control.init);
+    node->control.update = constant_folding(node->control.update);
+  }
+  if (node->kind == ND_LABEL || node->kind == ND_CASE)
+    node->jump.statement_child = constant_folding(node->jump.statement_child);
+  if (node->kind == ND_FUNCCALL || node->kind == ND_FUNCDEF)
+    for (size_t i = 1; i <= vector_size(node->func.expr); i++)
+    {
+      Node* result = constant_folding(vector_peek_at(node->func.expr, i));
+      vector_replace_at(node->func.expr, i, result);
+    }
+  if (node->kind == ND_INITIALIZER)
+    for (size_t i = 1; i <= vector_size(node->initialize.init_list); i++)
+      constant_folding(vector_peek_at(node->initialize.init_list, i));
 
   switch (node->kind)
   {

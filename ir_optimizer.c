@@ -440,7 +440,10 @@ static void lower_phi_in_func(IRFunc* func)
   }
 }
 
-__attribute__((unused)) static void lower_phi(IRProgram* program)
+#ifndef SELF_HOST
+__attribute__((unused))
+#endif
+static void lower_phi(IRProgram* program)
 {
   for (size_t fi = 1; fi <= vector_size(program->functions); fi++)
   {

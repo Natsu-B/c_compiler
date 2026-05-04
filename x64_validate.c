@@ -46,6 +46,7 @@ static void validate_stack_alignment(IRFunc* func_ir, X64_FUNC* fx)
             op = "+";
             if (as->kind == X64_SUB)
               op = "-";
+            (void)op;
             pr_debug("x64-validate: rsp %s= %lld -> mod16=%d", op, imm,
                      sp_mod);
           }

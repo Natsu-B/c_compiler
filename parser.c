@@ -107,15 +107,14 @@ char *find_jmp_target(size_t type)
   // Function to find the jump target for break/continue
   // If type is 1, it's for continue; if type is 2, it's for break.
   // Search for while/for loops, starting from the deepest nested one.
-  for (size_t i = vector_size(label_list); i >= 1; i--)
+  for (size_t i = vector_size(label_list); i > 0; i--)
   {
     for (size_t j = 1; j <= vector_size(vector_peek_at(label_list, i)); j++)
     {
       GTLabel *labeled_loop = vector_peek_at(vector_peek_at(label_list, i), j);
-      if (!labeled_loop || (labeled_loop->kind == ND_SWITCH && type == 1))
-        continue;
-      if (labeled_loop->kind == ND_WHILE || labeled_loop->kind == ND_FOR ||
-          labeled_loop->kind == ND_DO || labeled_loop->kind == ND_SWITCH)
+      if (labeled_loop && !(labeled_loop->kind == ND_SWITCH && type == 1) &&
+          (labeled_loop->kind == ND_WHILE || labeled_loop->kind == ND_FOR ||
+           labeled_loop->kind == ND_DO || labeled_loop->kind == ND_SWITCH))
       {
         char *label_name =
             malloc(labeled_loop->len + 14 /*.Lbeginswitch + null terminator*/);
@@ -1238,6 +1237,7 @@ Node *primary_expression()
     }
     else
       num_val = char_token->str[0];
+    num_val = num_val & 255;
     return new_node_num(num_val);
   }
   long long num;

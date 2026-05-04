@@ -1201,17 +1201,18 @@ static IR_REG *gen_stmt(Vector *blocks, Vector *labels, IR_Blocks **irs,
       for (size_t i = 0; i < vector_size(node->func.expr); i++)
       {
         Node *arg_node = vector_peek_at(node->func.expr, i + 1);
-        if (arg_node->kind == ND_VARIABLE_ARGS)
-          continue;
-        IR_REG *addr_reg = gen_addr(blocks, labels, irs, arg_node);
-        IR *ir = calloc(1, sizeof(IR));
-        ir->kind = IR_STORE_ARG;
-        ir->store_arg.dst_reg = addr_reg;
-        vector_push(addr_reg->used_list, ir);
-        ir->store_arg.arg_index = i;
-        // Set the store width based on the argument's type
-        ir->store_arg.size = num2OpSize(size_of_real(arg_node->type->type));
-        vector_push((*irs)->IRs, ir);
+        if (arg_node->kind != ND_VARIABLE_ARGS)
+        {
+          IR_REG *addr_reg = gen_addr(blocks, labels, irs, arg_node);
+          IR *ir = calloc(1, sizeof(IR));
+          ir->kind = IR_STORE_ARG;
+          ir->store_arg.dst_reg = addr_reg;
+          vector_push(addr_reg->used_list, ir);
+          ir->store_arg.arg_index = i;
+          // Set the store width based on the argument's type
+          ir->store_arg.size = num2OpSize(size_of_real(arg_node->type->type));
+          vector_push((*irs)->IRs, ir);
+        }
       }
 
       // Generate code for the function body.

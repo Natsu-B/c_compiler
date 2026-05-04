@@ -240,6 +240,7 @@ void a64_build_mir_liveness(IRFunc* func_ir, A64_FUNC* func)
 
 static void dump_reg_set(const char* tag, Vector* regs)
 {
+  (void)tag;
   pr_debug("  %s:", (char*)tag);
   for (size_t i = 1; i <= vector_size(regs); i++)
   {
@@ -269,6 +270,7 @@ void a64_dump_mir_cfg(IRFunc* func_ir, A64_FUNC* func)
     for (size_t j = 1; j <= vector_size(ab->asm_list); j++)
     {
       A64_ASM* as = vector_peek_at(ab->asm_list, j);
+      (void)as;
       pr_debug("    #%zu kind=%d", as->insn_id, (int)as->kind);
     }
   }

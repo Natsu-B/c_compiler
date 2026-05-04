@@ -56,6 +56,13 @@ on 2026-04-30. They are also tracked as expected compile-fail cases in `test.sh`
   - Status: fixed on 2026-04-28 and covered by a positive regression in `test.sh`.
   - Root cause: `consume_string()` iterated with `return_token->len - 1`, which
     underflowed for zero-length string tokens.
+- `continue` inside a `for` loop body can be miscompiled in self-hosted stage2
+  output so that it jumps to the loop condition instead of the increment clause.
+  - Repro: `for (int i = 0; i < 1; i = i + 1) { continue; }`
+  - Observed impact: `find_jmp_target()` could hang while stage2 compiled
+    `conditional_inclusion.c`.
+  - Workaround used: avoid `continue` in compiler implementation loops that
+    must be compiled by `./main2`.
 
 ## Current Self-Host Status
 

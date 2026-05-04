@@ -471,57 +471,14 @@ void x64_regalloc(IRFunc* func_ir, X64_FUNC* func_x64)
     bool active_entry_recorded = false;
     if (r == register_reserved)
     {
-      // No free reg: if current requires register, try spilling a non-required active
-      if (cur_must_in_reg)
-      {
-        // Find a victim with latest end that is not must_in_reg
-        size_t victim = (size_t)-1; size_t victim_end = 0;
-        for (size_t j = 0; j < active_n; j++)
-        {
-          if (!active_must[j] && active_end[j] >= victim_end)
-          {
-            victim = j; victim_end = active_end[j];
-          }
-        }
-        if (victim != (size_t)-1)
-        {
-          // Split victim at current start
-          enum register_name freed = (enum register_name)active_real[victim];
-          size_t vindex = active_vindex[victim];
-          size_t* slot = vector_peek_at(func_x64->vreg_stack_slot, vindex);
-          size_t* rend = vector_peek_at(func_x64->vreg_real_end, vindex);
-          if (rend) *rend = (cur_start > 0 ? cur_start - 1 : 0);
-          if (slot && *slot == 0)
-            *slot = regalloc_allocate_spill_slot(
-                func_ir, func_x64, live_spill_end, live_spill_slot,
-                &live_spills_n, free_slots, &free_slots_n, active_end[victim]);
-
-          // Assign freed register to current
-          r = freed;
-          reg_taken[r] = true;
-          // Replace victim with current in active
-          active_vindex[victim] = cur_vindex;
-          active_real[victim] = r;
-          active_must[victim] = cur_must_in_reg ? 1 : 0;
-          active_end[victim] = cur_end;
-          // Record mapping
-          size_t* real_cur = vector_peek_at(func_x64->vreg_real, cur_vindex);
-          *real_cur = r;
-          func_x64->used_registers |= (1 << r);
-          assigned_current = true;
-          active_entry_recorded = true;
-        }
-      }
-
-      if (!assigned_current)
-      {
-        // Spill current
-        size_t* slot = vector_peek_at(func_x64->vreg_stack_slot, cur_vindex);
-        *slot = regalloc_allocate_spill_slot(
-            func_ir, func_x64, live_spill_end, live_spill_slot,
-            &live_spills_n, free_slots, &free_slots_n, cur_end);
-        // Keep it out of active since no register assigned
-      }
+      // No free register. Prefer spilling the current interval over splitting
+      // an already-active interval; the x64 emitter can materialize spilled
+      // operands through scratch registers, while active splitting has exposed
+      // wrong-code in self-hosted analyzer builds.
+      size_t* slot = vector_peek_at(func_x64->vreg_stack_slot, cur_vindex);
+      *slot = regalloc_allocate_spill_slot(
+          func_ir, func_x64, live_spill_end, live_spill_slot,
+          &live_spills_n, free_slots, &free_slots_n, cur_end);
     }
     else
     {

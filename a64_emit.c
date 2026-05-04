@@ -860,13 +860,16 @@ void a64_emit_function(IRFunc* func_ir, A64_FUNC* fa)
             size_t* rendp = fa->vreg_real_end ? vector_peek_at(fa->vreg_real_end, vi) : NULL;
             size_t* slotp = vector_peek_at(fa->vreg_stack_slot, vi);
             A64_REG* vinfo = vector_peek_at(fa->virtual_regs, vi);
-            if (!realp || !rendp || !slotp || !vinfo) continue;
-            a64_register_name r = (a64_register_name)(*realp);
-            size_t rend = *rendp; size_t slot = *slotp;
-            if (r != a64_reg_reserved && rend != 0 && rend <= as->insn_id && slot)
+            if (realp && rendp && slotp && vinfo)
             {
-              emit_str_spill(a64_reg_name(r, vinfo->size ? vinfo->size : SIZE_QWORD),
-                             vinfo->size ? vinfo->size : SIZE_QWORD, slot);
+              a64_register_name r = (a64_register_name)(*realp);
+              size_t rend = *rendp;
+              size_t slot = *slotp;
+              if (r != a64_reg_reserved && rend != 0 && rend <= as->insn_id && slot)
+              {
+                emit_str_spill(a64_reg_name(r, vinfo->size ? vinfo->size : SIZE_QWORD),
+                               vinfo->size ? vinfo->size : SIZE_QWORD, slot);
+              }
             }
           }
           output_file("    bl %s", as->jump_target_label);

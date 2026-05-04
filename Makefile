@@ -1,7 +1,8 @@
 CC=gcc
-CFLAGS=-std=c11 -g -Wall -Wextra -Werror -Wno-builtin-declaration-mismatch -Wno-attributes -D_GNU_SOURCE -DSELF_HOST
+CFLAGS=-std=c11 -g -Wall -Wextra -Werror -Wno-builtin-declaration-mismatch -Wno-attributes -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-parameter -D_GNU_SOURCE -DSELF_HOST
 LDFLAGS=-no-pie
 ASFLAGS=-g
+SELF_ASFLAGS ?=
 CPPFLAGS=-E -P -D__MYCC__ -DSELF_HOST
 AARCH64_CC ?= aarch64-linux-gnu-gcc
 
@@ -9,6 +10,10 @@ SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)
 SELF_OUT ?= .selfhost-out
 SELF_OBJS=$(addprefix $(SELF_OUT)/,$(OBJS))
+SELF2_OUT ?= .selfhost2-out
+SELF2_OBJS=$(addprefix $(SELF2_OUT)/,$(OBJS))
+SELF3_OUT ?= .selfhost3-out
+SELF3_OBJS=$(addprefix $(SELF3_OUT)/,$(OBJS))
 GENERATED_HEADERS=include/include_paths.h include/gcc_predef.h
 
 TARGET=main
@@ -83,7 +88,7 @@ self1: build
 	for src in $(SRCS); do \
 		s_file=$${src%.c}.s; \
 		o_file=$${src%.c}.o; \
-		$(CC) $(ASFLAGS) -c $(SELF_OUT)/$$s_file -o $(SELF_OUT)/$$o_file; \
+		$(CC) $(SELF_ASFLAGS) -c $(SELF_OUT)/$$s_file -o $(SELF_OUT)/$$o_file; \
 	done
 	@echo -e "${CYAN}[4/4] Linking to create $(TARGET)2...${NC}"
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $(TARGET)2 $(SELF_OBJS)
@@ -107,6 +112,109 @@ self1-test: test self1
 self1-smoke: self1
 	@echo -e "\n${CYAN}--- Running self-host smoke tests... ---${NC}"
 	sh ./test/selfhost_smoke.sh ./main2
+
+self2: self1
+	@echo -e "${CYAN}--- Starting second-generation self-host ---${NC}"
+	rm -f .success_list2 .failure_list2
+	mkdir -p $(SELF2_OUT)
+	@echo -e "${CYAN}[1/4] Preprocessing source files...${NC}"
+	for src in $(SRCS); do \
+		$(CC) $(CPPFLAGS) $$src -o $(SELF2_OUT)/$$src; \
+	done
+	@echo -e "${CYAN}[2/4] Compiling with ./$(TARGET)2 (no fallback)...${NC}"
+	for src in $(SRCS); do \
+		s_file=$${src%.c}.s; \
+		if ./$(TARGET)2 -i $(SELF2_OUT)/$$src -o $(SELF2_OUT)/$$s_file; then \
+			echo -e "    [${GREEN}SUCCESS${NC}] Compiled '$${src}' with ./main2."; \
+			echo "$$src" >> .success_list2; \
+		else \
+			echo -e "    [${YELLOW}FAIL${NC}] Failed on '$${src}' with ./main2."; \
+			echo "$$src" >> .failure_list2; \
+			exit 1; \
+		fi; \
+	done
+	@echo -e "${CYAN}[3/4] Assembling generated sources...${NC}"
+	for src in $(SRCS); do \
+		s_file=$${src%.c}.s; \
+		o_file=$${src%.c}.o; \
+		$(CC) $(SELF_ASFLAGS) -c $(SELF2_OUT)/$$s_file -o $(SELF2_OUT)/$$o_file; \
+	done
+	@echo -e "${CYAN}[4/4] Linking to create $(TARGET)3...${NC}"
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $(TARGET)3 $(SELF2_OBJS)
+	@echo ""
+	@echo -e "${CYAN}--- Second-Generation Self-Host Summary ---${NC}"
+	@if [ -f .success_list2 ]; then \
+		echo -e "${GREEN}Successfully compiled with ./main2:${NC}"; \
+		cat .success_list2 | sed 's/^/  - /'; \
+	fi
+	@if [ -f .failure_list2 ]; then \
+		echo -e "\n${YELLOW}Failed with ./main2:${NC}"; \
+		cat .failure_list2 | sed 's/^/  - /'; \
+	fi
+	@echo ""
+	@echo -e "${GREEN}--- Second-generation self-host complete. Executable '$(TARGET)3' created. ---${NC}"
+
+self2-test: self2
+	@echo -e "\n${CYAN}--- Running tests after second-generation self-host... ---${NC}"
+	./test.sh ./main3
+
+self3: self2
+	@echo -e "${CYAN}--- Starting third-generation self-host ---${NC}"
+	rm -f .success_list3 .failure_list3
+	mkdir -p $(SELF3_OUT)
+	@echo -e "${CYAN}[1/4] Preprocessing source files...${NC}"
+	for src in $(SRCS); do \
+		$(CC) $(CPPFLAGS) $$src -o $(SELF3_OUT)/$$src; \
+	done
+	@echo -e "${CYAN}[2/4] Compiling with ./$(TARGET)3 (no fallback)...${NC}"
+	for src in $(SRCS); do \
+		s_file=$${src%.c}.s; \
+		if ./$(TARGET)3 -i $(SELF3_OUT)/$$src -o $(SELF3_OUT)/$$s_file; then \
+			echo -e "    [${GREEN}SUCCESS${NC}] Compiled '$${src}' with ./main3."; \
+			echo "$$src" >> .success_list3; \
+		else \
+			echo -e "    [${YELLOW}FAIL${NC}] Failed on '$${src}' with ./main3."; \
+			echo "$$src" >> .failure_list3; \
+			exit 1; \
+		fi; \
+	done
+	@echo -e "${CYAN}[3/4] Assembling generated sources...${NC}"
+	for src in $(SRCS); do \
+		s_file=$${src%.c}.s; \
+		o_file=$${src%.c}.o; \
+		$(CC) $(SELF_ASFLAGS) -c $(SELF3_OUT)/$$s_file -o $(SELF3_OUT)/$$o_file; \
+	done
+	@echo -e "${CYAN}[4/4] Linking to create $(TARGET)4...${NC}"
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $(TARGET)4 $(SELF3_OBJS)
+	@echo ""
+	@echo -e "${CYAN}--- Third-Generation Self-Host Summary ---${NC}"
+	@if [ -f .success_list3 ]; then \
+		echo -e "${GREEN}Successfully compiled with ./main3:${NC}"; \
+		cat .success_list3 | sed 's/^/  - /'; \
+	fi
+	@if [ -f .failure_list3 ]; then \
+		echo -e "\n${YELLOW}Failed with ./main3:${NC}"; \
+		cat .failure_list3 | sed 's/^/  - /'; \
+	fi
+	@echo ""
+	@echo -e "${GREEN}--- Third-generation self-host complete. Executable '$(TARGET)4' created. ---${NC}"
+
+self2-compare: self3
+	@echo -e "\n${CYAN}--- Comparing self-hosted binaries... ---${NC}"
+	@if cmp -s $(TARGET)3 $(TARGET)4; then \
+		echo -e "${GREEN}Raw binaries match: $(TARGET)3 == $(TARGET)4${NC}"; \
+	else \
+		echo -e "${YELLOW}Raw binaries differ; checking stripped executable content...${NC}"; \
+		cp $(TARGET)3 $(SELF3_OUT)/$(TARGET)3.compare; \
+		cp $(TARGET)4 $(SELF3_OUT)/$(TARGET)4.compare; \
+		strip --strip-debug --remove-section=.comment --remove-section=.note.gnu.build-id $(SELF3_OUT)/$(TARGET)3.compare $(SELF3_OUT)/$(TARGET)4.compare; \
+		if cmp -s $(SELF3_OUT)/$(TARGET)3.compare $(SELF3_OUT)/$(TARGET)4.compare; then \
+			echo -e "${GREEN}Stripped binaries match: $(TARGET)3 == $(TARGET)4${NC}"; \
+		else \
+			echo -e "${YELLOW}Self-hosted binaries differ: $(TARGET)3 != $(TARGET)4${NC}"; \
+			exit 1; \
+		fi; \
+	fi
 
 # Minimal self-host: only compile a safe subset (e.g., main.c) with ./main
 self1-min: build
@@ -137,7 +245,7 @@ self1-min: build
 	for src in $(SRCS); do \
 		s_file=$${src%.c}.s; \
 		o_file=$${src%.c}.o; \
-		$(CC) $(ASFLAGS) -c $(SELF_OUT)/$$s_file -o $(SELF_OUT)/$$o_file; \
+		$(CC) $(SELF_ASFLAGS) -c $(SELF_OUT)/$$s_file -o $(SELF_OUT)/$$o_file; \
 	done
 	@echo -e "${CYAN}[4/4] Linking to create $(TARGET)2...${NC}"
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $(TARGET)2 $(SELF_OBJS)
@@ -159,8 +267,8 @@ self1-min-test: test self1-min
 	./test.sh ./main2
 
 clean:
-	rm -f *.o $(TARGET) $(TARGET)2
-	rm -f .success_list .failure_list
-	rm -rf out $(SELF_OUT)
+	rm -f *.o $(TARGET) $(TARGET)2 $(TARGET)3 $(TARGET)4
+	rm -f .success_list .failure_list .success_list2 .failure_list2 .success_list3 .failure_list3
+	rm -rf out $(SELF_OUT) $(SELF2_OUT) $(SELF3_OUT)
 
-.PHONY: all clean self1 test self1-test self1-smoke build self1-min self1-min-test
+.PHONY: all clean self1 self2 self3 test self1-test self1-smoke self2-test self2-compare build self1-min self1-min-test

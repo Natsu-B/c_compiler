@@ -1,6 +1,7 @@
 *.s
 /out/
 /.selfhost-out/
+/.selfhost2-out/
 # Prerequisites
 *.d
 
@@ -58,5 +59,8 @@ include/include_paths.h
 include/gcc_predef.h
 main
 main2
+main3
 .failure_list
 .success_list
+.failure_list2
+.success_list2

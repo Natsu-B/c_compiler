@@ -135,10 +135,6 @@ int main(int argc, char **argv)
       error_exit("Invalid arguments.");
   }
 
-  // Debug: print parsed arg state before validation (helps self-host debug)
-  fprintf(stderr, "[argcheck] input=%p, output=%p, gcc=%d, pp=%d, tgt=%d\n",
-          (void *)input, (void *)output_file_name, (int)gcc_compatible,
-          (int)output_preprocess, (int)g_target_arch);
   // Validate required arguments separately to avoid depending on
   // complex short-circuit expressions that our early self-hosted
   // backend may miscompile.

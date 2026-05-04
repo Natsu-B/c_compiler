@@ -39,6 +39,7 @@ static void validate_stack_alignment(IRFunc* func_ir, A64_FUNC* fa)
             op = "+";
             if (as->kind == A64_SUB)
               op = "-";
+            (void)op;
             pr_debug("a64-validate: sp %s= %lld -> mod16=%d",
                      op, imm, sp_mod);
           }

@@ -1112,6 +1112,19 @@ static size_t count_callee_saved(unsigned int used_mask)
   return cnt;
 }
 
+static size_t max_vreg_stack_slot(X64_FUNC* func_x64)
+{
+  size_t max_slot = 0;
+  if (!func_x64->vreg_stack_slot) return 0;
+  for (size_t i = 1; i <= vector_size(func_x64->vreg_stack_slot); i++)
+  {
+    size_t* slot = vector_peek_at(func_x64->vreg_stack_slot, i);
+    if (slot && *slot > max_slot)
+      max_slot = *slot;
+  }
+  return max_slot;
+}
+
 static void emit_prologue(IRFunc* func_ir, X64_FUNC* func_x64, size_t* out_alloc)
 {
   output_file("    push rbp");
@@ -1120,6 +1133,9 @@ static void emit_prologue(IRFunc* func_ir, X64_FUNC* func_x64, size_t* out_alloc
   size_t locals = func_ir->user_defined.stack_size;
   size_t spills = func_x64->spill_stack_size;
   size_t base = locals + spills;
+  size_t max_slot = max_vreg_stack_slot(func_x64);
+  if (max_slot > base)
+    base = max_slot;
   // Reserve local/spill space directly below RBP so [rbp-offsetof] never
   // overlaps saved callee-saved registers. Then push the callee-saved
   // registers beneath that area.
@@ -1128,6 +1144,7 @@ static void emit_prologue(IRFunc* func_ir, X64_FUNC* func_x64, size_t* out_alloc
   // Entry: RSP%16==8; after push rbp -> 0; after sub alloc -> (-alloc)%16;
   // after k pushes -> (-alloc - 8*k)%16.
   size_t k = count_callee_saved(func_x64->used_registers);
+  base += k * 8;
   size_t required_mod = (k % 2) ? 8 : 0;
   size_t padding = (16 + required_mod - (base % 16)) % 16;
   size_t alloc = base + padding;
@@ -1270,14 +1287,16 @@ void x64_emit_function(IRFunc* func_ir, X64_FUNC* func_x64)
             size_t* rendp = func_x64->vreg_real_end ? vector_peek_at(func_x64->vreg_real_end, vi) : NULL;
             size_t* slotp = vector_peek_at(func_x64->vreg_stack_slot, vi);
             X64_REG* vinfo = vector_peek_at(func_x64->virtual_regs, vi);
-            if (!realp || !rendp || !slotp || !vinfo) continue;
-            enum register_name r = (enum register_name)(*realp);
-            size_t rend = *rendp;
-            size_t slot = *slotp;
-            if (r != register_reserved && rend != 0 && rend <= as->insn_id && slot)
+            if (realp && rendp && slotp && vinfo)
             {
-              emit_mov_store_spill(reg_name(r, vinfo->size ? vinfo->size : SIZE_QWORD),
-                                   vinfo->size ? vinfo->size : SIZE_QWORD, slot);
+              enum register_name r = (enum register_name)(*realp);
+              size_t rend = *rendp;
+              size_t slot = *slotp;
+              if (r != register_reserved && rend != 0 && rend <= as->insn_id && slot)
+              {
+                emit_mov_store_spill(reg_name(r, vinfo->size ? vinfo->size : SIZE_QWORD),
+                                     vinfo->size ? vinfo->size : SIZE_QWORD, slot);
+              }
             }
           }
           output_file("    call %s", as->jump_target_label);

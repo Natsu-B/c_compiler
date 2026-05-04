@@ -12,23 +12,18 @@
 #define DEBUG 0
 
 // Debug printf management
-// If DEBUG is not defined, nothing is output.
-// If DEBUG is 0, only pr_debug is output.
+// If DEBUG is not defined or 0, nothing is output.
 // If DEBUG is 1, both pr_debug and pr_debug2 are output.
 // pr_debug2 outputs longer messages.
-#ifdef DEBUG
+#if DEBUG
 #define pr_debug(fmt, ...) \
   _debug(__FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
-#if DEBUG
 #define pr_debug2(fmt, ...) \
   _debug2(__FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
-#endif  // DEBUG=(true)
 #else
-#define pr_debug(fmt, ...)
+#define pr_debug(fmt, ...) ((void)0)
+#define pr_debug2(fmt, ...) ((void)0)
 #endif  // DEBUG
-#ifndef pr_debug2
-#define pr_debug2(fmt, ...)
-#endif  // pr_debug2
 
 #define unreachable() error_exit("unreachable")
 #define unimplemented() error_exit("unimplemented")
